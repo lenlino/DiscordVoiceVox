@@ -31,12 +31,6 @@ def print_hi(name):
 
 
 @bot.slash_command()
-async def hello(ctx, name: str = None):
-    name = name or ctx.author.name
-    await ctx.respond(f"Hello {name}!")
-
-
-@bot.slash_command(guild_ids=[621623130124713994])
 async def vc(ctx):
     if ctx.author.voice is None:
         await ctx.respond("音声チャンネルに入っていないため操作できません")
@@ -52,7 +46,7 @@ async def vc(ctx):
         await ctx.respond("読み上げを開始します")
         return
 
-@bot.slash_command(guild_ids=[621623130124713994])
+@bot.slash_command()
 async def setvc(ctx, voiceid: int):
     setvoiceid(ctx.author.id, voiceid)
     await ctx.respond("設定を変更しました")
