@@ -6,13 +6,16 @@ import asyncio
 import json
 import re
 import wave
+from concurrent.futures import ThreadPoolExecutor
 
 import psycopg2
 import requests as requests
 import discord
 
-token = "OTE3NjMzNjA1Njg0MDU2MDg1.Ya7i5A.vjx7pL_UBz6gxGn8kshdJeVyiUI"
-bot = discord.Bot()
+token = ""
+intents = discord.Intents.default()
+intents.message_content = True
+bot = discord.Bot(intents=intents)
 vclist = {}
 mclist = {}
 filelist = ["temp1.wav", "temp2.wav", "temp3.wav", "temp4.wav", "temp5.wav", "temp6.wav", "temp7.wav", "temp8.wav",
@@ -25,12 +28,18 @@ DB_USER = 'postgres'
 DB_PASS = 'maikura123'
 
 
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press Ctrl+F8 to toggle the breakpoint.
+def initdatabase():
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute('CREATE TABLE IF NOT EXISTS voice(id char(10), voice_id char(2));')
+
+    conn.commit()
+    cur.close()
+    conn.close()
 
 
-@bot.slash_command()
+@bot.slash_command(guild_ids=[864441028866080768])
 async def vc(ctx):
     if ctx.author.voice is None:
         await ctx.respond("音声チャンネルに入っていないため操作できません")
@@ -46,7 +55,7 @@ async def vc(ctx):
         await ctx.respond("読み上げを開始します")
         return
 
-@bot.slash_command()
+@bot.slash_command(guild_ids=[864441028866080768])
 async def setvc(ctx, voiceid: int):
     setvoiceid(ctx.author.id, voiceid)
     await ctx.respond("設定を変更しました")
@@ -107,30 +116,32 @@ def text2wav(text, voiceid):
 
 
 def generate_wav(text, speaker=1, filepath='./audio.wav'):
-    host = 'localhost'
+    host = '127.0.0.1'
     port = 50021
     params = (
         ('text', text),
         ('speaker', speaker),
     )
-    response1 = requests.post(
-        f'http://{host}:{port}/audio_query',
-        params=params
-    )
-    headers = {'Content-Type': 'application/json', }
-    response2 = requests.post(
-        f'http://{host}:{port}/synthesis',
-        headers=headers,
-        params=params,
-        data=json.dumps(response1.json())
-    )
+    with ThreadPoolExecutor(4) as executor:
+        response1 = requests.post(
+            f'http://{host}:{port}/audio_query',
+            params=params
+        )
+        headers = {'Content-Type': 'application/json', }
+        response2 = requests.post(
+            f'http://{host}:{port}/synthesis',
+            headers=headers,
+            params=params,
+            data=json.dumps(response1.json())
+        )
 
-    wf = wave.open(filepath, 'wb')
-    wf.setnchannels(1)
-    wf.setsampwidth(2)
-    wf.setframerate(24000)
-    wf.writeframes(response2.content)
-    wf.close()
+        wf = wave.open(filepath, 'wb')
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(24000)
+        wf.writeframes(response2.content)
+        wf.close()
+
 
 
 async def vc(ctx):
@@ -188,7 +199,9 @@ async def on_voice_state_update(member, before, after):
 
 
 # Press the green button in the gutter to run the script.
+initdatabase()
 if __name__ == '__main__':
+
     bot.run(token)
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
