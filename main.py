@@ -20,7 +20,7 @@ from discord.ext import tasks
 from requests import Timeout, ReadTimeout
 
 
-token = "TOKEN"
+token = ""
 intents = discord.Intents.default()
 intents.message_content = True
 bot = discord.Bot(intents=intents)
@@ -33,7 +33,7 @@ DB_HOST = 'localhost'
 DB_PORT = '5433'
 DB_NAME = 'postgres'
 DB_USER = 'postgres'
-DB_PASS = 'pass'
+DB_PASS = 'maikura123'
 ManagerGuilds = [864441028866080768]
 tips_list= ["/setvoice　で自分の声を変更できます"]
 voice_id_list = []
@@ -119,8 +119,9 @@ class VoiceSelectView2(discord.ui.Select):
 
 @bot.slash_command(description="読み上げを開始・終了するのだ")
 async def vc(ctx):
+    await ctx.defer()
     if ctx.author.voice is None:
-        await ctx.respond("音声チャンネルに入っていないため操作できません")
+        await ctx.send_followup("音声チャンネルに入っていないため操作できません")
         return
     if ctx.guild.id in vclist and ctx.guild.voice_client is not None:
         del vclist[ctx.guild.id]
@@ -129,24 +130,25 @@ async def vc(ctx):
             title="Disconnect",
             color=discord.Colour.brand_red()
         )
-        await ctx.respond(embed=embed)
+        await ctx.send_followup(embed=embed)
         return
     else:
-        vclist[ctx.guild.id] = ctx.channel.id
         await ctx.author.voice.channel.connect()
+        vclist[ctx.guild.id] = ctx.channel.id
         embed = discord.Embed(
             title="Connect",
             color=discord.Colour.brand_green(),
             description="tips: `"+random.choice(tips_list)+"`"
         )
-        await ctx.respond(embed=embed)
+        await ctx.send_followup(embed=embed)
         return
 
 
 @bot.slash_command(description="自分の声を変更できるのだ")
 async def setvc(ctx, voiceid: discord.Option(required=False, input_type=int, description="指定しない場合は一覧が表示されます")):
+    await ctx.defer()
     if (voiceid is None):
-        await ctx.respond("", view=HogeList("ずんだもん"))
+        await ctx.send_followup("", view=HogeList("ずんだもん"))
         return
 
     setdatabase(ctx.author.id, "voiceid", voiceid)
@@ -164,7 +166,7 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=int, des
             color=discord.Colour.brand_green(),
         )
     print(f"**{name}**")
-    await ctx.respond(embed=embed)
+    await ctx.send_followup(embed=embed)
 
 
 #@bot.slash_command(description="自分の名前の読み方を変更できるのだ", guild_ids=ManagerGuilds)
@@ -314,13 +316,12 @@ def generate_wav(text, speaker=1, filepath='./audio.wav'):
 @bot.event
 async def on_ready():
     status_update_loop.start()
-    await connect_nodes()
     print("起動しました")
 
 
 @bot.event
 async def on_message(message):
-    if message.author.isbot:
+    if message.author.bot:
         return
     voice = discord.utils.get(bot.voice_clients, guild=message.guild)
 
@@ -328,9 +329,19 @@ async def on_message(message):
         pattern = "https?://[\w/:%#\$&\?\(\)~\.=\+\-]+"
         pattern_emoji = "\<.+?\>"
         pattern_voice = "\.vc[0-9]*"
+        voice_id = None
+
+        if re.search(pattern_voice, message.content) is not None:
+            cmd = re.search(pattern_voice, message.content).group()
+            if re.search("[0-9]", cmd.group()) is not None:
+                voice_id = re.search("[0-9]", cmd.group()).group()
 
         output = re.sub(pattern, "URL省略", message.content)
         output = re.sub(pattern_emoji, "", output)
+        output = re.sub(pattern_voice, "", output)
+
+        if voice_id is None:
+            voice_id = getdatabase(message.author.id, "voiceid", 0)
         if len(output) > 50:
             output = output[:50]
             output += "以下略"
@@ -340,7 +351,7 @@ async def on_message(message):
 
         while message.guild.voice_client.is_playing():
             await asyncio.sleep(0.1)
-        filename = text2wav(output, getdatabase(message.author.id, "voiceid", 0))
+        filename = text2wav(output, int(voice_id))
         if filename == "failed":
             return
         source = discord.FFmpegOpusAudio(source=filename, bitrate=24)
@@ -371,16 +382,6 @@ async def status_update_loop():
     await bot.change_presence(activity=discord.Game(text))
 
 
-async def connect_nodes():
-  """Connect to our Lavalink nodes."""
-  await bot.wait_until_ready() # wait until the bot is ready
-
-  await wavelink.NodePool.create_node(
-    bot=bot,
-    host='0.0.0.0',
-    port=2333,
-    password='youshallnotpass'
-  ) # create a node
 
 # Press the green button in the gutter to run the script.
 initdatabase()
