@@ -15,13 +15,13 @@ from subprocess import Popen
 import psycopg2
 import requests as requests
 import discord
-import wavelink as wavelink
+#import wavelink as wavelink
 from discord import Guild
 from discord.ext import tasks
 from requests import Timeout, ReadTimeout
 
 
-token = ""
+token = "ODE0Njg3ODE2MjQ0MTMzODg4.GIujXO.d3MNsfpKp4xuWGiRfczlQBvvZYiQ-vK1u3VmTU"
 intents = discord.Intents.default()
 intents.message_content = True
 bot = discord.AutoShardedBot(intents=intents)
@@ -34,7 +34,7 @@ DB_HOST = 'localhost'
 DB_PORT = '5433'
 DB_NAME = 'postgres'
 DB_USER = 'postgres'
-DB_PASS = ''
+DB_PASS = 'maikura123'
 ManagerGuilds = [864441028866080768]
 tips_list= ["/setvoice　で自分の声を変更できます"]
 voice_id_list = []
@@ -166,7 +166,7 @@ async def vc(ctx):
         await ctx.send_followup(embed=embed)
         return
     else:
-        await ctx.author.voice.channel.connect(cls=wavelink.Player)
+        await ctx.author.voice.channel.connect()
         vclist[ctx.guild.id] = ctx.channel.id
         embed = discord.Embed(
             title="Connect",
@@ -349,7 +349,7 @@ def generate_wav(text, speaker=1, filepath='./audio.wav'):
 @bot.event
 async def on_ready():
     status_update_loop.start()
-    await connect_nodes()
+    #await connect_nodes()
     print("起動しました")
 
 
@@ -395,8 +395,8 @@ async def on_message(message):
         filename = text2wav(output, int(voice_id))
         if filename == "failed":
             return
-        #source = discord.FFmpegOpusAudio(source=filename, bitrate=24)
-        source = await wavelink.LocalTrack.search(query=os.path.dirname(os.path.abspath(__file__))+"/"+filename,return_first=True)
+        source = discord.FFmpegOpusAudio(source=filename, bitrate=24)
+        #source = await wavelink.LocalTrack.search(query=os.path.dirname(os.path.abspath(__file__))+"/"+filename,return_first=True)
         await message.guild.voice_client.play(source)
     else:
         return
@@ -434,7 +434,7 @@ async def status_update_loop():
     await bot.change_presence(activity=discord.Game(text))
 
 
-async def connect_nodes():
+'''async def connect_nodes():
   """Connect to our Lavalink nodes."""
   await bot.wait_until_ready() # wait until the bot is ready
 
@@ -443,7 +443,7 @@ async def connect_nodes():
     host='127.0.0.1',
     port=2333,
     password='youshallnotpass'
-  ) # create a node
+  ) # create a node'''
 
 
 
