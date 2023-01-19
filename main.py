@@ -5,6 +5,7 @@
 import asyncio
 import io
 import json
+import os.path
 import random
 import re
 import subprocess
@@ -23,7 +24,7 @@ from requests import Timeout, ReadTimeout
 token = ""
 intents = discord.Intents.default()
 intents.message_content = True
-bot = discord.Bot(intents=intents)
+bot = discord.AutoShardedBot(intents=intents)
 vclist = {}
 voice_select_dict = {}
 filelist = ["temp1.wav", "temp2.wav", "temp3.wav", "temp4.wav", "temp5.wav", "temp6.wav", "temp7.wav", "temp8.wav",
@@ -33,13 +34,14 @@ DB_HOST = 'localhost'
 DB_PORT = '5433'
 DB_NAME = 'postgres'
 DB_USER = 'postgres'
-DB_PASS = 'maikura123'
+DB_PASS = ''
 ManagerGuilds = [864441028866080768]
 tips_list= ["/setvoice　で自分の声を変更できます"]
 voice_id_list = []
 host = '127.0.0.1'
 port = 50021
-
+coeiroink_host = '127.0.0.1'
+coeiroink_port = 50031
 
 def initdatabase():
     conn = get_connection()
@@ -64,6 +66,17 @@ def init_voice_list():
         timeout=(3.0, 10)
     )
     json : list = response2.json()
+    '''response3 = requests.get(
+        f'http://{coeiroink_host}:{coeiroink_port}/speakers',
+        headers=headers,
+        timeout=(3.0, 10)
+    )
+    json2: list = response3.json()
+    for voice_info in json2:
+        for style_info in voice_info["styles"]:
+            style_info["id"] += 1000
+
+    json.extend(json2)'''
     global voice_id_list
     voice_id_list = json
     print(json)
@@ -117,6 +130,26 @@ class VoiceSelectView2(discord.ui.Select):
         await interaction.message.delete()
 
 
+class ActivateButtonView(discord.ui.View): # Create a class called MyView that subclasses discord.ui.View
+    @discord.ui.button(label="アクティベート", style=discord.ButtonStyle.primary, emoji="😎") # Create a button with the label "😎 Click me!" with color Blurple
+    async def button_callback(self, button, interaction):
+        await interaction.response.send_modal(ActivateModal(title="Activate"))
+
+
+class ActivateModal(discord.ui.Modal):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+
+        self.add_item(discord.ui.InputText(label="Short Input"))
+        self.add_item(discord.ui.InputText(label="Long Input", style=discord.InputTextStyle.long))
+
+    async def callback(self, interaction: discord.Interaction):
+        embed = discord.Embed(title="Modal Results")
+        embed.add_field(name="Short Input", value=self.children[0].value)
+        embed.add_field(name="Long Input", value=self.children[1].value)
+        await interaction.response.send_message(embeds=[embed])
+
+
 @bot.slash_command(description="読み上げを開始・終了するのだ")
 async def vc(ctx):
     await ctx.defer()
@@ -124,8 +157,8 @@ async def vc(ctx):
         await ctx.send_followup("音声チャンネルに入っていないため操作できません")
         return
     if ctx.guild.id in vclist and ctx.guild.voice_client is not None:
-        del vclist[ctx.guild.id]
         await ctx.guild.voice_client.disconnect()
+        del vclist[ctx.guild.id]
         embed = discord.Embed(
             title="Disconnect",
             color=discord.Colour.brand_red()
@@ -133,7 +166,7 @@ async def vc(ctx):
         await ctx.send_followup(embed=embed)
         return
     else:
-        await ctx.author.voice.channel.connect()
+        await ctx.author.voice.channel.connect(cls=wavelink.Player)
         vclist[ctx.guild.id] = ctx.channel.id
         embed = discord.Embed(
             title="Connect",
@@ -183,13 +216,13 @@ async def setname(ctx, name: discord.Option(input_type=str, description="自分�
 
 
 #@bot.slash_command(description="ユーザーをプレミアム登録するのだ(modonly)", guild_ids=ManagerGuilds)
-async def setpremium(ctx, id: discord.Option(input_type=int, description="対象ユーザーのID"), premium: discord.Option(input_type=bool, description="有効/無効")):
-    setdatabase(id, "is_premium", premium)
-
-
-#@bot.slash_command(description="出入りを読み上げるかの設定なのだ", guild_ids=ManagerGuilds)
-async def setjoiuout(ctx, read: discord.Option(input_type=bool, description="有効/無効")):
-    setdatabase(id, "is_joinoutread", read)
+async def activate(ctx):
+    embed = discord.Embed(
+        title="Activate",
+        description=f"ボタンを",
+        color=discord.Colour.gold(),
+    )
+    await ctx.respond(embed=embed,view=ActivateButtonView())
 
 
 @bot.slash_command(description="辞書に単語を追加するのだ", guild_ids=ManagerGuilds)
@@ -289,7 +322,7 @@ def generate_wav(text, speaker=1, filepath='./audio.wav'):
     headers = {'Content-Type': 'application/json', }
     query_json = response1.json()
     #query_json["prePhonemeLength"] = 0.1
-    #query_json["outputSamplingRate"] = 96000
+    #query_json["outputSamplingRate"] = 24000
     response2 = requests.post(
         f'http://{host}:{port}/synthesis',
         headers=headers,
@@ -316,13 +349,21 @@ def generate_wav(text, speaker=1, filepath='./audio.wav'):
 @bot.event
 async def on_ready():
     status_update_loop.start()
+    await connect_nodes()
     print("起動しました")
 
 
 @bot.event
 async def on_message(message):
-    if message.author.bot:
-        return
+    '''if message.content == "!ping":
+        # Ping値を秒単位で取得
+        raw_ping = bot.latency
+
+        # ミリ秒に変換して丸める
+        ping = round(raw_ping * 1000)
+
+        # 送信する
+        await message.reply(f"Pong!\nBotのPing値は{ping}msです。")'''
     voice = discord.utils.get(bot.voice_clients, guild=message.guild)
 
     if voice and voice.is_connected and message.channel.id == vclist[message.guild.id]:
@@ -331,10 +372,10 @@ async def on_message(message):
         pattern_voice = "\.vc[0-9]*"
         voice_id = None
 
-        if re.search(pattern_voice, message.content) is not None:
+        '''if re.search(pattern_voice, message.content) is not None:
             cmd = re.search(pattern_voice, message.content).group()
             if re.search("[0-9]", cmd.group()) is not None:
-                voice_id = re.search("[0-9]", cmd.group()).group()
+                voice_id = re.search("[0-9]", cmd.group()).group()'''
 
         output = re.sub(pattern, "URL省略", message.content)
         output = re.sub(pattern_emoji, "", output)
@@ -354,8 +395,9 @@ async def on_message(message):
         filename = text2wav(output, int(voice_id))
         if filename == "failed":
             return
-        source = discord.FFmpegOpusAudio(source=filename, bitrate=24)
-        message.guild.voice_client.play(source)
+        #source = discord.FFmpegOpusAudio(source=filename, bitrate=24)
+        source = await wavelink.LocalTrack.search(query=os.path.dirname(os.path.abspath(__file__))+"/"+filename,return_first=True)
+        await message.guild.voice_client.play(source)
     else:
         return
 
@@ -366,8 +408,9 @@ async def on_voice_state_update(member, before, after):
     if voicestate is None:
         return
     if (voicestate.user.id == member.id and after.channel is None) or len(voicestate.channel.members) == 1:
+        await voicestate.disconnect()
         del vclist[voicestate.guild.id]
-        await voicestate.disconnect(force=True)
+
 
 
 @bot.event
@@ -378,8 +421,29 @@ async def on_guild_join(guild: Guild):
 
 @tasks.loop(minutes=1)
 async def status_update_loop():
-    text = str(len(vclist)) + "/" + str(len(bot.guilds))+ " 読み上げ"
+    for key in vclist.keys():
+        guild = bot.get_guild(key)
+        if guild is None:
+            del vclist[key]
+            continue
+        if guild.voice_client is None or guild.voice_client.is_connected is False:
+            del vclist[key]
+            if guild.voice_client is not None:
+                guild.voice_client.cleanup()
+    text = str(len(vclist)) + "/" + str(len(bot.guilds)) + " 読み上げ"
     await bot.change_presence(activity=discord.Game(text))
+
+
+async def connect_nodes():
+  """Connect to our Lavalink nodes."""
+  await bot.wait_until_ready() # wait until the bot is ready
+
+  await wavelink.NodePool.create_node(
+    bot=bot,
+    host='127.0.0.1',
+    port=2333,
+    password='youshallnotpass'
+  ) # create a node
 
 
 
