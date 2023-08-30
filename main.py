@@ -1134,9 +1134,9 @@ async def save_customemoji(custom_emoji, kana):
 
 
 async def updatedict():
-    with open("custom_emoji.json", ) as f:
+    '''with open("custom_emoji.json", ) as f:
         json_data = json.load(f)
-    emoji.EMOJI_DATA.update(json_data)
+    emoji.EMOJI_DATA.update(json_data)'''
 
     headers = {'Content-Type': 'application/json', }
     async with aiohttp.ClientSession() as session:
