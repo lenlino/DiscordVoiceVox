@@ -33,7 +33,7 @@ host = os.environ.get("VOICEVOX_HOST", "127.0.0.1:50021")
 premium_host_list = os.environ.get("VOICEVOX_HOSTS", "127.0.0.1:50021").split(",")
 host_count = 0
 stripe.api_key = os.environ.get("STRIPE_TOKEN", None)
-is_lavalink = True
+is_lavalink = False
 coeiroink_host = os.environ.get("COEIROINK_HOST", "127.0.0.1:50031")
 ManagerGuilds = [888020016660893726]
 intents = discord.Intents.none()
@@ -59,7 +59,6 @@ tips_list = ["/setvc　で自分の声を変更できます。", "[プレミア�
              "導入サーバー数2万達成！今後ともよろしくお願いします。",
              "/vc コマンドで「考え中...」のまま動かない場合は[サポートサーバー](https://discord.gg/MWnnkbXSDJ)へお問い合わせください。"]
 voice_id_list = []
-
 
 generating_guilds = set()
 pool = None
@@ -102,6 +101,8 @@ async def init_voice_list():
             timeout=10
         ) as response2:
             json: list = await response2.json()
+            for voice_info in json:
+                voice_info["name"] = "VOICEVOX:" + voice_info["name"]
         try:
             async with session.get(
                 f'http://{coeiroink_host}/speakers',
@@ -110,6 +111,7 @@ async def init_voice_list():
             ) as response3:
                 json2: list = await response3.json()
                 for voice_info in json2:
+                    voice_info["name"] = "COEIROINK:" + voice_info["name"]
                     for style_info in voice_info["styles"]:
                         style_info["id"] += 1000
 
@@ -173,7 +175,7 @@ class VoiceSelectView2(discord.ui.Select):
                 color=discord.Colour.brand_red(),
             )
         else:
-            await setdatabase(interaction.user.id, "voiceid", str(id))
+            await setdatabase(interaction.user.id, "voiceid", id)
         print(f"**{self.name}({self.values[0]})**")
         await interaction.response.send_message(embed=embed)
         await interaction.message.delete()
@@ -280,7 +282,8 @@ async def vc(ctx):
         )
         if ctx.guild.id in premium_server_list:
             premium_server_list.remove(ctx.guild.id)
-        if str(ctx.author.id) in premium_user_list or str(int(await getdatabase(ctx.guild.id, "premium_user", 0, "guild"))) in premium_user_list:
+        if str(ctx.author.id) in premium_user_list or str(
+            int(await getdatabase(ctx.guild.id, "premium_user", 0, "guild"))) in premium_user_list:
             embed.set_author(name="Premium")
             premium_server_list.append(ctx.guild.id)
 
@@ -403,8 +406,8 @@ async def set(ctx, key: discord.Option(str, choices=[
             await ctx.send_followup(embed=embed)
             return
         before_guild_id = await getdatabase(ctx.author.id, key, 0)
-        if before_guild_id!=0:
-        	await setdatabase(before_guild_id, "premium_user", "0", "guild")
+        if before_guild_id != 0:
+            await setdatabase(before_guild_id, "premium_user", "0", "guild")
         await setdatabase(ctx.author.id, key, value)
         await setdatabase(ctx.guild.id, "premium_user", str(ctx.author.id), "guild")
         embed = discord.Embed(
@@ -559,7 +562,6 @@ async def server_set(ctx, key: discord.Option(str, choices=[
         await ctx.send_followup(embed=embed)
 
 
-
 @bot.slash_command(description="自分の声を変更できるのだ")
 async def setvc(ctx, voiceid: discord.Option(required=False, input_type=int, description="指定しない場合は一覧が表示されます")):
     await ctx.defer()
@@ -567,7 +569,7 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=int, des
         test_pages = []
         for i in range(-(-len(voice_id_list) // 25)):
             if i == 0:
-                name = "ずんだもん"
+                name = "VOICEVOX:ずんだもん"
             else:
                 name = voice_id_list[i * 25]["name"]
             test_pages.append(pages.Page(content="ボイス・スタイルを選択してください。",
@@ -712,7 +714,7 @@ async def adddict(ctx, surface: discord.Option(input_type=str, description="辞�
     embed.add_field(name="surface", value=surface)
     embed.add_field(name="pronunciation", value=pronunciation)
     await ctx.respond(embed=embed)
-    #await updatedict()
+    # await updatedict()
 
 
 @bot.slash_command(description="辞書から単語を削除するのだ(全サーバー)", guild_ids=ManagerGuilds)
@@ -854,7 +856,8 @@ async def generate_wav(text, speaker=1, filepath='./audio.wav', target_host='loc
                     return False
 
                 try:
-                    async with aiofiles.open(os.path.dirname(os.path.abspath(__file__)) + "/" + filepath, mode='wb') as f:
+                    async with aiofiles.open(os.path.dirname(os.path.abspath(__file__)) + "/" + filepath,
+                                             mode='wb') as f:
                         await f.write(await response2.read())
                     return True
                 except ReadTimeout:
@@ -877,7 +880,7 @@ async def on_message(message):
         return
 
     if voice is not None and message.channel.id == vclist[message.guild.id]:
-        await yomiage(message.author,message.guild,message.content)
+        await yomiage(message.author, message.guild, message.content)
     else:
         return
 
@@ -900,7 +903,7 @@ async def yomiage(member, guild, text):
             if re.search("[0-9]", cmd) is not None:
                 voice_id = re.sub(r"\D", "", cmd)
         if re.search(pattern, text) is not None and await getdatabase(guild.id, "is_readurl", True,
-                                                                           "guild"):
+                                                                      "guild"):
             url = re.search(pattern, text).group()
             async with aiohttp.ClientSession() as session:
                 async with session.get(url=url, timeout=5) as response:
@@ -955,7 +958,6 @@ async def yomiage(member, guild, text):
     output = re.sub(pattern_emoji, "", output)
     output = re.sub(pattern_voice, "", output)
 
-
     if len(output) <= 0:
         return
     print(output)
@@ -986,7 +988,8 @@ async def yomiage(member, guild, text):
         time_sta = time.time()
 
         if is_lavalink:
-            source = (await wavelink.GenericTrack.search(os.path.dirname(os.path.abspath(__file__)) + "/" + filename))[0]
+            source = (await wavelink.GenericTrack.search(os.path.dirname(os.path.abspath(__file__)) + "/" + filename))[
+                0]
         else:
             source = await discord.FFmpegOpusAudio.from_probe(source=filename)
 
@@ -1000,6 +1003,7 @@ async def yomiage(member, guild, text):
     else:
         guild.voice_client.play(source)
     print("☑")
+
 
 @bot.event
 async def on_voice_state_update(member, before, after):
@@ -1025,7 +1029,8 @@ async def on_voice_state_update(member, before, after):
             )
             if after.channel.guild.id in premium_server_list:
                 premium_server_list.remove(after.channel.guild.id)
-            if str(member.id) in premium_user_list or str(int(await getdatabase(after.channel.guild.id, "premium_user", 0, "guild"))) in premium_user_list:
+            if str(member.id) in premium_user_list or str(
+                int(await getdatabase(after.channel.guild.id, "premium_user", 0, "guild"))) in premium_user_list:
                 embed.set_author(name="Premium")
                 premium_server_list.append(after.channel.guild.id)
             await after.channel.guild.get_channel(autojoin["text_channel_id"]).send(embed=embed)
@@ -1044,7 +1049,8 @@ async def on_voice_state_update(member, before, after):
         del vclist[voicestate.guild.id]
         return
 
-    if after.channel is not None and after.channel.id == voicestate.channel.id and str(member.id) in premium_user_list and after.channel.guild.id not in premium_server_list:
+    if after.channel is not None and after.channel.id == voicestate.channel.id and str(
+        member.id) in premium_user_list and after.channel.guild.id not in premium_server_list:
         premium_server_list.append(after.channel.guild.id)
         embed = discord.Embed(
             title="Premium Mode",
@@ -1056,7 +1062,6 @@ async def on_voice_state_update(member, before, after):
         except:
             pass
 
-
     if await getdatabase(member.guild.id, "is_readjoin", False, "guild"):
         if after.channel is not None and before.channel is not None and after.channel.id == before.channel.id:
             return
@@ -1064,6 +1069,7 @@ async def on_voice_state_update(member, before, after):
             await yomiage(member.guild.me, member.guild, f"{member.display_name}が入室したのだ、")
         elif before.channel.id == voicestate.channel.id:
             await yomiage(member.guild.me, member.guild, f"{member.display_name}が退出したのだ、")
+
 
 @bot.event
 async def on_guild_join(guild):
@@ -1081,7 +1087,6 @@ async def status_update_loop():
             del vclist[key]
     text = str(len(vclist)) + "/" + str(len(bot.guilds)) + " 読み上げ"
     await bot.change_presence(activity=discord.Game(text))
-
 
 
 @tasks.loop(hours=24)
