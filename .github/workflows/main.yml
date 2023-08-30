@@ -1,0 +1,20 @@
+name: CD
+on:
+  push:
+    branches: [main]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install SSH Key for Deploy
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USER }}
+          password: ${{ secrets.SECRET_KEY }}
+          script: |
+            cd DiscordVoiceVox
+            git pull
+            sudo python3.11 -m pip install -r requirements.txt
+            sudo systemctl restart discordvoicevox.service
