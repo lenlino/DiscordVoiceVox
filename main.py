@@ -854,7 +854,7 @@ async def generate_wav(text, speaker=1, filepath='./audio.wav', target_host='loc
                     return False
 
                 try:
-                    async with aiofiles.open(filepath, mode='wb') as f:
+                    async with aiofiles.open(os.path.dirname(os.path.abspath(__file__)) + "/" + filepath, mode='wb') as f:
                         await f.write(await response2.read())
                     return True
                 except ReadTimeout:
