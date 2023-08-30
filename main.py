@@ -35,6 +35,7 @@ host_count = 0
 stripe.api_key = os.environ.get("STRIPE_TOKEN", None)
 is_lavalink = False
 coeiroink_host = os.environ.get("COEIROINK_HOST", "127.0.0.1:50031")
+sharevox_host = os.environ.get("SHAREVOX_HOST", "127.0.0.1:50025")
 ManagerGuilds = [888020016660893726]
 intents = discord.Intents.none()
 intents.message_content = True
@@ -118,6 +119,21 @@ async def init_voice_list():
                 json.extend(json2)
         except:
             print("COEIROINK接続なし")
+        try:
+            async with session.get(
+                f'http://{sharevox_host}/speakers',
+                headers=headers,
+                timeout=10
+            ) as response3:
+                json2: list = await response3.json()
+                for voice_info in json2:
+                    voice_info["name"] = "SHAREVOX:" + voice_info["name"]
+                    for style_info in voice_info["styles"]:
+                        style_info["id"] += 2000
+
+                json.extend(json2)
+        except:
+            print("SHAREVOX接続なし")
 
     global voice_id_list
     voice_id_list = json
@@ -168,7 +184,7 @@ class VoiceSelectView2(discord.ui.Select):
             description=f"**{self.name}({self.values[0]})** id:{id}に変更したのだ",
             color=discord.Colour.brand_green(),
         )
-        if id >= 1000 and str(interaction.user.id) not in premium_user_list:
+        if 1000 <= id < 2000 and str(interaction.user.id) not in premium_user_list:
             embed = discord.Embed(
                 title="**Error**",
                 description=f"この音声はプレミアムプラン限定です。",
@@ -777,7 +793,10 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0"):
         counter = 0
     filename = "temp" + str(counter) + ".wav"
 
-    if voiceid >= 1000:
+    if voiceid >= 2000:
+        target_host = f"{sharevox_host}"
+        voiceid -= 2000
+    elif voiceid >= 1000:
         target_host = f"{coeiroink_host}"
         voiceid -= 1000
     else:
