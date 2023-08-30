@@ -334,7 +334,7 @@ async def set(ctx, key: discord.Option(str, choices=[
                 print(f"**errorvoice**")
                 await ctx.send_followup(embed=embed)
                 return
-            await setdatabase(ctx.author.id, "voiceid", value)
+            await setdatabase(ctx.author.id, "voiceid", int(value))
             name = ""
             for speaker in voice_id_list:
                 if name != "":
@@ -596,7 +596,7 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=int, des
         print(f"**errorvoice**")
         await ctx.send_followup(embed=embed)
         return
-    await setdatabase(ctx.author.id, "voiceid", voiceid)
+    await setdatabase(ctx.author.id, "voiceid", int(voiceid))
     name = ""
     for speaker in voice_id_list:
         if name != "":
