@@ -15,24 +15,26 @@ import aiofiles as aiofiles
 import aiohttp
 import asyncpg as asyncpg
 import discord
-import requests as requests
 import stripe
 import wavelink
 from discord import default_permissions
 from discord.ext import tasks, pages
 from requests import ReadTimeout
+from ko2kana import korean2katakana
+from dotenv import load_dotenv
 
 import emoji
+import romajitable
 
-token = ""
-host = '127.0.0.1'
-port = 50021
-premium_host_list = ['127.0.0.1:50021']
+load_dotenv()
+
+token = os.environ.get("BOT_TOKEN", "BOT_TOKEN_HERE")
+host = os.environ.get("VOICEVOX_HOST", "127.0.0.1:50021")
+premium_host_list = os.environ.get("VOICEVOX_HOSTS", "127.0.0.1:50021").split(",")
 host_count = 0
-stripe.api_key = None
-is_lavalink = False
-coeiroink_host = '127.0.0.1'
-coeiroink_port = 50031
+stripe.api_key = os.environ.get("STRIPE_TOKEN", None)
+is_lavalink = True
+coeiroink_host = os.environ.get("COEIROINK_HOST", "127.0.0.1:50031")
 ManagerGuilds = [888020016660893726]
 intents = discord.Intents.none()
 intents.message_content = True
@@ -46,14 +48,16 @@ premium_user_list = []
 premium_server_list = []
 counter = 0
 voiceapi_counter = 0
-DB_HOST = 'localhost'
-DB_PORT = '5433'
-DB_NAME = 'postgres'
-DB_USER = 'postgres'
-DB_PASS = ''
+DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
+DB_PORT = os.getenv("DB_PORT", 5432)
+DB_NAME = os.getenv("DB_NAME", "postgres")
+DB_USER = os.getenv("DB_USER", "postgres")
+DB_PASS = os.getenv("DB_PASS", "maikura123")
 tips_list = ["/setvc　で自分の声を変更できます。", "[プレミアムプラン](https://lenlino.com/?page_id=2510)(月100円～)あります。",
              "[要望・不具合募集中](https://forms.gle/1TvbqzHRz6Q1vSfq9)",
-             "[VOICEVOX規約](https://voicevox.hiroshiba.jp/term/)の遵守をお願いします。", ]
+             "[VOICEVOX規約](https://voicevox.hiroshiba.jp/term/)の遵守をお願いします。",
+             "導入サーバー数2万達成！今後ともよろしくお願いします。",
+             "/vc コマンドで「考え中...」のまま動かない場合は[サポートサーバー](https://discord.gg/MWnnkbXSDJ)へお問い合わせください。"]
 voice_id_list = []
 
 
@@ -63,37 +67,44 @@ logger = logging.getLogger('discord')
 handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
 handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
 logger.addHandler(handler)
-default_conn = aiohttp.TCPConnector(limit_per_host=2)
+default_conn = aiohttp.TCPConnector(limit_per_host=10)
 premium_conn = aiohttp.TCPConnector()
 
 
 async def initdatabase():
     async with pool.acquire() as conn:
+        await conn.set_type_codec("jsonb", schema="pg_catalog", encoder=json.dumps, decoder=json.loads)
         await conn.execute('CREATE TABLE IF NOT EXISTS voice(id char(20), voiceid char(4));')
         await conn.execute('ALTER TABLE voice ADD COLUMN IF NOT EXISTS readname char(15);')
         await conn.execute('ALTER TABLE voice ADD COLUMN IF NOT EXISTS is_premium boolean;')
         await conn.execute('ALTER TABLE voice ADD COLUMN IF NOT EXISTS speed char(3);')
         await conn.execute('ALTER TABLE voice ADD COLUMN IF NOT EXISTS pitch char(3);')
+        await conn.execute('ALTER TABLE voice ADD COLUMN IF NOT EXISTS premium_guild1 char(20);')
+        await conn.execute('ALTER TABLE voice ADD COLUMN IF NOT EXISTS premium_guild2 char(20);')
+        await conn.execute('ALTER TABLE voice ADD COLUMN IF NOT EXISTS premium_guild3 char(20);')
         await conn.execute('CREATE TABLE IF NOT EXISTS guild(id char(20), is_premium boolean);')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_joinoutread boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS auto_join jsonb;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_reademoji boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readname boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readjoin boolean;')
+        await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readurl boolean;')
+        await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS premium_user char(20);')
+        await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS lang char(2);')
 
 
 async def init_voice_list():
     headers = {'Content-Type': 'application/json', }
     async with aiohttp.ClientSession() as session:
         async with session.get(
-            f'http://{host}:{port}/speakers',
+            f'http://{host}/speakers',
             headers=headers,
             timeout=10
         ) as response2:
             json: list = await response2.json()
         try:
             async with session.get(
-                f'http://{coeiroink_host}:{coeiroink_port}/speakers',
+                f'http://{coeiroink_host}/speakers',
                 headers=headers,
                 timeout=10
             ) as response3:
@@ -162,7 +173,7 @@ class VoiceSelectView2(discord.ui.Select):
                 color=discord.Colour.brand_red(),
             )
         else:
-            await setdatabase(interaction.user.id, "voiceid", id)
+            await setdatabase(interaction.user.id, "voiceid", str(id))
         print(f"**{self.name}({self.values[0]})**")
         await interaction.response.send_message(embed=embed)
         await interaction.message.delete()
@@ -254,7 +265,12 @@ async def vc(ctx):
             return
         vclist[ctx.guild.id] = ctx.channel.id
         if is_lavalink:
-            await ctx.author.voice.channel.connect(cls=wavelink.Player)
+            try:
+                await ctx.author.voice.channel.connect(cls=wavelink.Player)
+            except Exception as e:
+                logger.error(e)
+                await ctx.send_followup("予期しないエラーが発生しました。")
+                return
         else:
             await ctx.author.voice.channel.connect()
         embed = discord.Embed(
@@ -264,7 +280,7 @@ async def vc(ctx):
         )
         if ctx.guild.id in premium_server_list:
             premium_server_list.remove(ctx.guild.id)
-        if str(ctx.author.id) in premium_user_list:
+        if str(ctx.author.id) in premium_user_list or str(int(await getdatabase(ctx.guild.id, "premium_user", 0, "guild"))) in premium_user_list:
             embed.set_author(name="Premium")
             premium_server_list.append(ctx.guild.id)
 
@@ -276,7 +292,10 @@ async def vc(ctx):
 async def set(ctx, key: discord.Option(str, choices=[
     discord.OptionChoice(name="voice", value="voice"),
     discord.OptionChoice(name="speed", value="speed"),
-    discord.OptionChoice(name="pitch", value="pitch")], description="設定項目"),
+    discord.OptionChoice(name="pitch", value="pitch"),
+    discord.OptionChoice(name="premium_guild1", value="premium_guild1"),
+    discord.OptionChoice(name="premium_guild2", value="premium_guild2"),
+    discord.OptionChoice(name="premium_guild3", value="premium_guild3")], description="設定項目"),
               value: discord.Option(str, description="設定値", required=False)):
     await ctx.defer()
     if key == "voice":
@@ -374,6 +393,26 @@ async def set(ctx, key: discord.Option(str, choices=[
             color=discord.Colour.brand_green(),
         )
         await ctx.send_followup(embed=embed)
+    elif key == "premium_guild1" or key == "premium_guild2" or key == "premium_guild3":
+        if str(ctx.author.id) not in premium_user_list:
+            embed = discord.Embed(
+                title="**Error**",
+                description=f"プレミアム限定設定なのだ",
+                color=discord.Colour.brand_red(),
+            )
+            await ctx.send_followup(embed=embed)
+            return
+        before_guild_id = await getdatabase(ctx.author.id, key, 0)
+        if before_guild_id!=0:
+        	await setdatabase(before_guild_id, "premium_user", "0", "guild")
+        await setdatabase(ctx.author.id, key, value)
+        await setdatabase(ctx.guild.id, "premium_user", str(ctx.author.id), "guild")
+        embed = discord.Embed(
+            title="**Changed Premium Guild**",
+            description=f"{key}　のサーバーを サーバーid({ctx.guild.id}) に設定したのだ",
+            color=discord.Colour.brand_green(),
+        )
+        await ctx.send_followup(embed=embed)
 
 
 @bot.slash_command(description="サーバーの色々な設定なのだ", name="server-set",
@@ -384,14 +423,15 @@ async def server_set(ctx, key: discord.Option(str, choices=[
     discord.OptionChoice(name="reademoji"),
     discord.OptionChoice(name="readname"),
     discord.OptionChoice(name="readurl"),
-    discord.OptionChoice(name="readjoinleave")], description="設定項目"),
+    discord.OptionChoice(name="readjoinleave"),
+    discord.OptionChoice(name="lang")], description="設定項目"),
                      value: discord.Option(str, description="設定値", required=False), ):
     await ctx.defer()
     guild_id = ctx.guild_id
     if key == "autojoin":
         text_channel_id = ctx.channel_id
         if value == "0":
-            setting_json = {"text_channel_id": 1, "voice_channel_id": 1}
+            setting_json = json.dumps({"text_channel_id": 1, "voice_channel_id": 1})
             await setdatabase(ctx.guild.id, "auto_join", setting_json, "guild")
             embed = discord.Embed(
                 title="Changed AutoJoin",
@@ -409,7 +449,7 @@ async def server_set(ctx, key: discord.Option(str, choices=[
             await ctx.send_followup(embed=embed)
             return
         voice_channel_id = ctx.author.voice.channel.id
-        setting_json = {"text_channel_id": text_channel_id, "voice_channel_id": voice_channel_id}
+        setting_json = json.dumps({"text_channel_id": text_channel_id, "voice_channel_id": voice_channel_id})
         await setdatabase(ctx.guild.id, "auto_join", setting_json, "guild")
         embed = discord.Embed(
             title="Changed AutoJoin",
@@ -497,6 +537,27 @@ async def server_set(ctx, key: discord.Option(str, choices=[
             embed.description = "数字をvalueに指定してください。(1:ON,0:OFF)"
             embed.color = discord.Colour.brand_red()
         await ctx.send_followup(embed=embed)
+    elif key == "lang":
+        embed = discord.Embed(
+            title="Changed Lang",
+            description="名前",
+            color=discord.Colour.brand_green()
+        )
+        if value is None:
+            embed.description = "言語をjaにしました（デフォルト）(日本語:ja,　한국어:OFF)"
+            await setdatabase(ctx.guild.id, "lang", "ja", "guild")
+        elif value == "ja":
+            embed.description = "言語をjaにしました"
+            await setdatabase(ctx.guild.id, "lang", "ja", "guild")
+        elif value == "ko":
+            embed.description = "言語をkoにしました。"
+            await setdatabase(ctx.guild.id, "lang", "ko", "guild")
+        else:
+            embed.title = "Error"
+            embed.description = "数字をvalueに指定してください。(日本語:ja,　한국어:OFF)"
+            embed.color = discord.Colour.brand_red()
+        await ctx.send_followup(embed=embed)
+
 
 
 @bot.slash_command(description="自分の声を変更できるのだ")
@@ -583,15 +644,19 @@ async def stop_bot(ctx, message: discord.Option(input_type=str, description="カ
         color=discord.Colour.red(),
     )
     savelist = []
-    for server_id, text_ch_id in vclist.items():
+    await ctx.defer()
+    for server_id, text_ch_id in vclist.copy().items():
         guild = bot.get_guild(server_id)
         if guild.voice_client is None:
             continue
         savelist.append({"guild": server_id, "text_ch_id": text_ch_id, "voice_ch_id": guild.voice_client.channel.id})
-        await guild.get_channel(text_ch_id).send(embed=embed)
+        try:
+            await guild.get_channel(text_ch_id).send(embed=embed)
+        except:
+            pass
     with open('bot_stop.json', 'wt') as f:
         json.dump(savelist, f, ensure_ascii=False)
-    await ctx.respond("送信しました。", embed=embed)
+    await ctx.send_followup("送信しました。", embed=embed)
     await bot.close()
 
 
@@ -611,13 +676,9 @@ async def auto_join():
 
 @bot.slash_command(description="辞書に単語を追加するのだ(全サーバー)", guild_ids=ManagerGuilds)
 async def adddict(ctx, surface: discord.Option(input_type=str, description="辞書に登録する単語"),
-                  pronunciation: discord.Option(input_type=str, description="カタカナでの読み方"),
-                  accent_type: discord.Option(input_type=int, description="アクセント核位置、整数(詳しくはサイトに記載)",
-                                              default=0),
-                  priority: discord.Option(input_type=int, description="優先度[0-10]",
-                                           default=5)):
+                  pronunciation: discord.Option(input_type=str, description="カタカナでの読み方")):
     print(surface)
-    if (surface.startswith("<") and surface.endswith(">")) or emoji.is_emoji(surface):
+    """if (surface.startswith("<") and surface.endswith(">")) or emoji.is_emoji(surface):
         await save_customemoji(surface, pronunciation)
         embed2 = discord.Embed(
             title="**Add Emoji**",
@@ -641,7 +702,8 @@ async def adddict(ctx, surface: discord.Option(input_type=str, description="辞�
         headers=headers,
         params=params,
         timeout=(3.0, 10)
-    )
+    )"""
+    await update_private_dict(9686, surface, pronunciation)
     embed = discord.Embed(
         title="**Add Dict**",
         description=f"辞書に単語を登録しました。",
@@ -649,27 +711,26 @@ async def adddict(ctx, surface: discord.Option(input_type=str, description="辞�
     )
     embed.add_field(name="surface", value=surface)
     embed.add_field(name="pronunciation", value=pronunciation)
-    embed.add_field(name="accent_type", value=accent_type)
-    embed.add_field(name="uuid", value=response2.text)
     await ctx.respond(embed=embed)
-    await updatedict()
+    #await updatedict()
 
 
 @bot.slash_command(description="辞書から単語を削除するのだ(全サーバー)", guild_ids=ManagerGuilds)
-async def deletedict(ctx, uuid: discord.Option(input_type=str, description="辞書に登録する単語", required=True)):
+async def deletedict(ctx, uuid: discord.Option(input_type=str, description="辞書から削除する単語", required=True)):
     headers = {'Content-Type': 'application/json', }
     embed = discord.Embed(
         title="**Add Dict**",
         description=f"辞書から単語を削除しました。",
         color=discord.Colour.brand_red(),
     )
-    for d_host in premium_host_list:
+    await delete_private_dict(9686, uuid)
+    """for d_host in premium_host_list:
         response2 = requests.delete(
             f'http://{d_host}/user_dict_word/{uuid}',
             headers=headers,
             timeout=(3.0, 10)
         )
-        embed.add_field(name="uuid", value=response2.text)
+        embed.add_field(name="uuid", value=response2.text)"""
 
     await ctx.respond(embed=embed)
 
@@ -703,19 +764,19 @@ async def setdatabase(userid, id, value, table="voice"):
         if rows is None:
             await conn.execute('INSERT INTO voice (id, voiceid) VALUES ($1, 3);', (str(userid)))
             rows = await conn.fetchrow('SELECT voiceid from voice where id = $1;', (str(userid)))
-        await conn.execute(f'UPDATE {table} SET {id} = {value} WHERE "id" = $1;', (str(userid)))
+        await conn.execute(f'UPDATE {table} SET {id} = $1 WHERE "id" = $2;', value, str(userid))
         return rows[0]
 
 
 async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0"):
     global counter
     counter += 1
-    if counter > 30:
+    if counter > 100:
         counter = 0
     filename = "temp" + str(counter) + ".wav"
 
     if voiceid >= 1000:
-        target_host = f"{coeiroink_host}:{coeiroink_port}"
+        target_host = f"{coeiroink_host}"
         voiceid -= 1000
     else:
         target_port = 50021
@@ -738,10 +799,10 @@ async def generate_wav(text, speaker=1, filepath='./audio.wav', target_host='loc
         ('text', text),
         ('speaker', speaker),
     )
-    len_limit = 100
+    len_limit = 80
     if is_premium:
         conn = premium_conn
-        len_limit = 200
+        len_limit = 160
     else:
         conn = default_conn
     if int(speed) < 80:
@@ -831,12 +892,14 @@ async def yomiage(member, guild, text):
         is_premium = True
     output = text
     output = await henkan_private_dict(guild.id, output)
+    output = await henkan_private_dict(9686, output)
+
     if guild.id in premium_server_list:
         if re.search(pattern_voice, text) is not None:
             cmd = re.search(pattern_voice, text).group()
             if re.search("[0-9]", cmd) is not None:
                 voice_id = re.sub(r"\D", "", cmd)
-        if re.search(pattern, text) is not None and getdatabase(guild.id, "is_readurl", True,
+        if re.search(pattern, text) is not None and await getdatabase(guild.id, "is_readurl", True,
                                                                            "guild"):
             url = re.search(pattern, text).group()
             async with aiohttp.ClientSession() as session:
@@ -844,30 +907,54 @@ async def yomiage(member, guild, text):
                     html = await response.text()
                     title = re.findall('<title>(.*)</title>', html)[0]
                     if title is not None:
-                        output = re.sub(pattern, "URL " + title, output)
+                        output = re.sub(pattern, "ユーアールエル " + title, output)
     if await getdatabase(guild.id, "is_reademoji", True, "guild"):
         output = emoji.demojize(output, language="ja")
 
     if await getdatabase(guild.id, "is_readname", False, "guild"):
         output = member.display_name + " " + output
 
-    output = re.sub(pattern, "URL省略", output)
+    lang = await getdatabase(guild.id, "lang", "ja", "guild")
+
+    if lang == "ko":
+        output = re.sub(pattern, "유알엘생략", output)
+        if len(output) <= 0:
+            return
+        output = re.sub("w{4,100}", "ㅋ", output)
+        if re.search("[^w]", output) is None:
+            output = "ㅋ"
+
+        if voice_id is None:
+            voice_id = await getdatabase(member.id, "voiceid", 0)
+        if len(output) > 50:
+            if is_premium:
+                if len(output) > 100:
+                    output = output[:100] + "이하 약어"
+            else:
+                output = output[:50] + "이하 약어"
+        output = korean2katakana(output)
+        output = output.replace(" ", "")
+    elif lang == "ja":
+        output = re.sub(pattern, "ユーアールエル省略", output)
+        output = romajitable.to_kana(output).katakana
+        if len(output) <= 0:
+            return
+        output = re.sub("w{4,100}", "ワラ", output)
+        if re.search("[^w]", output) is None:
+            output = "ワラ"
+
+        if voice_id is None:
+            voice_id = await getdatabase(member.id, "voiceid", 0)
+        if len(output) > 50:
+            if is_premium:
+                if len(output) > 100:
+                    output = output[:100] + "以下略"
+            else:
+                output = output[:50] + "以下略"
+
     output = re.sub(pattern_emoji, "", output)
     output = re.sub(pattern_voice, "", output)
-    if len(output) <= 0:
-        return
-    output = re.sub("w{4,100}", "ワラ", output)
-    if re.search("[^w]", output) is None:
-        output = "ワラ"
 
-    if voice_id is None:
-        voice_id = await getdatabase(member.id, "voiceid", 0)
-    if len(output) > 50:
-        if is_premium:
-            if len(output) > 100:
-                output = output[:100] + "以下略"
-        else:
-            output = output[:50] + "以下略"
 
     if len(output) <= 0:
         return
@@ -938,7 +1025,7 @@ async def on_voice_state_update(member, before, after):
             )
             if after.channel.guild.id in premium_server_list:
                 premium_server_list.remove(after.channel.guild.id)
-            if str(member.id) in premium_user_list:
+            if str(member.id) in premium_user_list or str(int(await getdatabase(after.channel.guild.id, "premium_user", 0, "guild"))) in premium_user_list:
                 embed.set_author(name="Premium")
                 premium_server_list.append(after.channel.guild.id)
             await after.channel.guild.get_channel(autojoin["text_channel_id"]).send(embed=embed)
@@ -957,7 +1044,22 @@ async def on_voice_state_update(member, before, after):
         del vclist[voicestate.guild.id]
         return
 
+    if after.channel is not None and after.channel.id == voicestate.channel.id and str(member.id) in premium_user_list and after.channel.guild.id not in premium_server_list:
+        premium_server_list.append(after.channel.guild.id)
+        embed = discord.Embed(
+            title="Premium Mode",
+            color=discord.Colour.yellow(),
+            description="プレミアムモードに切り替わりました。"
+        )
+        try:
+            await after.channel.guild.get_channel(vclist[after.channel.guild.id]).send(embed=embed)
+        except:
+            pass
+
+
     if await getdatabase(member.guild.id, "is_readjoin", False, "guild"):
+        if after.channel is not None and before.channel is not None and after.channel.id == before.channel.id:
+            return
         if after.channel is not None and after.channel.id == voicestate.channel.id:
             await yomiage(member.guild.me, member.guild, f"{member.display_name}が入室したのだ、")
         elif before.channel.id == voicestate.channel.id:
@@ -981,20 +1083,24 @@ async def status_update_loop():
     await bot.change_presence(activity=discord.Game(text))
 
 
+
 @tasks.loop(hours=24)
 async def premium_user_check_loop():
     if stripe.api_key is None:
         return
     global premium_user_list
-    premium_user_list = [d['metadata']['discord_user_id'] for d in stripe.Subscription.search(limit=100,
-                                                                                              query="status:'active' AND -metadata['discord_user_id']:null")]
-    print(premium_user_list)
+    for d in stripe.Subscription.search(limit=100,
+                                        query="status:'active' AND -metadata['discord_user_id']:null").auto_paging_iter():
+        premium_user_list.append(d['metadata']['discord_user_id'])
+    print(len(premium_user_list))
 
 
 @tasks.loop(minutes=1)
 async def init_loop():
+    await bot.change_presence(activity=discord.Game("起動中..."))
     global pool
     pool = await get_connection()
+
     await initdatabase()
     await init_voice_list()
     status_update_loop.start()
@@ -1035,7 +1141,7 @@ async def updatedict():
     headers = {'Content-Type': 'application/json', }
     async with aiohttp.ClientSession() as session:
         async with session.get(
-            f'http://{host}:{port}/user_dict',
+            f'http://{host}/user_dict',
             headers=headers,
             timeout=10
         ) as response2:
@@ -1102,7 +1208,9 @@ async def henkan_private_dict(server_id, source):
             json_data = json.load(f)
     except:
         json_data = {}
-    for k in sorted(json_data.keys(), key=len):
+    dict_data = sorted(json_data.keys(), key=len)
+    dict_data.reverse()
+    for k in dict_data:
         source = source.replace(k, json_data[k])
     return source
 
