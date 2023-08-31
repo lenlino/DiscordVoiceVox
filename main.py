@@ -191,7 +191,7 @@ class VoiceSelectView2(discord.ui.Select):
                 color=discord.Colour.brand_red(),
             )
         else:
-            await setdatabase(interaction.user.id, "voiceid", id)
+            await setdatabase(interaction.user.id, "voiceid", str(id))
         print(f"**{self.name}({self.values[0]})**")
         await interaction.response.send_message(embed=embed)
         await interaction.message.delete()
@@ -350,7 +350,7 @@ async def set(ctx, key: discord.Option(str, choices=[
                 print(f"**errorvoice**")
                 await ctx.send_followup(embed=embed)
                 return
-            await setdatabase(ctx.author.id, "voiceid", int(value))
+            await setdatabase(ctx.author.id, "voiceid", value)
             name = ""
             for speaker in voice_id_list:
                 if name != "":
@@ -612,7 +612,7 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=int, des
         print(f"**errorvoice**")
         await ctx.send_followup(embed=embed)
         return
-    await setdatabase(ctx.author.id, "voiceid", int(voiceid))
+    await setdatabase(ctx.author.id, "voiceid", voiceid)
     name = ""
     for speaker in voice_id_list:
         if name != "":
