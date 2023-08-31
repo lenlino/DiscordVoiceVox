@@ -64,7 +64,7 @@ voice_id_list = []
 generating_guilds = set()
 pool = None
 logger = logging.getLogger('discord')
-handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
+handler = logging.FileHandler(filename=os.path.dirname(os.path.abspath(__file__)) + "/" +'discord.log', encoding='utf-8', mode='w')
 handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
 logger.addHandler(handler)
 default_conn = aiohttp.TCPConnector(limit_per_host=10)
