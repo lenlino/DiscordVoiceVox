@@ -323,7 +323,7 @@ async def set(ctx, key: discord.Option(str, choices=[
             for i in range(-(-len(voice_id_list) // 25)):
                 name = None
                 if i == 0:
-                    name = "ずんだもん"
+                    name = "VOICEVOX:ずんだもん"
                 else:
                     name = voice_id_list[i * 25]["name"]
                 test_pages.append(pages.Page(content="ボイス・スタイルを選択してください。",
