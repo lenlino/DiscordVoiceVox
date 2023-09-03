@@ -67,7 +67,7 @@ logger = logging.getLogger('discord')
 handler = logging.FileHandler(filename=os.path.dirname(os.path.abspath(__file__)) + "/" +'discord.log', encoding='utf-8', mode='w')
 handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
 logger.addHandler(handler)
-default_conn = aiohttp.TCPConnector(limit_per_host=10)
+default_conn = aiohttp.TCPConnector(limit_per_host=12)
 premium_conn = aiohttp.TCPConnector()
 
 
@@ -1053,8 +1053,13 @@ async def on_voice_state_update(member, before, after):
                 embed.set_author(name="Premium")
                 premium_server_list.append(after.channel.guild.id)
             await after.channel.guild.get_channel(autojoin["text_channel_id"]).send(embed=embed)
+            try:
+                await after.channel.connect(cls=wavelink.Player)
+            except Exception as e:
+                logger.error(e)
+                logger.error("自動接続")
+                return
 
-            await after.channel.connect(cls=wavelink.Player)
 
         return
 
