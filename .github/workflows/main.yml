@@ -16,5 +16,4 @@ jobs:
           script: |
             cd DiscordVoiceVox
             git pull
-            sudo python3.11 -m pip install -r requirements.txt
-            sudo systemctl restart discordvoicevox.service
+
