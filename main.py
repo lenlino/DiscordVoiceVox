@@ -721,6 +721,14 @@ async def adddict(ctx, surface: discord.Option(input_type=str, description="辞�
         params=params,
         timeout=(3.0, 10)
     )"""
+    if surface == "":
+        embed = discord.Embed(
+            title="**Error**",
+            description=f"空文字は登録できません。",
+            color=discord.Colour.brand_red(),
+        )
+        await ctx.respond(embed=embed)
+        return
     await update_private_dict(9686, surface, pronunciation)
     embed = discord.Embed(
         title="**Add Dict**",
@@ -1188,6 +1196,14 @@ async def updatedict():
 async def adddict_local(ctx, surface: discord.Option(input_type=str, description="辞書に登録する単語"),
                         pronunciation: discord.Option(input_type=str, description="カタカナでの読み方")):
     print(surface)
+    if surface == "":
+        embed = discord.Embed(
+            title="**Error**",
+            description=f"空文字は登録できません。",
+            color=discord.Colour.brand_red(),
+        )
+        await ctx.respond(embed=embed)
+        return
     await update_private_dict(ctx.guild.id, surface, pronunciation)
     embed = discord.Embed(
         title="**Add Dict**",
