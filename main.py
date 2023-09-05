@@ -921,6 +921,8 @@ async def yomiage(member, guild, text):
     if stripe.api_key is None:
         is_premium = True
     output = text
+    if await getdatabase(guild.id, "is_readname", False, "guild"):
+        output = member.display_name + " " + output
     output = await henkan_private_dict(guild.id, output)
     output = await henkan_private_dict(9686, output)
 
@@ -941,8 +943,7 @@ async def yomiage(member, guild, text):
     if await getdatabase(guild.id, "is_reademoji", True, "guild"):
         output = emoji.demojize(output, language="ja")
 
-    if await getdatabase(guild.id, "is_readname", False, "guild"):
-        output = member.display_name + " " + output
+
 
     lang = await getdatabase(guild.id, "lang", "ja", "guild")
 
@@ -1097,10 +1098,13 @@ async def on_voice_state_update(member, before, after):
     if await getdatabase(member.guild.id, "is_readjoin", False, "guild"):
         if after.channel is not None and before.channel is not None and after.channel.id == before.channel.id:
             return
+        name = member.display_name
+        name = await henkan_private_dict(member.guild.id, name)
+        name = await henkan_private_dict(9686, name)
         if after.channel is not None and after.channel.id == voicestate.channel.id:
-            await yomiage(member.guild.me, member.guild, f"{member.display_name}が入室したのだ、")
+            await yomiage(member.guild.me, member.guild, f"{name}が入室したのだ、")
         elif before.channel.id == voicestate.channel.id:
-            await yomiage(member.guild.me, member.guild, f"{member.display_name}が退出したのだ、")
+            await yomiage(member.guild.me, member.guild, f"{name}が退出したのだ、")
 
 
 @bot.event
