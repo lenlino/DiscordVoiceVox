@@ -721,6 +721,14 @@ async def adddict(ctx, surface: discord.Option(input_type=str, description="辞�
         params=params,
         timeout=(3.0, 10)
     )"""
+    if surface == "":
+        embed = discord.Embed(
+            title="**Error**",
+            description=f"空文字は登録できません。",
+            color=discord.Colour.brand_red(),
+        )
+        await ctx.respond(embed=embed)
+        return
     await update_private_dict(9686, surface, pronunciation)
     embed = discord.Embed(
         title="**Add Dict**",
@@ -913,6 +921,8 @@ async def yomiage(member, guild, text):
     if stripe.api_key is None:
         is_premium = True
     output = text
+    if await getdatabase(guild.id, "is_readname", False, "guild"):
+        output = member.display_name + " " + output
     output = await henkan_private_dict(guild.id, output)
     output = await henkan_private_dict(9686, output)
 
@@ -933,8 +943,7 @@ async def yomiage(member, guild, text):
     if await getdatabase(guild.id, "is_reademoji", True, "guild"):
         output = emoji.demojize(output, language="ja")
 
-    if await getdatabase(guild.id, "is_readname", False, "guild"):
-        output = member.display_name + " " + output
+
 
     lang = await getdatabase(guild.id, "lang", "ja", "guild")
 
@@ -1089,10 +1098,13 @@ async def on_voice_state_update(member, before, after):
     if await getdatabase(member.guild.id, "is_readjoin", False, "guild"):
         if after.channel is not None and before.channel is not None and after.channel.id == before.channel.id:
             return
+        name = member.display_name
+        name = await henkan_private_dict(member.guild.id, name)
+        name = await henkan_private_dict(9686, name)
         if after.channel is not None and after.channel.id == voicestate.channel.id:
-            await yomiage(member.guild.me, member.guild, f"{member.display_name}が入室したのだ、")
+            await yomiage(member.guild.me, member.guild, f"{name}が入室したのだ、")
         elif before.channel.id == voicestate.channel.id:
-            await yomiage(member.guild.me, member.guild, f"{member.display_name}が退出したのだ、")
+            await yomiage(member.guild.me, member.guild, f"{name}が退出したのだ、")
 
 
 @bot.event
@@ -1188,6 +1200,14 @@ async def updatedict():
 async def adddict_local(ctx, surface: discord.Option(input_type=str, description="辞書に登録する単語"),
                         pronunciation: discord.Option(input_type=str, description="カタカナでの読み方")):
     print(surface)
+    if surface == "":
+        embed = discord.Embed(
+            title="**Error**",
+            description=f"空文字は登録できません。",
+            color=discord.Colour.brand_red(),
+        )
+        await ctx.respond(embed=embed)
+        return
     await update_private_dict(ctx.guild.id, surface, pronunciation)
     embed = discord.Embed(
         title="**Add Dict**",
