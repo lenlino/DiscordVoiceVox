@@ -946,6 +946,8 @@ async def yomiage(member, guild, text):
 
 
     lang = await getdatabase(guild.id, "lang", "ja", "guild")
+    output = re.sub(pattern_emoji, "", output)
+    output = re.sub(pattern_voice, "", output)
 
     if lang == "ko":
         output = re.sub(pattern, "유알엘생략", output)
@@ -983,8 +985,7 @@ async def yomiage(member, guild, text):
             else:
                 output = output[:50] + "以下略"
 
-    output = re.sub(pattern_emoji, "", output)
-    output = re.sub(pattern_voice, "", output)
+
 
     if len(output) <= 0:
         return
