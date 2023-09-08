@@ -61,7 +61,7 @@ tips_list = ["/setvc　で自分の声を変更できます。", "[プレミア�
              "/vc コマンドで「考え中...」のまま動かない場合は[サポートサーバー](https://discord.gg/MWnnkbXSDJ)へお問い合わせください。"]
 voice_id_list = []
 
-generating_guilds = set()
+generating_guilds = {}
 pool = None
 logger = logging.getLogger('discord')
 handler = logging.FileHandler(filename=os.path.dirname(os.path.abspath(__file__)) + "/" +'discord.log', encoding='utf-8', mode='w')
@@ -287,7 +287,7 @@ async def vc(ctx):
                 await ctx.author.voice.channel.connect(cls=wavelink.Player)
             except Exception as e:
                 logger.error(e)
-                await ctx.send_followup("予期しないエラーが発生しました。")
+                await ctx.send_followup("現在起動中です。")
                 return
         else:
             await ctx.author.voice.channel.connect()
@@ -912,7 +912,11 @@ async def on_message(message):
         return
 
 
-async def yomiage(member, guild, text):
+async def yomiage(member, guild, text: str):
+    if text == "zundamon!!stop":
+        generating_guilds[guild.id].clear()
+        print(f"クリアしました。guild: {guild.id}")
+        return
     pattern = "https?://[\w/:%#\$&\?\(\)~\.=\+\-]+"
     pattern_emoji = "\<.+?\>"
     pattern_voice = "\.v[0-9]*"
@@ -991,10 +995,13 @@ async def yomiage(member, guild, text):
         return
     print(output)
 
-    while guild.voice_client.is_playing() or guild.id in generating_guilds:
-        await asyncio.sleep(0.1)
-    generating_guilds.add(guild.id)
+
     try:
+        generating_guilds.setdefault(guild.id, []).append(text)
+        while guild.voice_client.is_playing() or generating_guilds[guild.id].index(text, 0) > 0:
+            await asyncio.sleep(0.1)
+        print(len(generating_guilds.get(guild.id)))
+        print(text)
         filename = ""
         time_sta = time.time()
         done = True
@@ -1026,7 +1033,7 @@ async def yomiage(member, guild, text):
         tim = time_end - time_sta
         print("ソース:" + str(tim))
     finally:
-        generating_guilds.remove(guild.id)
+        generating_guilds.get(guild.id, []).remove(text)
     if is_lavalink:
         await guild.voice_client.play(source)
     else:
