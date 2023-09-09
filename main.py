@@ -900,11 +900,7 @@ async def on_ready():
 
 @bot.event
 async def on_message(message):
-    voice = discord.utils.get(bot.voice_clients, guild=message.guild)
-    if message.guild.id not in vclist.keys():
-        if voice is not None:
-            await voice.disconnect(force=True)
-        return
+    voice = message.guild.voice_client
 
     if voice is not None and message.channel.id == vclist[message.guild.id]:
         await yomiage(message.author, message.guild, message.content)
