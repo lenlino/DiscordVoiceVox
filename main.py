@@ -34,7 +34,7 @@ premium_host_list = os.environ.get("VOICEVOX_HOSTS", "127.0.0.1:50021").split(",
 host_count = 0
 stripe.api_key = os.environ.get("STRIPE_TOKEN", None)
 is_lavalink = True
-coeiroink_host = os.environ.get("COEIROINK_HOST", "127.0.0.1:50031")
+coeiroink_host = os.environ.get("COEIROINK_HOST", "127.0.0.1:50032")
 sharevox_host = os.environ.get("SHAREVOX_HOST", "127.0.0.1:50025")
 ManagerGuilds = [888020016660893726]
 intents = discord.Intents.none()
@@ -64,7 +64,8 @@ voice_id_list = []
 generating_guilds = {}
 pool = None
 logger = logging.getLogger('discord')
-handler = logging.FileHandler(filename=os.path.dirname(os.path.abspath(__file__)) + "/" +'discord.log', encoding='utf-8', mode='w')
+handler = logging.FileHandler(filename=os.path.dirname(os.path.abspath(__file__)) + "/" + 'discord.log',
+                              encoding='utf-8', mode='w')
 handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
 logger.addHandler(handler)
 default_conn = aiohttp.TCPConnector(limit_per_host=14)
@@ -106,15 +107,16 @@ async def init_voice_list():
                 voice_info["name"] = "VOICEVOX:" + voice_info["name"]
         try:
             async with session.get(
-                f'http://{coeiroink_host}/speakers',
+                f'http://{coeiroink_host}/v1/speakers',
                 headers=headers,
                 timeout=10
             ) as response3:
                 json2: list = await response3.json()
                 for voice_info in json2:
-                    voice_info["name"] = "COEIROINK:" + voice_info["name"]
+                    voice_info["name"] = "COEIROINK:" + voice_info["speakerName"]
                     for style_info in voice_info["styles"]:
-                        style_info["id"] += 1000
+                        style_info["id"] = style_info["styleId"] + 1000
+                        style_info["name"] = style_info["styleName"]
 
                 json.extend(json2)
         except:
@@ -836,6 +838,61 @@ async def generate_wav(text, speaker=1, filepath='./audio.wav', target_host='loc
         conn = default_conn
     if int(speed) < 80:
         speed = 100
+
+    # COEIROINKAPI用に対応
+    if coeiroink_host == target_host:
+        return await synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, filepath)
+    else:
+        return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath)
+
+
+async def synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, filepath):
+    try:
+        text_json = {"text": text}
+        async with aiohttp.ClientSession(connector_owner=False, connector=conn) as private_session:
+            async with private_session.post(f'http://{target_host}/v1/estimate_prosody',
+                                            json=text_json,
+                                            timeout=30) as response1:
+                if response1.status != 200:
+                    return False
+                headers = {'Content-Type': 'application/json', }
+                query_json = {}
+                query_json["speedScale"] = int(speed) / 100
+                query_json["pitchScale"] = int(pitch) / 100
+                query_json["styleId"] = speaker
+                query_json["text"] = text
+                query_json["prosodyDetail"] = (await response1.json())["detail"]
+                query_json["volumeScale"] = 1
+                query_json["intonationScale"] = 1
+                query_json["prePhonemeLength"] = 0.1
+                query_json["postPhonemeLength"] = 0.1
+                query_json["outputSamplingRate"] = 24000
+
+            async with private_session.post(f'http://{target_host}/v1/style_id_to_speaker_meta?styleId={speaker}',
+                                            headers=headers,
+                                            timeout=30) as response_speaker_res:
+                query_json["speakerUuid"] = (await response_speaker_res.json())["speakerUuid"]
+
+            async with private_session.post(f'http://{target_host}/v1/synthesis',
+                                            headers=headers,
+                                            json=query_json,
+                                            timeout=30) as response2:
+                if response2.status != 200:
+                    return False
+
+                try:
+                    async with aiofiles.open(os.path.dirname(os.path.abspath(__file__)) + "/" + filepath,
+                                             mode='wb') as f:
+                        await f.write(await response2.read())
+                    return True
+                except ReadTimeout:
+                    return False
+    except:
+        return False
+
+
+
+async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath):
     try:
         async with aiohttp.ClientSession(connector_owner=False, connector=conn) as private_session:
             async with private_session.post(f'http://{target_host}/audio_query',
@@ -845,8 +902,6 @@ async def generate_wav(text, speaker=1, filepath='./audio.wav', target_host='loc
                     return False
                 headers = {'Content-Type': 'application/json', }
                 query_json = await response1.json()
-                # query_json["prePhonemeLength"] = 0.4
-                query_json["outputSamplingRate"] = 24000
                 query_json["speedScale"] = int(speed) / 100
                 query_json["pitchScale"] = int(pitch) / 100
 
@@ -943,8 +998,6 @@ async def yomiage(member, guild, text: str):
     if await getdatabase(guild.id, "is_reademoji", True, "guild"):
         output = emoji.demojize(output, language="ja")
 
-
-
     lang = await getdatabase(guild.id, "lang", "ja", "guild")
     output = re.sub(pattern_emoji, "", output)
     output = re.sub(pattern_voice, "", output)
@@ -985,12 +1038,9 @@ async def yomiage(member, guild, text: str):
             else:
                 output = output[:50] + "以下略"
 
-
-
     if len(output) <= 0:
         return
     print(output)
-
 
     try:
         generating_guilds.setdefault(guild.id, []).append(text)
@@ -1072,7 +1122,6 @@ async def on_voice_state_update(member, before, after):
                 logger.error(e)
                 logger.error("自動接続")
                 return
-
 
         return
 
