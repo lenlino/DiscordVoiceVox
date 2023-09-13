@@ -3,6 +3,7 @@
 # Press Shift+F10 to execute it or replace it with your code.
 # Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
 import asyncio
+import datetime
 import json
 import logging
 import os
@@ -68,7 +69,7 @@ handler = logging.FileHandler(filename=os.path.dirname(os.path.abspath(__file__)
                               encoding='utf-8', mode='w')
 handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
 logger.addHandler(handler)
-default_conn = aiohttp.TCPConnector(limit_per_host=14)
+default_conn = aiohttp.TCPConnector(limit_per_host=16)
 premium_conn = aiohttp.TCPConnector()
 
 
@@ -92,6 +93,9 @@ async def initdatabase():
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readurl boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS premium_user char(20);')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS lang char(2);')
+        await conn.execute('CREATE TABLE IF NOT EXISTS log(created timestamp);')
+        await conn.execute('ALTER TABLE log ADD COLUMN IF NOT EXISTS guild_count integer;')
+        await conn.execute('ALTER TABLE log ADD COLUMN IF NOT EXISTS voice_count integer;')
 
 
 async def init_voice_list():
@@ -1174,8 +1178,15 @@ async def status_update_loop():
             continue
         if guild.voice_client is None or guild.voice_client.channel is None:
             del vclist[key]
-    text = str(len(vclist)) + "/" + str(len(bot.guilds)) + " 読み上げ"
-    await bot.change_presence(activity=discord.Game(text))
+    text = str(len(vclist)) + "/" + str(len(bot.guilds)) + " 読み上げ中" + str(len(bot.users)) + "Users"
+    await bot.change_presence(activity=discord.CustomActivity(text))
+
+
+@tasks.loop(minutes=10)
+async def database_update_loop():
+    datetime_now = datetime.datetime.now()
+    async with pool.acquire() as conn:
+        await conn.execute(f'INSERT INTO log (created, guild_count, voice_count) VALUES ($1, $2, $3);', datetime_now, len(bot.guilds), len(vclist))
 
 
 @tasks.loop(hours=24)
@@ -1202,7 +1213,9 @@ async def init_loop():
     bot.add_view(ActivateButtonView())
     bot.loop.create_task(connect_nodes())
     await updatedict()
-    # await auto_join()
+    while datetime.datetime.now().minute % 10 != 0:
+        await asyncio.sleep(0.1)
+    database_update_loop.start()
 
 
 async def connect_nodes():
