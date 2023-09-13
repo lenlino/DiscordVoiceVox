@@ -794,8 +794,8 @@ async def setdatabase(userid, id, value, table="voice"):
     async with pool.acquire() as conn:
         rows = await conn.fetchrow(f'SELECT {id} from {table} where "id" = $1;', (str(userid)))
         if rows is None:
-            await conn.execute('INSERT INTO {table} (id) VALUES ($1);', (str(userid)))
-            rows = await conn.fetchrow('SELECT {id} from {table} where id = $1;', (str(userid)))
+            await conn.execute(f'INSERT INTO {table} (id) VALUES ($1);', (str(userid)))
+            rows = await conn.fetchrow(f'SELECT {id} from {table} where id = $1;', (str(userid)))
         await conn.execute(f'UPDATE {table} SET {id} = $1 WHERE "id" = $2;', value, str(userid))
         return rows[0]
 
