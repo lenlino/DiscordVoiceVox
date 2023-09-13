@@ -1178,7 +1178,7 @@ async def status_update_loop():
             continue
         if guild.voice_client is None or guild.voice_client.channel is None:
             del vclist[key]
-    text = str(len(vclist)) + "/" + str(len(bot.guilds)) + " 読み上げ中" + str(len(bot.users)) + "Users"
+    text = str(len(vclist)) + "/" + str(len(bot.guilds)) + " 読み上げ中"
     await bot.change_presence(activity=discord.CustomActivity(text))
 
 
