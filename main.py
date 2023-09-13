@@ -427,8 +427,8 @@ async def set(ctx, key: discord.Option(str, choices=[
             )
             await ctx.send_followup(embed=embed)
             return
-        before_guild_id = await getdatabase(ctx.author.id, key, 0)
-        if before_guild_id != 0:
+        before_guild_id = await getdatabase(ctx.author.id, key, "0")
+        if before_guild_id.replace(" ", "") != "0":
             await setdatabase(before_guild_id, "premium_user", "0", "guild")
         await setdatabase(ctx.author.id, key, value)
         await setdatabase(ctx.guild.id, "premium_user", str(ctx.author.id), "guild")
@@ -794,8 +794,8 @@ async def setdatabase(userid, id, value, table="voice"):
     async with pool.acquire() as conn:
         rows = await conn.fetchrow(f'SELECT {id} from {table} where "id" = $1;', (str(userid)))
         if rows is None:
-            await conn.execute('INSERT INTO voice (id, voiceid) VALUES ($1, 3);', (str(userid)))
-            rows = await conn.fetchrow('SELECT voiceid from voice where id = $1;', (str(userid)))
+            await conn.execute('INSERT INTO {table} (id) VALUES ($1);', (str(userid)))
+            rows = await conn.fetchrow('SELECT {id} from {table} where id = $1;', (str(userid)))
         await conn.execute(f'UPDATE {table} SET {id} = $1 WHERE "id" = $2;', value, str(userid))
         return rows[0]
 
