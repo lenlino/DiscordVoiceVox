@@ -1008,6 +1008,7 @@ async def yomiage(member, guild, text: str):
     pattern = "https?://[\w/:%#\$&\?\(\)~\.=\+\-]+"
     pattern_emoji = "\<.+?\>"
     pattern_voice = "\.v[0-9]*"
+    pattern_spoiler = "\|\|.*?\|\|"
     voice_id = None
     is_premium = guild.id in premium_server_list
     if stripe.api_key is None:
@@ -1038,6 +1039,7 @@ async def yomiage(member, guild, text: str):
     lang = await getdatabase(guild.id, "lang", "ja", "guild")
     output = re.sub(pattern_emoji, "", output)
     output = re.sub(pattern_voice, "", output)
+    output = re.sub(pattern_spoiler, "", output)
 
     if lang == "ko":
         output = re.sub(pattern, "유알엘생략", output)
