@@ -91,6 +91,7 @@ async def initdatabase():
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readname boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readjoin boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readurl boolean;')
+        await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readsan boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS premium_user char(20);')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS lang char(2);')
         await conn.execute('CREATE TABLE IF NOT EXISTS log(created timestamp);')
@@ -440,6 +441,7 @@ async def set(ctx, key: discord.Option(str, choices=[
         await ctx.send_followup(embed=embed)
 
 
+
 @bot.slash_command(description="サーバーの色々な設定なのだ", name="server-set",
                    default_member_permissions=discord.Permissions.manage_guild)
 @default_permissions(manage_messages=True)
@@ -449,8 +451,9 @@ async def server_set(ctx, key: discord.Option(str, choices=[
     discord.OptionChoice(name="readname"),
     discord.OptionChoice(name="readurl"),
     discord.OptionChoice(name="readjoinleave"),
-    discord.OptionChoice(name="lang")], description="設定項目"),
-                     value: discord.Option(str, description="設定値", required=False), ):
+    discord.OptionChoice(name="lang"),
+    discord.OptionChoice(name="readsan")], description="設定項目"),
+                     value: discord.Option(str, description="設定値", required=False,), ):
     await ctx.defer()
     guild_id = ctx.guild_id
     if key == "autojoin":
@@ -579,7 +582,27 @@ async def server_set(ctx, key: discord.Option(str, choices=[
             await setdatabase(ctx.guild.id, "lang", "ko", "guild")
         else:
             embed.title = "Error"
-            embed.description = "数字をvalueに指定してください。(日本語:ja,　한국어:OFF)"
+            embed.description = "言語をvalueに指定してください。(日本語:ja,　한국어:OFF)"
+            embed.color = discord.Colour.brand_red()
+        await ctx.send_followup(embed=embed)
+    elif key == "readsan":
+        embed = discord.Embed(
+            title="Changed readsan",
+            description="名前",
+            color=discord.Colour.brand_green()
+        )
+        if value is None:
+            embed.description = "さんをつける設定をオフにしました（デフォルト）(1:ON,0:OFF)"
+            await setdatabase(ctx.guild.id, "is_readsan", False, "guild")
+        elif value == "0":
+            embed.description = "さんをつける設定をオフにしました(1:ON,0:OFF)"
+            await setdatabase(ctx.guild.id, "is_readsan", False, "guild")
+        elif value == "1":
+            embed.description = "さんをつける設定をオンにしました(1:ON,0:OFF)"
+            await setdatabase(ctx.guild.id, "is_readsan", True, "guild")
+        else:
+            embed.title = "Error"
+            embed.description = "数字をvalueに指定してください。(1:ON,0:OFF)"
             embed.color = discord.Colour.brand_red()
         await ctx.send_followup(embed=embed)
 
@@ -1158,6 +1181,8 @@ async def on_voice_state_update(member, before, after):
         name = member.display_name
         name = await henkan_private_dict(member.guild.id, name)
         name = await henkan_private_dict(9686, name)
+        if await getdatabase(member.guild.id, "is_readsan", False, "guild"):
+            name += "さん"
         if after.channel is not None and after.channel.id == voicestate.channel.id:
             await yomiage(member.guild.me, member.guild, f"{name}が入室したのだ、")
         elif before.channel.id == voicestate.channel.id:
