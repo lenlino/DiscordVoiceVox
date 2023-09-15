@@ -441,6 +441,16 @@ async def set(ctx, key: discord.Option(str, choices=[
         await ctx.send_followup(embed=embed)
 
 
+async def get_server_set_value(ctx: discord.AutocompleteContext):
+    setting_type = ctx.options["key"]
+    bool_settings = ["reademoji", "readname", "readurl", "readjoinleave", "readsan"]
+    if setting_type in bool_settings:
+        return ["off", "on"]
+    elif setting_type == "lang":
+        return ["ja", "ko"]
+    else:
+        return ["off"]
+
 
 @bot.slash_command(description="サーバーの色々な設定なのだ", name="server-set",
                    default_member_permissions=discord.Permissions.manage_guild)
@@ -453,12 +463,13 @@ async def server_set(ctx, key: discord.Option(str, choices=[
     discord.OptionChoice(name="readjoinleave"),
     discord.OptionChoice(name="lang"),
     discord.OptionChoice(name="readsan")], description="設定項目"),
-                     value: discord.Option(str, description="設定値", required=False,), ):
+                     value: discord.Option(str, description="設定値", required=False,
+                                           autocomplete=get_server_set_value), ):
     await ctx.defer()
     guild_id = ctx.guild_id
     if key == "autojoin":
         text_channel_id = ctx.channel_id
-        if value == "0":
+        if value == "off":
             setting_json = json.dumps({"text_channel_id": 1, "voice_channel_id": 1})
             await setdatabase(ctx.guild.id, "auto_join", setting_json, "guild")
             embed = discord.Embed(
@@ -481,7 +492,7 @@ async def server_set(ctx, key: discord.Option(str, choices=[
         await setdatabase(ctx.guild.id, "auto_join", setting_json, "guild")
         embed = discord.Embed(
             title="Changed AutoJoin",
-            description="現在の接続している音声チャンネル、テキストチャンネルで設定したのだ。(OFFにする際は0をvalueに設定して実行してください。)",
+            description="現在の接続している音声チャンネル、テキストチャンネルで設定したのだ。(OFFにする際はoffをvalueに設定して実行してください。)",
             color=discord.Colour.brand_green()
         )
         await ctx.send_followup(embed=embed)
@@ -492,17 +503,17 @@ async def server_set(ctx, key: discord.Option(str, choices=[
             color=discord.Colour.brand_green()
         )
         if value is None:
-            embed.description = "絵文字の読み上げをオンにしました（デフォルト）(1:ON,0:OFF)"
+            embed.description = "絵文字の読み上げをオンにしました（デフォルト)"
             await setdatabase(ctx.guild.id, "is_reademoji", True, "guild")
-        elif value == "0":
+        elif value == "off":
             embed.description = "絵文字の読み上げをオフにしました。"
             await setdatabase(ctx.guild.id, "is_reademoji", False, "guild")
-        elif value == "1":
+        elif value == "on":
             embed.description = "絵文字の読み上げをオンにしました。"
             await setdatabase(ctx.guild.id, "is_reademoji", True, "guild")
         else:
             embed.title = "Error"
-            embed.description = "数字をvalueに指定してください。(1:ON,0:OFF)"
+            embed.description = "on/offをvalueに指定してください。"
             embed.color = discord.Colour.brand_red()
         await ctx.send_followup(embed=embed)
     elif key == "readname":
@@ -512,17 +523,17 @@ async def server_set(ctx, key: discord.Option(str, choices=[
             color=discord.Colour.brand_green()
         )
         if value is None:
-            embed.description = "名前の読み上げをオンにしました（デフォルト）(1:ON,0:OFF)"
+            embed.description = "名前の読み上げをオンにしました（デフォルト）"
             await setdatabase(ctx.guild.id, "is_readname", True, "guild")
-        elif value == "0":
+        elif value == "off":
             embed.description = "名前の読み上げをオフにしました。"
             await setdatabase(ctx.guild.id, "is_readname", False, "guild")
-        elif value == "1":
+        elif value == "on":
             embed.description = "名前の読み上げをオンにしました。"
             await setdatabase(ctx.guild.id, "is_readname", True, "guild")
         else:
             embed.title = "Error"
-            embed.description = "数字をvalueに指定してください。(1:ON,0:OFF)"
+            embed.description = "on/offをvalueに指定してください。"
             embed.color = discord.Colour.brand_red()
         await ctx.send_followup(embed=embed)
     elif key == "readurl":
@@ -532,17 +543,17 @@ async def server_set(ctx, key: discord.Option(str, choices=[
             color=discord.Colour.brand_green()
         )
         if value is None:
-            embed.description = "URLの読み上げをオンにしました（デフォルト）(1:ON,0:OFF)"
+            embed.description = "URLの読み上げをオンにしました（デフォルト）"
             await setdatabase(ctx.guild.id, "is_readurl", True, "guild")
-        elif value == "0":
+        elif value == "off":
             embed.description = "URLの読み上げをオフにしました。"
             await setdatabase(ctx.guild.id, "is_readurl", False, "guild")
-        elif value == "1":
+        elif value == "on":
             embed.description = "URLの読み上げをオンにしました。"
             await setdatabase(ctx.guild.id, "is_readurl", True, "guild")
         else:
             embed.title = "Error"
-            embed.description = "数字をvalueに指定してください。(1:ON,0:OFF)"
+            embed.description = "on/offをvalueに指定してください。"
             embed.color = discord.Colour.brand_red()
         await ctx.send_followup(embed=embed)
     elif key == "readjoinleave":
@@ -552,17 +563,17 @@ async def server_set(ctx, key: discord.Option(str, choices=[
             color=discord.Colour.brand_green()
         )
         if value is None:
-            embed.description = "入退室の読み上げをオフにしました（デフォルト）(1:ON,0:OFF)"
+            embed.description = "入退室の読み上げをオフにしました（デフォルト）"
             await setdatabase(ctx.guild.id, "is_readjoin", False, "guild")
-        elif value == "0":
+        elif value == "off":
             embed.description = "入退室の読み上げをオフにしました。"
             await setdatabase(ctx.guild.id, "is_readjoin", False, "guild")
-        elif value == "1":
+        elif value == "on":
             embed.description = "入退室の読み上げをオンにしました。"
             await setdatabase(ctx.guild.id, "is_readjoin", True, "guild")
         else:
             embed.title = "Error"
-            embed.description = "数字をvalueに指定してください。(1:ON,0:OFF)"
+            embed.description = "on/offをvalueに指定してください。"
             embed.color = discord.Colour.brand_red()
         await ctx.send_followup(embed=embed)
     elif key == "lang":
@@ -592,17 +603,17 @@ async def server_set(ctx, key: discord.Option(str, choices=[
             color=discord.Colour.brand_green()
         )
         if value is None:
-            embed.description = "さんをつける設定をオフにしました（デフォルト）(1:ON,0:OFF)"
+            embed.description = "さん付けをオフにしました（デフォルト）"
             await setdatabase(ctx.guild.id, "is_readsan", False, "guild")
-        elif value == "0":
-            embed.description = "さんをつける設定をオフにしました(1:ON,0:OFF)"
+        elif value == "off":
+            embed.description = "さん付けをオフにしました"
             await setdatabase(ctx.guild.id, "is_readsan", False, "guild")
-        elif value == "1":
-            embed.description = "さんをつける設定をオンにしました(1:ON,0:OFF)"
+        elif value == "on":
+            embed.description = "さん付けをオンにしました"
             await setdatabase(ctx.guild.id, "is_readsan", True, "guild")
         else:
             embed.title = "Error"
-            embed.description = "数字をvalueに指定してください。(1:ON,0:OFF)"
+            embed.description = "on/offをvalueに指定してください。"
             embed.color = discord.Colour.brand_red()
         await ctx.send_followup(embed=embed)
 
@@ -918,7 +929,6 @@ async def synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, fi
         return False
 
 
-
 async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath):
     try:
         async with aiohttp.ClientSession(connector_owner=False, connector=conn) as private_session:
@@ -1211,7 +1221,8 @@ async def status_update_loop():
 async def database_update_loop():
     datetime_now = datetime.datetime.now()
     async with pool.acquire() as conn:
-        await conn.execute(f'INSERT INTO log (created, guild_count, voice_count) VALUES ($1, $2, $3);', datetime_now, len(bot.guilds), len(vclist))
+        await conn.execute(f'INSERT INTO log (created, guild_count, voice_count) VALUES ($1, $2, $3);', datetime_now,
+                           len(bot.guilds), len(vclist))
 
 
 @tasks.loop(hours=24)
