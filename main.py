@@ -1190,9 +1190,11 @@ async def on_voice_state_update(member, before, after):
     if await getdatabase(member.guild.id, "is_readjoin", False, "guild"):
         if after.channel is not None and before.channel is not None and after.channel.id == before.channel.id:
             return
+        pattern_emoji = "\<.+?\>"
         name = member.display_name
         name = await henkan_private_dict(member.guild.id, name)
         name = await henkan_private_dict(9686, name)
+        name = re.sub(pattern_emoji, "", name)
         if await getdatabase(member.guild.id, "is_readsan", False, "guild"):
             name += "さん"
         if after.channel is not None and after.channel.id == voicestate.channel.id:
