@@ -1015,7 +1015,10 @@ async def yomiage(member, guild, text: str):
         is_premium = True
     output = text
     if await getdatabase(guild.id, "is_readname", False, "guild"):
-        output = member.display_name + " " + output
+        if await getdatabase(member.guild.id, "is_readsan", False, "guild"):
+            output = member.display_name + "さん " + output
+        else:
+            output = member.display_name + " " + output
     output = await henkan_private_dict(guild.id, output)
     output = await henkan_private_dict(9686, output)
 
