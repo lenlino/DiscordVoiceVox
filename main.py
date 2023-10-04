@@ -48,6 +48,8 @@ vclist = {}
 voice_select_dict = {}
 premium_user_list = []
 premium_server_list = []
+voice_cache_dict = {}
+voice_cache_counter_dict = {}
 counter = 0
 voiceapi_counter = 0
 DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
@@ -852,6 +854,16 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0"):
             voiceapi_counter = 0
         else:
             voiceapi_counter += 1
+
+    if voice_cache_dict.get(voiceid, {}).get(text):
+        return voice_cache_dict.get(voiceid).get(text)
+    if voice_cache_counter_dict.get(voiceid, None) is None:
+        voice_cache_counter_dict[voiceid] = {}
+        voice_cache_dict[voiceid] = {}
+    voice_cache_counter_dict[voiceid][text] = voice_cache_counter_dict.get(voiceid, {}).get(text, 0) + 1
+    if voice_cache_counter_dict[voiceid][text] > 10:
+        filename = "cache/" + text + ".wav"
+        voice_cache_dict[voiceid][text] = filename
     if await generate_wav(text, voiceid, './' + filename, target_host=target_host,
                           is_premium=is_premium, speed=speed, pitch=pitch):
         return filename
@@ -1234,6 +1246,8 @@ async def premium_user_check_loop():
                                         query="status:'active' AND -metadata['discord_user_id']:null").auto_paging_iter():
         premium_user_list.append(d['metadata']['discord_user_id'])
     print(len(premium_user_list))
+    voice_cache_dict.clear()
+    voice_cache_counter_dict.clear()
 
 
 @tasks.loop(minutes=1)
