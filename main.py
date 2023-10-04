@@ -94,9 +94,6 @@ async def initdatabase():
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readsan boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS premium_user char(20);')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS lang char(2);')
-        await conn.execute('CREATE TABLE IF NOT EXISTS log(created timestamp);')
-        await conn.execute('ALTER TABLE log ADD COLUMN IF NOT EXISTS guild_count integer;')
-        await conn.execute('ALTER TABLE log ADD COLUMN IF NOT EXISTS voice_count integer;')
 
 
 async def init_voice_list():
@@ -1225,12 +1222,7 @@ async def status_update_loop():
     await bot.change_presence(activity=discord.CustomActivity(text))
 
 
-@tasks.loop(minutes=10)
-async def database_update_loop():
-    datetime_now = datetime.datetime.now()
-    async with pool.acquire() as conn:
-        await conn.execute(f'INSERT INTO log (created, guild_count, voice_count) VALUES ($1, $2, $3);', datetime_now,
-                           len(bot.guilds), len(vclist))
+
 
 
 @tasks.loop(hours=24)
@@ -1259,7 +1251,6 @@ async def init_loop():
     await updatedict()
     while datetime.datetime.now().minute % 10 != 0:
         await asyncio.sleep(0.1)
-    database_update_loop.start()
 
 
 async def connect_nodes():
