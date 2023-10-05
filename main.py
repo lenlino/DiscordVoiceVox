@@ -862,16 +862,16 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0"):
         voice_cache_dict[voiceid] = {}
     voice_cache_counter_dict[voiceid][text] = voice_cache_counter_dict.get(voiceid, {}).get(text, 0) + 1
     if voice_cache_counter_dict[voiceid][text] > 10:
-        filename = "cache/" + text + ".wav"
+        filename = f"cache/{text}-{voiceid}.wav"
         voice_cache_dict[voiceid][text] = filename
-    if await generate_wav(text, voiceid, './' + filename, target_host=target_host,
+    if await generate_wav(text, voiceid, filename, target_host=target_host,
                           is_premium=is_premium, speed=speed, pitch=pitch):
         return filename
     else:
         return "failed"
 
 
-async def generate_wav(text, speaker=1, filepath='./audio.wav', target_host='localhost', target_port=50021,
+async def generate_wav(text, speaker=1, filepath='audio.wav', target_host='localhost', target_port=50021,
                        is_premium=False, speed="100", pitch="0"):
     params = (
         ('text', text),
@@ -1246,6 +1246,9 @@ async def premium_user_check_loop():
                                         query="status:'active' AND -metadata['discord_user_id']:null").auto_paging_iter():
         premium_user_list.append(d['metadata']['discord_user_id'])
     print(len(premium_user_list))
+
+    with open('custom_emoji.json', 'wt') as f:
+        json.dump(voice_cache_dict, f, ensure_ascii=False)
     voice_cache_dict.clear()
     voice_cache_counter_dict.clear()
 
@@ -1255,6 +1258,10 @@ async def init_loop():
     await bot.change_presence(activity=discord.Game("起動中..."))
     global pool
     pool = await get_connection()
+
+    global voice_cache_dict
+    with open("./cache/voice_cache.json") as f:
+        voice_cache_dict = json.load(f)
 
     await initdatabase()
     await init_voice_list()
