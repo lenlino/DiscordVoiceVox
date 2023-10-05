@@ -60,7 +60,7 @@ DB_PASS = os.getenv("DB_PASS", "maikura123")
 tips_list = ["/setvc　で自分の声を変更できます。", "[プレミアムプラン](https://lenlino.com/?page_id=2510)(月100円～)あります。",
              "[要望・不具合募集中](https://forms.gle/1TvbqzHRz6Q1vSfq9)",
              "[VOICEVOX規約](https://voicevox.hiroshiba.jp/term/)の遵守をお願いします。",
-             "8/30 [SHAREVOX](https://www.sharevox.app/)の読み上げに対応しました。また、COEIROINKの音声追加を行いました。",
+             "10/05 [VOICEVOX](https://voicevox.hiroshiba.jp/)より音声が追加されました。/setvcより音声の変更が可能です。追加音声：栗田まろん、あいえるたん、満点花丸、琴詠ニア",
              "/vc コマンドで「考え中...」のまま動かない場合は[サポートサーバー](https://discord.gg/MWnnkbXSDJ)へお問い合わせください。"]
 voice_id_list = []
 
