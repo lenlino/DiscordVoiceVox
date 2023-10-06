@@ -48,6 +48,8 @@ vclist = {}
 voice_select_dict = {}
 premium_user_list = []
 premium_server_list = []
+voice_cache_dict = {}
+voice_cache_counter_dict = {}
 counter = 0
 voiceapi_counter = 0
 DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
@@ -58,7 +60,7 @@ DB_PASS = os.getenv("DB_PASS", "maikura123")
 tips_list = ["/setvc　で自分の声を変更できます。", "[プレミアムプラン](https://lenlino.com/?page_id=2510)(月100円～)あります。",
              "[要望・不具合募集中](https://forms.gle/1TvbqzHRz6Q1vSfq9)",
              "[VOICEVOX規約](https://voicevox.hiroshiba.jp/term/)の遵守をお願いします。",
-             "8/30 [SHAREVOX](https://www.sharevox.app/)の読み上げに対応しました。また、COEIROINKの音声追加を行いました。",
+             "10/05 [VOICEVOX](https://voicevox.hiroshiba.jp/)より音声が追加されました。/setvcより音声の変更が可能です。追加音声：栗田まろん、あいえるたん、満点花丸、琴詠ニア",
              "/vc コマンドで「考え中...」のまま動かない場合は[サポートサーバー](https://discord.gg/MWnnkbXSDJ)へお問い合わせください。"]
 voice_id_list = []
 
@@ -94,9 +96,6 @@ async def initdatabase():
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readsan boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS premium_user char(20);')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS lang char(2);')
-        await conn.execute('CREATE TABLE IF NOT EXISTS log(created timestamp);')
-        await conn.execute('ALTER TABLE log ADD COLUMN IF NOT EXISTS guild_count integer;')
-        await conn.execute('ALTER TABLE log ADD COLUMN IF NOT EXISTS voice_count integer;')
 
 
 async def init_voice_list():
@@ -855,14 +854,24 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0"):
             voiceapi_counter = 0
         else:
             voiceapi_counter += 1
-    if await generate_wav(text, voiceid, './' + filename, target_host=target_host,
+
+    if voice_cache_dict.get(voiceid, {}).get(text):
+        return voice_cache_dict.get(voiceid).get(text)
+    if voice_cache_counter_dict.get(voiceid, None) is None:
+        voice_cache_counter_dict[voiceid] = {}
+        voice_cache_dict[voiceid] = {}
+    voice_cache_counter_dict[voiceid][text] = voice_cache_counter_dict.get(voiceid, {}).get(text, 0) + 1
+    if voice_cache_counter_dict[voiceid][text] > 10:
+        filename = f"cache/{text}-{voiceid}.wav"
+        voice_cache_dict[voiceid][text] = filename
+    if await generate_wav(text, voiceid, filename, target_host=target_host,
                           is_premium=is_premium, speed=speed, pitch=pitch):
         return filename
     else:
         return "failed"
 
 
-async def generate_wav(text, speaker=1, filepath='./audio.wav', target_host='localhost', target_port=50021,
+async def generate_wav(text, speaker=1, filepath='audio.wav', target_host='localhost', target_port=50021,
                        is_premium=False, speed="100", pitch="0"):
     params = (
         ('text', text),
@@ -1225,12 +1234,7 @@ async def status_update_loop():
     await bot.change_presence(activity=discord.CustomActivity(text))
 
 
-@tasks.loop(minutes=10)
-async def database_update_loop():
-    datetime_now = datetime.datetime.now()
-    async with pool.acquire() as conn:
-        await conn.execute(f'INSERT INTO log (created, guild_count, voice_count) VALUES ($1, $2, $3);', datetime_now,
-                           len(bot.guilds), len(vclist))
+
 
 
 @tasks.loop(hours=24)
@@ -1243,12 +1247,21 @@ async def premium_user_check_loop():
         premium_user_list.append(d['metadata']['discord_user_id'])
     print(len(premium_user_list))
 
+    with open('custom_emoji.json', 'wt') as f:
+        json.dump(voice_cache_dict, f, ensure_ascii=False)
+    voice_cache_dict.clear()
+    voice_cache_counter_dict.clear()
+
 
 @tasks.loop(minutes=1)
 async def init_loop():
     await bot.change_presence(activity=discord.Game("起動中..."))
     global pool
     pool = await get_connection()
+
+    global voice_cache_dict
+    with open("./cache/voice_cache.json") as f:
+        voice_cache_dict = json.load(f)
 
     await initdatabase()
     await init_voice_list()
@@ -1259,7 +1272,6 @@ async def init_loop():
     await updatedict()
     while datetime.datetime.now().minute % 10 != 0:
         await asyncio.sleep(0.1)
-    database_update_loop.start()
 
 
 async def connect_nodes():
