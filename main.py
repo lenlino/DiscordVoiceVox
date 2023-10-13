@@ -909,7 +909,7 @@ async def synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, fi
                 query_json["styleId"] = speaker
                 query_json["text"] = text
                 query_json["prosodyDetail"] = (await response1.json())["detail"]
-                query_json["volumeScale"] = 1
+                query_json["volumeScale"] = 0.8
                 query_json["intonationScale"] = 1
                 query_json["prePhonemeLength"] = 0.1
                 query_json["postPhonemeLength"] = 0.1
