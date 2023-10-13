@@ -950,6 +950,7 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                 query_json = await response1.json()
                 query_json["speedScale"] = int(speed) / 100
                 query_json["pitchScale"] = int(pitch) / 100
+                query_json["outputStereo"] = False
 
             if len(query_json["kana"]) > len_limit:
                 print(query_json["kana"])
