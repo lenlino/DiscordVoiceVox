@@ -861,7 +861,7 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0"):
         voice_cache_counter_dict[voiceid] = {}
         voice_cache_dict[voiceid] = {}
     voice_cache_counter_dict[voiceid][text] = voice_cache_counter_dict.get(voiceid, {}).get(text, 0) + 1
-    if voice_cache_counter_dict[voiceid][text] > 10:
+    if voice_cache_counter_dict[voiceid][text] > 100:
         filename = f"cache/{text}-{voiceid}.wav"
         voice_cache_dict[voiceid][text] = filename
     if await generate_wav(text, voiceid, filename, target_host=target_host,
@@ -1092,14 +1092,16 @@ async def yomiage(member, guild, text: str):
 
     if len(output) <= 0:
         return
-    print(output)
+    if is_premium:
+        premium_text = "P"
+    else:
+        premium_text = "";
+    print(premium_text+output)
 
     try:
         generating_guilds.setdefault(guild.id, []).append(text)
         while guild.voice_client.is_playing() or generating_guilds[guild.id].index(text, 0) > 0:
             await asyncio.sleep(0.1)
-        print(len(generating_guilds.get(guild.id)))
-        print(text)
         filename = ""
         time_sta = time.time()
         done = True
@@ -1118,7 +1120,7 @@ async def yomiage(member, guild, text: str):
 
         time_end = time.time()
         tim = time_end - time_sta
-        print("音声合成:" + str(tim))
+        print(premium_text+"音声合成:" + str(tim))
         time_sta = time.time()
 
         if is_lavalink:
@@ -1129,14 +1131,13 @@ async def yomiage(member, guild, text: str):
 
         time_end = time.time()
         tim = time_end - time_sta
-        print("ソース:" + str(tim))
+        print(premium_text+"ソース:" + str(tim))
     finally:
         generating_guilds.get(guild.id, []).remove(text)
     if is_lavalink:
         await guild.voice_client.play(source)
     else:
         guild.voice_client.play(source)
-    print("☑")
 
 
 @bot.event
@@ -1248,7 +1249,7 @@ async def premium_user_check_loop():
         premium_user_list.append(d['metadata']['discord_user_id'])
     print(len(premium_user_list))
 
-    with open('custom_emoji.json', 'wt') as f:
+    with open(os.path.dirname(os.path.abspath(__file__)) + "/cache/" + f"voice_cache.json", 'wt') as f:
         json.dump(voice_cache_dict, f, ensure_ascii=False)
     voice_cache_dict.clear()
     voice_cache_counter_dict.clear()
