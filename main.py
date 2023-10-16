@@ -50,6 +50,7 @@ premium_user_list = []
 premium_server_list = []
 voice_cache_dict = {}
 voice_cache_counter_dict = {}
+generating_guilds = set()
 counter = 0
 voiceapi_counter = 0
 DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
@@ -836,7 +837,7 @@ async def setdatabase(userid, id, value, table="voice"):
 async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0"):
     global counter
     counter += 1
-    if counter > 100:
+    if counter > 200:
         counter = 0
     filename = "temp" + str(counter) + ".wav"
 
@@ -1096,12 +1097,14 @@ async def yomiage(member, guild, text: str):
         premium_text = "P"
     else:
         premium_text = "";
-    print(premium_text+output)
+
 
     try:
         generating_guilds.setdefault(guild.id, []).append(text)
-        while guild.voice_client.is_playing() or generating_guilds[guild.id].index(text, 0) > 0:
+        while guild.voice_client.is_playing() or (generating_guilds[guild.id].index(text, 0) > 0) or guild.id in generating_guilds:
             await asyncio.sleep(0.1)
+        generating_guilds.add(guild.id)
+        print(premium_text + output)
         filename = ""
         time_sta = time.time()
         done = True
@@ -1133,6 +1136,7 @@ async def yomiage(member, guild, text: str):
         tim = time_end - time_sta
         print(premium_text+"ソース:" + str(tim))
     finally:
+        generating_guilds.remove(guild.id)
         generating_guilds.get(guild.id, []).remove(text)
     if is_lavalink:
         await guild.voice_client.play(source)
