@@ -1100,6 +1100,8 @@ async def yomiage(member, guild, text: str):
 
 
     try:
+        if guild.voice_client is None:
+            return
         generating_guilds.setdefault(guild.id, []).append(text)
         while guild.voice_client.is_playing() or (generating_guilds[guild.id].index(text, 0) > 0) or guild.id in generating_guild_set:
             await asyncio.sleep(0.1)
