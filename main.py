@@ -1144,8 +1144,8 @@ async def yomiage(member, guild, text: str):
         tim = time_end - time_sta
         print(premium_text+"ソース:" + str(tim))
     finally:
-        generating_guilds.remove(guild.id)
         generating_guilds.get(guild.id, []).remove(text)
+        generating_guild_set.remove(guild.id)
     if is_lavalink:
         await guild.voice_client.play(source)
     else:
