@@ -50,6 +50,8 @@ premium_user_list = []
 premium_server_list = []
 voice_cache_dict = {}
 voice_cache_counter_dict = {}
+voice_generate_time_list = []
+voice_generate_time_list_p = []
 generating_guilds = set()
 counter = 0
 voiceapi_counter = 0
@@ -1093,10 +1095,7 @@ async def yomiage(member, guild, text: str):
 
     if len(output) <= 0:
         return
-    if is_premium:
-        premium_text = "P"
-    else:
-        premium_text = "";
+
 
 
     try:
@@ -1106,7 +1105,7 @@ async def yomiage(member, guild, text: str):
         while guild.voice_client.is_playing() or (generating_guilds[guild.id].index(text, 0) > 0) or guild.id in generating_guilds:
             await asyncio.sleep(0.1)
         generating_guilds.add(guild.id)
-        print(premium_text + output)
+        print(output)
         filename = ""
         time_sta = time.time()
         done = True
@@ -1125,6 +1124,12 @@ async def yomiage(member, guild, text: str):
 
         time_end = time.time()
         tim = time_end - time_sta
+        if is_premium:
+            premium_text = "P"
+            voice_generate_time_list_p.append(tim)
+        else:
+            premium_text = ""
+            voice_generate_time_list.append(tim)
         print(premium_text+"音声合成:" + str(tim))
         time_sta = time.time()
 
@@ -1138,8 +1143,8 @@ async def yomiage(member, guild, text: str):
         tim = time_end - time_sta
         print(premium_text+"ソース:" + str(tim))
     finally:
-        generating_guilds.remove(guild.id)
         generating_guilds.get(guild.id, []).remove(text)
+        generating_guilds.remove(guild.id)
     if is_lavalink:
         await guild.voice_client.play(source)
     else:
@@ -1238,7 +1243,12 @@ async def status_update_loop():
             continue
         if guild.voice_client is None or guild.voice_client.channel is None:
             del vclist[key]
-    text = str(len(vclist)) + "/" + str(len(bot.guilds)) + " 読み上げ中"
+    avarage = sum(voice_generate_time_list) / len(voice_generate_time_list)
+    avarage_p = sum(voice_generate_time_list_p) / len(voice_generate_time_list_p)
+    text = f"{str(len(vclist))}/{str(len(bot.guilds))}読み上げ中\n 負荷 N:{avarage} P:{avarage_p}"
+    logger.error(text)
+    voice_generate_time_list_p.clear()
+    voice_generate_time_list.clear()
     await bot.change_presence(activity=discord.CustomActivity(text))
 
 
