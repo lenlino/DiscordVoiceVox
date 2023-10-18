@@ -1244,8 +1244,12 @@ async def status_update_loop():
             continue
         if guild.voice_client is None or guild.voice_client.channel is None:
             del vclist[key]
-    avarage = sum(voice_generate_time_list) / len(voice_generate_time_list)
-    avarage_p = sum(voice_generate_time_list_p) / len(voice_generate_time_list_p)
+    if len(voice_generate_time_list) != 0 and len(voice_generate_time_list_p) != 0:
+        avarage = sum(voice_generate_time_list) / len(voice_generate_time_list)
+        avarage_p = sum(voice_generate_time_list_p) / len(voice_generate_time_list_p)
+    else:
+        avarage = 0
+        avarage_p = 0
     text = f"{str(len(vclist))}/{str(len(bot.guilds))}読み上げ中\n 負荷 N:{avarage} P:{avarage_p}"
     logger.error(text)
     voice_generate_time_list_p.clear()
