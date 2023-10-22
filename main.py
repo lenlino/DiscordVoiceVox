@@ -37,6 +37,7 @@ stripe.api_key = os.environ.get("STRIPE_TOKEN", None)
 is_lavalink = True
 coeiroink_host = os.environ.get("COEIROINK_HOST", "127.0.0.1:50032")
 sharevox_host = os.environ.get("SHAREVOX_HOST", "127.0.0.1:50025")
+lavalink_host = os.environ.get("LAVALINK_HOST", "http://127.0.0.1:2333")
 ManagerGuilds = [888020016660893726]
 intents = discord.Intents.none()
 intents.message_content = True
@@ -1304,7 +1305,7 @@ async def connect_nodes():
         print("lavalink無効")
         return
     print(len(wavelink.NodePool.nodes))
-    node: wavelink.Node = wavelink.Node(uri='http://127.0.0.1:2333', password='youshallnotpass')
+    node: wavelink.Node = wavelink.Node(uri=lavalink_host, password='youshallnotpass')
     await wavelink.NodePool.connect(client=bot, nodes=[node])
     print(len(wavelink.NodePool.nodes))
 
