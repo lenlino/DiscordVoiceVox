@@ -1029,6 +1029,7 @@ async def yomiage(member, guild, text: str):
     if stripe.api_key is None:
         is_premium = True
     output = text
+    output = re.sub("\n", "", output)
     if await getdatabase(guild.id, "is_readname", False, "guild"):
         if await getdatabase(member.guild.id, "is_readsan", False, "guild"):
             output = member.display_name + "さん " + output
