@@ -114,7 +114,7 @@ async def init_voice_list():
             json: list = await response2.json()
             for voice_info in json:
                 voice_info["name"] = "VOICEVOX:" + voice_info["name"]
-        try:
+        '''try:
             async with session.get(
                 f'http://{coeiroink_host}/v1/speakers',
                 headers=headers,
@@ -126,6 +126,21 @@ async def init_voice_list():
                     for style_info in voice_info["styles"]:
                         style_info["id"] = style_info["styleId"] + 1000
                         style_info["name"] = style_info["styleName"]
+
+                json.extend(json2)
+        except:
+            print("COEIROINK接続なし")'''
+        try:
+            async with session.get(
+                f'http://{coeiroink_host}/speakers',
+                headers=headers,
+                timeout=10
+            ) as response3:
+                json2: list = await response3.json()
+                for voice_info in json2:
+                    voice_info["name"] = "COEIROINK:" + voice_info["name"]
+                    for style_info in voice_info["styles"]:
+                        style_info["id"] += 1000
 
                 json.extend(json2)
         except:
@@ -893,7 +908,8 @@ async def generate_wav(text, speaker=1, filepath='audio.wav', target_host='local
 
     # COEIROINKAPI用に対応
     if coeiroink_host == target_host:
-        return await synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, filepath)
+        # return await synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, filepath)
+        return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath)
     else:
         return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath)
 
