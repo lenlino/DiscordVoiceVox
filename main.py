@@ -1067,7 +1067,10 @@ async def yomiage(member, guild, text: str):
                     html = await response.text()
                     title = re.findall('<title>(.*)</title>', html)[0]
                     if title is not None:
-                        output = re.sub(pattern, "ユーアールエル " + title, output)
+                        if len(re.findall('<img(.*)>', html)) != 1:
+                            output = re.sub(pattern, "ユーアールエル " + title, output)
+                        else:
+                            output = re.sub(pattern, "ユーアールエル画像省略", output)
     if await getdatabase(guild.id, "is_reademoji", True, "guild"):
         output = emoji.demojize(output, language="ja")
 
