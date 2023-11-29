@@ -823,8 +823,8 @@ async def deletedict(ctx, uuid: discord.Option(input_type=str, description="辞�
         embed.add_field(name="uuid", value=response2.text)"""
     embed.add_field(name="削除する単語", value=uuid)
 
-    await ctx.respond(embed=embed)
-    message = await ctx.respond(embed=embed).message
+    res = await ctx.respond(embed=embed)
+    message = await res.original_response()
     await message.add_reaction("⭕")
     await message.add_reaction("❌")
 
@@ -1318,17 +1318,17 @@ async def premium_user_check_loop():
             yomi = embed_fields[1].value
             if reactions[0].count >= reactions[1].count:
                 await update_private_dict(9686, tango, yomi)
-                embed.title = "グローバル辞書に単語が登録されました。"
+                embed.description = "グローバル辞書に単語が登録されました。"
             else:
-                embed.title = "適切な登録ではないため登録が拒否されました。"
+                embed.description = "適切な登録ではないため登録が拒否されました。"
             await mes.edit(embed=embed)
         elif embed.description == "グローバル辞書に単語削除を申請しました。":
             tango = embed_fields[0].value
             if reactions[0].count >= reactions[1].count:
                 await delete_private_dict(9686, tango)
-                embed.title = "グローバル辞書から単語が削除されました。"
+                embed.description = "グローバル辞書から単語が削除されました。"
             else:
-                embed.title = "適切な削除ではないため削除が拒否されました。"
+                embed.description = "適切な削除ではないため削除が拒否されました。"
             await mes.edit(embed=embed)
 
 
