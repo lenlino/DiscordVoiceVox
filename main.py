@@ -38,6 +38,7 @@ is_lavalink = True
 coeiroink_host = os.environ.get("COEIROINK_HOST", "127.0.0.1:50032")
 sharevox_host = os.environ.get("SHAREVOX_HOST", "127.0.0.1:50025")
 lavalink_host_list = os.environ.get("LAVALINK_HOST", "http://127.0.0.1:2333").split(",")
+DictChannel = 1057517276674400336
 ManagerGuilds = [888020016660893726]
 intents = discord.Intents.none()
 intents.message_content = True
@@ -788,15 +789,19 @@ async def adddict(ctx, surface: discord.Option(input_type=str, description="辞�
         )
         await ctx.respond(embed=embed)
         return
-    await update_private_dict(9686, surface, pronunciation)
+    # await update_private_dict(9686, surface, pronunciation)
     embed = discord.Embed(
         title="**Add Dict**",
-        description=f"辞書に単語を登録しました。",
+        description="グローバル辞書に単語登録を申請しました。",
         color=discord.Colour.brand_green(),
     )
     embed.add_field(name="surface", value=surface)
     embed.add_field(name="pronunciation", value=pronunciation)
-    await ctx.respond(embed=embed)
+    res = await ctx.respond(embed=embed)
+    message = await res.original_response()
+    await message.add_reaction("⭕")
+    await message.add_reaction("❌")
+
     # await updatedict()
 
 
@@ -805,10 +810,10 @@ async def deletedict(ctx, uuid: discord.Option(input_type=str, description="辞�
     headers = {'Content-Type': 'application/json', }
     embed = discord.Embed(
         title="**Add Dict**",
-        description=f"辞書から単語を削除しました。",
+        description=f"グローバル辞書に単語削除を申請しました。",
         color=discord.Colour.brand_red(),
     )
-    await delete_private_dict(9686, uuid)
+    # await delete_private_dict(9686, uuid)
     """for d_host in premium_host_list:
         response2 = requests.delete(
             f'http://{d_host}/user_dict_word/{uuid}',
@@ -816,8 +821,12 @@ async def deletedict(ctx, uuid: discord.Option(input_type=str, description="辞�
             timeout=(3.0, 10)
         )
         embed.add_field(name="uuid", value=response2.text)"""
+    embed.add_field(name="削除する単語", value=uuid)
 
-    await ctx.respond(embed=embed)
+    res = await ctx.respond(embed=embed)
+    message = await res.original_response()
+    await message.add_reaction("⭕")
+    await message.add_reaction("❌")
 
 
 async def get_connection():
@@ -1295,6 +1304,38 @@ async def premium_user_check_loop():
         json.dump(voice_cache_dict, f, ensure_ascii=False)
     voice_cache_dict.clear()
     voice_cache_counter_dict.clear()
+
+    # 辞書登録チェック
+    channel = bot.get_channel(DictChannel)
+    async for mes in channel.history(before=(datetime.datetime.now()+datetime.timedelta(days=-1))):
+        if len(mes.embeds) == 0:
+            continue
+        embed = mes.embeds[0]
+        embed_fields = embed.fields
+        reactions = mes.reactions
+        if embed.description == "グローバル辞書に単語登録を申請しました。":
+            tango = embed_fields[0].value
+            yomi = embed_fields[1].value
+            if reactions[0].count >= reactions[1].count:
+                await update_private_dict(9686, tango, yomi)
+                embed.description = "グローバル辞書に単語が登録されました。"
+            else:
+                embed.description = "適切な登録ではないため登録が拒否されました。"
+            await mes.edit(embed=embed)
+        elif embed.description == "グローバル辞書に単語削除を申請しました。":
+            tango = embed_fields[0].value
+            if reactions[0].count >= reactions[1].count:
+                await delete_private_dict(9686, tango)
+                embed.description = "グローバル辞書から単語が削除されました。"
+            else:
+                embed.description = "適切な削除ではないため削除が拒否されました。"
+            await mes.edit(embed=embed)
+
+
+
+
+
+
 
 
 @tasks.loop(minutes=1)
