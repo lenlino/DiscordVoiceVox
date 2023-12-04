@@ -50,6 +50,9 @@ vclist = {}
 voice_select_dict = {}
 premium_user_list = []
 premium_server_list = []
+premium_server_list_300 = []
+premium_server_list_500 = []
+premium_server_list_1000 = []
 voice_cache_dict = {}
 voice_cache_counter_dict = {}
 generating_guild_set = set()
@@ -63,7 +66,8 @@ DB_PORT = os.getenv("DB_PORT", 5432)
 DB_NAME = os.getenv("DB_NAME", "postgres")
 DB_USER = os.getenv("DB_USER", "postgres")
 DB_PASS = os.getenv("DB_PASS", "maikura123")
-tips_list = ["/setvc　で自分の声を変更できます。", "[プレミアムプラン](https://lenlino.com/?page_id=2510)(月100円～)あります。",
+tips_list = ["/setvc　で自分の声を変更できます。",
+             "[プレミアムプラン](https://lenlino.com/?page_id=2510)(月100円～)あります。",
              "[要望・不具合募集中](https://forms.gle/1TvbqzHRz6Q1vSfq9)",
              "[VOICEVOX規約](https://voicevox.hiroshiba.jp/term/)の遵守をお願いします。",
              "10/05 [VOICEVOX](https://voicevox.hiroshiba.jp/)より音声が追加されました。/setvcより音声の変更が可能です。追加音声：栗田まろん、あいえるたん、満点花丸、琴詠ニア",
@@ -238,7 +242,8 @@ class ActivateModal(discord.ui.Modal):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
-        self.add_item(discord.ui.InputText(label="メールアドレスを入力してください。(登録状況の参照にのみ使用されます。)"))
+        self.add_item(
+            discord.ui.InputText(label="メールアドレスを入力してください。(登録状況の参照にのみ使用されます。)"))
 
     async def callback(self, interaction: discord.Interaction):
         mail = self.children[0].value
@@ -639,7 +644,8 @@ async def server_set(ctx, key: discord.Option(str, choices=[
 
 
 @bot.slash_command(description="自分の声を変更できるのだ")
-async def setvc(ctx, voiceid: discord.Option(required=False, input_type=int, description="指定しない場合は一覧が表示されます")):
+async def setvc(ctx, voiceid: discord.Option(required=False, input_type=int,
+                                             description="指定しない場合は一覧が表示されます")):
     await ctx.defer()
     if (voiceid is None):
         test_pages = []
@@ -1127,13 +1133,12 @@ async def yomiage(member, guild, text: str):
     if len(output) <= 0:
         return
 
-
-
     try:
         if guild.voice_client is None:
             return
         generating_guilds.setdefault(guild.id, []).append(text)
-        while guild.voice_client.is_playing() or (generating_guilds[guild.id].index(text, 0) > 0) or guild.id in generating_guild_set:
+        while guild.voice_client.is_playing() or (
+            generating_guilds[guild.id].index(text, 0) > 0) or guild.id in generating_guild_set:
             await asyncio.sleep(0.1)
         generating_guild_set.add(guild.id)
         print(output)
@@ -1161,7 +1166,7 @@ async def yomiage(member, guild, text: str):
         else:
             premium_text = ""
             voice_generate_time_list.append(tim)
-        print(premium_text+"音声合成:" + str(tim))
+        print(premium_text + "音声合成:" + str(tim))
         time_sta = time.time()
 
         if is_lavalink:
@@ -1172,7 +1177,7 @@ async def yomiage(member, guild, text: str):
 
         time_end = time.time()
         tim = time_end - time_sta
-        print(premium_text+"ソース:" + str(tim))
+        print(premium_text + "ソース:" + str(tim))
     finally:
         generating_guilds.get(guild.id, []).remove(text)
         generating_guild_set.remove(guild.id)
@@ -1287,27 +1292,39 @@ async def status_update_loop():
     await bot.change_presence(activity=discord.CustomActivity(text))
 
 
-
-
-
 @tasks.loop(hours=24)
 async def premium_user_check_loop():
     if stripe.api_key is None:
         return
     global premium_user_list
+    global premium_server_list_300
+    global premium_server_list_500
+    global premium_server_list_1000
+    premium_user_list.clear()
+    premium_server_list_300.clear()
+    premium_server_list_500.clear()
+    premium_server_list_1000.clear()
     for d in stripe.Subscription.search(limit=100,
                                         query="status:'active' AND -metadata['discord_user_id']:null").auto_paging_iter():
-        premium_user_list.append(d['metadata']['discord_user_id'])
-    print(len(premium_user_list))
+        user_id = d['metadata']['discord_user_id']
+        premium_user_list.append(user_id)
+        amount = d["plan"]["amount"]
+        if amount == 300:
+            premium_server_list_300.append(user_id)
+        elif amount == 500:
+            premium_server_list_500.append(user_id)
+        elif amount == 1000:
+            premium_server_list_1000.append(user_id)
 
     with open(os.path.dirname(os.path.abspath(__file__)) + "/cache/" + f"voice_cache.json", 'wt') as f:
         json.dump(voice_cache_dict, f, ensure_ascii=False)
     voice_cache_dict.clear()
     voice_cache_counter_dict.clear()
 
+    await bot.wait_until_ready()
     # 辞書登録チェック
     channel = bot.get_channel(DictChannel)
-    async for mes in channel.history(before=(datetime.datetime.now()+datetime.timedelta(days=-1))):
+    async for mes in channel.history(before=(datetime.datetime.now() + datetime.timedelta(days=-1))):
         if len(mes.embeds) == 0:
             continue
         embed = mes.embeds[0]
@@ -1330,12 +1347,6 @@ async def premium_user_check_loop():
             else:
                 embed.description = "適切な削除ではないため削除が拒否されました。"
             await mes.edit(embed=embed)
-
-
-
-
-
-
 
 
 @tasks.loop(minutes=1)
@@ -1361,7 +1372,6 @@ async def init_loop():
 
 async def connect_nodes():
     """Connect to our Lavalink nodes."""
-    await bot.wait_until_ready()
     if is_lavalink is False:
         print("lavalink無効")
         return
