@@ -81,7 +81,7 @@ handler = logging.FileHandler(filename=os.path.dirname(os.path.abspath(__file__)
                               encoding='utf-8', mode='w')
 handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
 logger.addHandler(handler)
-default_conn = aiohttp.TCPConnector(limit_per_host=16)
+default_conn = aiohttp.TCPConnector(limit_per_host=20)
 premium_conn = aiohttp.TCPConnector()
 
 
