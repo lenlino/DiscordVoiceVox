@@ -20,7 +20,7 @@ import stripe
 import wavelink
 from discord.ext import tasks, pages
 from requests import ReadTimeout
-from ko2kana import korean2katakana
+from ko2kana import toKana
 from dotenv import load_dotenv
 
 import emoji
@@ -1108,7 +1108,7 @@ async def yomiage(member, guild, text: str):
                     output = output[:100] + "이하 약어"
             else:
                 output = output[:50] + "이하 약어"
-        output = korean2katakana(output)
+        output = toKana(output)
         output = output.replace(" ", "")
     elif lang == "ja":
         output = re.sub(pattern, "ユーアールエル省略", output)
