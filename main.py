@@ -276,7 +276,7 @@ async def vc(ctx):
     if ctx.author.voice is None:
         await ctx.send_followup("音声チャンネルに入っていないため操作できません。")
         return
-    if ctx.guild.voice_client is not None and ctx.guild.voice_client.is_connected() and ctx.guild.id in vclist:
+    if ctx.guild.voice_client is not None and ctx.guild.voice_client.connected and ctx.guild.id in vclist:
         del vclist[ctx.guild.id]
         await ctx.guild.voice_client.disconnect()
         embed = discord.Embed(
