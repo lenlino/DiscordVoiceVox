@@ -1137,7 +1137,7 @@ async def yomiage(member, guild, text: str):
         if guild.voice_client is None:
             return
         generating_guilds.setdefault(guild.id, []).append(text)
-        while guild.voice_client.is_playing() or (
+        while guild.voice_client.playing or (
             generating_guilds[guild.id].index(text, 0) > 0) or guild.id in generating_guild_set:
             await asyncio.sleep(0.1)
         generating_guild_set.add(guild.id)
@@ -1170,7 +1170,7 @@ async def yomiage(member, guild, text: str):
         time_sta = time.time()
 
         if is_lavalink:
-            source = (await wavelink.GenericTrack.search(os.path.dirname(os.path.abspath(__file__)) + "/" + filename))[
+            source = (await wavelink.Playable.search(os.path.dirname(os.path.abspath(__file__)) + "/" + filename, source=None))[
                 0]
         else:
             source = await discord.FFmpegOpusAudio.from_probe(source=filename)
@@ -1375,13 +1375,13 @@ async def connect_nodes():
     if is_lavalink is False:
         print("lavalink無効")
         return
-    print(len(wavelink.NodePool.nodes))
+    print(len(wavelink.Pool.nodes))
     nodes = []
     for lavalink_host in lavalink_host_list:
         node: wavelink.Node = wavelink.Node(uri=lavalink_host, password='youshallnotpass')
         nodes.append(node)
-    await wavelink.NodePool.connect(client=bot, nodes=nodes)
-    print(len(wavelink.NodePool.nodes))
+    await wavelink.Pool.connect(client=bot, nodes=nodes)
+    print(len(wavelink.Pool.nodes))
 
 
 async def save_customemoji(custom_emoji, kana):
