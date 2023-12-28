@@ -18,6 +18,7 @@ import asyncpg as asyncpg
 import discord
 import stripe
 import wavelink
+from discord import default_permissions
 from discord.ext import tasks, pages
 from requests import ReadTimeout
 from ko2kana import toKana
@@ -478,6 +479,7 @@ async def get_server_set_value(ctx: discord.AutocompleteContext):
 
 @bot.slash_command(description="サーバーの色々な設定なのだ", name="server-set",
                    default_member_permissions=discord.Permissions.manage_guild)
+@default_permissions(manage_messages=True)
 async def server_set(ctx, key: discord.Option(str, choices=[
     discord.OptionChoice(name="autojoin", value="autojoin"),
     discord.OptionChoice(name="reademoji"),
