@@ -1114,7 +1114,7 @@ async def yomiage(member, guild, text: str):
         output = output.replace(" ", "")
     elif lang == "ja":
         output = re.sub(pattern, "ユーアールエル省略", output)
-        output = await (romajitable.to_kana(output)).katakana
+        output = (await romajitable.to_kana(output)).katakana
         if len(output) <= 0:
             return
         output = re.sub("w{4,100}", "ワラ", output)
