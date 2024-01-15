@@ -1454,7 +1454,7 @@ async def adddict_local(ctx, surface: discord.Option(input_type=str, description
         )
         await ctx.respond(embed=embed)
         return
-embed = discord.Embed(
+    embed = discord.Embed(
         title="**Add Dict**",
         description=f"辞書に単語を登録しました。",
         color=discord.Colour.brand_green(),
