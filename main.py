@@ -815,7 +815,7 @@ async def adddict(ctx, surface: discord.Option(input_type=str, description="辞�
 async def deletedict(ctx, uuid: discord.Option(input_type=str, description="辞書から削除する単語", required=True)):
     headers = {'Content-Type': 'application/json', }
     embed = discord.Embed(
-        title="**Add Dict**",
+        title="**Delete Dict**",
         description=f"グローバル辞書に単語削除を申請しました。",
         color=discord.Colour.brand_red(),
     )
@@ -1438,8 +1438,23 @@ async def adddict_local(ctx, surface: discord.Option(input_type=str, description
         )
         await ctx.respond(embed=embed)
         return
-    await update_private_dict(ctx.guild.id, surface, pronunciation)
-    embed = discord.Embed(
+    if len(surface) > 50 or len(pronunciation) > 50:
+        embed = discord.Embed(
+            title="**Error**",
+            description=f"50文字以下の単語のみ登録できます。",
+            color=discord.Colour.brand_red(),
+        )
+        await ctx.respond(embed=embed)
+        return
+    if await update_private_dict(ctx.guild.id, surface, pronunciation) is not True:
+        embed = discord.Embed(
+            title="**Error**",
+            description=f"登録数の上限に達しました。(サポートサーバーへお問い合わせください。)",
+            color=discord.Colour.brand_red(),
+        )
+        await ctx.respond(embed=embed)
+        return
+embed = discord.Embed(
         title="**Add Dict**",
         description=f"辞書に単語を登録しました。",
         color=discord.Colour.brand_green(),
@@ -1501,11 +1516,14 @@ async def update_private_dict(server_id, source, kana):
             json_data = json.load(f)
     except:
         json_data = {}
+    if len(json_data) > 1000:
+        return False
     json_data[source] = kana
     sorted_json_data = json_data
     with open(os.path.dirname(os.path.abspath(__file__)) + "/user_dict/" + f"{server_id}.json", 'wt',
               encoding='utf-8') as f:
         json.dump(sorted_json_data, f, ensure_ascii=False)
+    return True
 
 
 async def delete_private_dict(server_id, source):
