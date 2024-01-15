@@ -1067,14 +1067,17 @@ async def yomiage(member, guild, text: str):
             output = member.display_name + "さん " + output
         else:
             output = member.display_name + " " + output
-    output = await henkan_private_dict(guild.id, output)
-    output = await henkan_private_dict(9686, output)
 
     if is_premium:
         if len(output) > 150:
             output = output[:150]
     else:
         output = output[:100]
+
+    output = await henkan_private_dict(guild.id, output)
+    output = await henkan_private_dict(9686, output)
+
+
 
     if guild.id in premium_server_list:
         if re.search(pattern_voice, text) is not None:
