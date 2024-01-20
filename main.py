@@ -924,7 +924,7 @@ async def generate_wav(text, speaker=1, filepath='audio.wav', target_host='local
     # COEIROINKAPI用に対応
     if coeiroink_host == target_host:
         # return await synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, filepath)
-        return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath)
+        return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, volume=0.8)
     else:
         return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath)
 
@@ -974,7 +974,7 @@ async def synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, fi
         return False
 
 
-async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath):
+async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, volume=1.0):
     try:
         async with aiohttp.ClientSession(connector_owner=False, connector=conn) as private_session:
             async with private_session.post(f'http://{target_host}/audio_query',
@@ -987,6 +987,7 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                 query_json["speedScale"] = int(speed) / 100
                 query_json["pitchScale"] = int(pitch) / 100
                 query_json["outputStereo"] = False
+                query_json["volumeScale"] = volume
 
             if len(query_json["kana"]) > len_limit:
                 print(query_json["kana"])
