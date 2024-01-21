@@ -82,7 +82,7 @@ handler = logging.FileHandler(filename=os.path.dirname(os.path.abspath(__file__)
                               encoding='utf-8', mode='w')
 handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
 logger.addHandler(handler)
-default_conn = aiohttp.TCPConnector(limit_per_host=24)
+default_conn = aiohttp.TCPConnector(limit_per_host=22)
 premium_conn = aiohttp.TCPConnector()
 
 
@@ -105,6 +105,7 @@ async def initdatabase():
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readjoin boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readurl boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readsan boolean;')
+        await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_joinnotice boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS premium_user char(20);')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS lang char(2);')
 
@@ -284,7 +285,10 @@ async def vc(ctx):
             title="Disconnect",
             color=discord.Colour.brand_red()
         )
-        await ctx.send_followup(embed=embed)
+        if await getdatabase(ctx.guild.id, "is_joinnotice", True, "guild"):
+            await ctx.send_followup(embed=embed)
+        else:
+            await ctx.send_followup(embed=embed, delete_after=0)
         return
     else:
         if ctx.author.voice.channel.user_limit != 0 and ctx.author.voice.channel.user_limit <= len(
@@ -335,8 +339,10 @@ async def vc(ctx):
             int(await getdatabase(ctx.guild.id, "premium_user", 0, "guild"))) in premium_user_list:
             embed.set_author(name="Premium")
             premium_server_list.append(ctx.guild.id)
-
-        await ctx.send_followup(embed=embed)
+        if await getdatabase(ctx.guild.id, "is_joinnotice", True, "guild"):
+            await ctx.send_followup(embed=embed)
+        else:
+            await ctx.send_followup(embed=embed, delete_after=0)
         return
 
 
@@ -469,7 +475,7 @@ async def set(ctx, key: discord.Option(str, choices=[
 
 async def get_server_set_value(ctx: discord.AutocompleteContext):
     setting_type = ctx.options["key"]
-    bool_settings = ["reademoji", "readname", "readurl", "readjoinleave", "readsan"]
+    bool_settings = ["reademoji", "readname", "readurl", "readjoinleave", "readsan", "joinnotice"]
     if setting_type in bool_settings:
         return ["off", "on"]
     elif setting_type == "lang":
@@ -488,7 +494,8 @@ async def server_set(ctx, key: discord.Option(str, choices=[
     discord.OptionChoice(name="readurl"),
     discord.OptionChoice(name="readjoinleave"),
     discord.OptionChoice(name="lang"),
-    discord.OptionChoice(name="readsan")], description="設定項目"),
+    discord.OptionChoice(name="readsan"),
+    discord.OptionChoice(name="joinnotice")], description="設定項目"),
                      value: discord.Option(str, description="設定値", required=False,
                                            autocomplete=get_server_set_value), ):
     await ctx.defer()
@@ -637,6 +644,26 @@ async def server_set(ctx, key: discord.Option(str, choices=[
         elif value == "on":
             embed.description = "さん付けをオンにしました"
             await setdatabase(ctx.guild.id, "is_readsan", True, "guild")
+        else:
+            embed.title = "Error"
+            embed.description = "on/offをvalueに指定してください。"
+            embed.color = discord.Colour.brand_red()
+        await ctx.send_followup(embed=embed)
+    elif key == "joinnotice":
+        embed = discord.Embed(
+            title="Changed readsan",
+            description="名前",
+            color=discord.Colour.brand_green()
+        )
+        if value is None:
+            embed.description = "参加退出表示をオンにしました（デフォルト）"
+            await setdatabase(ctx.guild.id, "is_joinnotice", True, "guild")
+        elif value == "off":
+            embed.description = "参加退出表示をオフにしました"
+            await setdatabase(ctx.guild.id, "is_joinnotice", False, "guild")
+        elif value == "on":
+            embed.description = "参加退出表示をオンにしました"
+            await setdatabase(ctx.guild.id, "is_joinnotice", True, "guild")
         else:
             embed.title = "Error"
             embed.description = "on/offをvalueに指定してください。"
@@ -1227,7 +1254,8 @@ async def on_voice_state_update(member, before, after):
                 int(await getdatabase(after.channel.guild.id, "premium_user", 0, "guild"))) in premium_user_list:
                 embed.set_author(name="Premium")
                 premium_server_list.append(after.channel.guild.id)
-            await after.channel.guild.get_channel(autojoin["text_channel_id"]).send(embed=embed)
+            if await getdatabase(after.channel.guild.id, "is_joinnotice", True, "guild"):
+                await after.channel.guild.get_channel(autojoin["text_channel_id"]).send(embed=embed)
             try:
                 await after.channel.connect(cls=wavelink.Player)
             except Exception as e:
