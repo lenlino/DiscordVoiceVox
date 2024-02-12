@@ -1080,6 +1080,8 @@ async def yomiage(member, guild, text: str):
         generating_guilds[guild.id].clear()
         print(f"クリアしました。guild: {guild.id}")
         return
+    elif text.startswith("!") or text.startswith("！"):
+        return
     pattern = "https?://[\w/:%#\$&\?\(\)~\.=\+\-@]+"
     pattern_emoji = "\<.+?\>"
     pattern_voice = "\.v[0-9]*"
