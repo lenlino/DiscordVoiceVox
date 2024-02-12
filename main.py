@@ -59,6 +59,11 @@ generating_guild_set = set()
 voice_generate_time_list = []
 voice_generate_time_list_p = []
 generating_guilds = set()
+text_limit = 50
+text_limit_100 = 100
+text_limit_300 = 300
+text_limit_500 = 500
+text_limit_1000 = 1000
 counter = 0
 voiceapi_counter = 0
 DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
@@ -1100,8 +1105,14 @@ async def yomiage(member, guild, text: str):
             output = member.display_name + " " + output
 
     if is_premium:
-        if len(output) > 150:
-            output = output[:150]
+        if len(output) > text_limit_300 and guild.id in premium_server_list_300:
+            output = output[:(text_limit_300 + 50)]
+        elif len(output) > text_limit_500 and guild.id in premium_server_list_500:
+            output = output[:(text_limit_500 + 50)]
+        elif len(output) > text_limit_1000 and guild.id in premium_server_list_1000:
+            output = output[:(text_limit_1000 + 50)]
+        else:
+            output = output[:(text_limit_100 + 50)]
     else:
         output = output[:100]
 
@@ -1164,12 +1175,20 @@ async def yomiage(member, guild, text: str):
 
         if voice_id is None:
             voice_id = await getdatabase(member.id, "voiceid", 0)
-        if len(output) > 50:
-            if is_premium:
-                if len(output) > 100:
-                    output = output[:100] + "以下略"
+
+        if is_premium:
+            if len(output) > text_limit_300 and guild.id in premium_server_list_300:
+                output = output[:(text_limit_300)]
+            elif len(output) > text_limit_500 and guild.id in premium_server_list_500:
+                output = output[:(text_limit_500)]
+            elif len(output) > text_limit_1000 and guild.id in premium_server_list_1000:
+                output = output[:(text_limit_1000)]
             else:
+                output = output[:(text_limit_100)]
+        else:
+            if len(output) > 50:
                 output = output[:50] + "以下略"
+
 
     if len(output) <= 0:
         return
@@ -1178,6 +1197,7 @@ async def yomiage(member, guild, text: str):
         if guild.voice_client is None:
             return
         generating_guilds.setdefault(guild.id, []).append(text)
+
         while guild.voice_client.playing or (
             generating_guilds[guild.id].index(text, 0) > 0) or guild.id in generating_guild_set:
             await asyncio.sleep(0.1)
@@ -1187,8 +1207,15 @@ async def yomiage(member, guild, text: str):
         time_sta = time.time()
         done = True
         retry_count = 0
-        while done and retry_count < 10:
-            filename = await text2wav(output, int(voice_id), is_premium,
+        output_list = []
+        if len(output) > 100:
+            for i in range(0, len(output), 100):
+                output_list.append(output[i:i + 100])
+        else:
+            output_list.append(output)
+        while done and retry_count < 10 and len(output_list) >= 0:
+            print(output_list[0])
+            filename = await text2wav(output_list[0], int(voice_id), is_premium,
                                       speed=await getdatabase(member.id, "speed", 100),
                                       pitch=await getdatabase(member.id, "pitch", 0))
             if filename != "failed":
@@ -1198,6 +1225,7 @@ async def yomiage(member, guild, text: str):
                 retry_count += 1
                 if retry_count >= 3:
                     return
+            del output_list[0]
 
         time_end = time.time()
         tim = time_end - time_sta
