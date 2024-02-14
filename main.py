@@ -59,6 +59,11 @@ generating_guild_set = set()
 voice_generate_time_list = []
 voice_generate_time_list_p = []
 generating_guilds = set()
+text_limit = 50
+text_limit_100 = 100
+text_limit_300 = 300
+text_limit_500 = 500
+text_limit_1000 = 1000
 counter = 0
 voiceapi_counter = 0
 DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
@@ -68,10 +73,11 @@ DB_USER = os.getenv("DB_USER", "postgres")
 DB_PASS = os.getenv("DB_PASS", "maikura123")
 tips_list = ["/setvc　で自分の声を変更できます。",
              "[プレミアムプラン](https://lenlino.com/?page_id=2510)(月100円～)あります。",
-             "[要望・不具合募集中](https://forms.gle/1TvbqzHRz6Q1vSfq9)",
+             "[要望・不具合募集中](https://discord.gg/MWnnkbXSDJ)",
              "[VOICEVOX規約](https://voicevox.hiroshiba.jp/term/)の遵守をお願いします。",
-             "10/05 [VOICEVOX](https://voicevox.hiroshiba.jp/)より音声が追加されました。/setvcより音声の変更が可能です。追加音声：栗田まろん、あいえるたん、満点花丸、琴詠ニア",
-             "/vc コマンドで「考え中...」のまま動かない場合は[サポートサーバー](https://discord.gg/MWnnkbXSDJ)へお問い合わせください。"]
+             "1/12 [VOICEVOX](https://voicevox.hiroshiba.jp/)より音声が追加されました。/setvcより音声の変更が可能です。追加スタイル：ずんだもん、小夜、もち子さん、青山龍星",
+             "/vc コマンドで「考え中...」のまま動かない場合は[サポートサーバー](https://discord.gg/MWnnkbXSDJ)へお問い合わせください。",
+             "使い方やコマンド一覧は[こちら](https://lenlino.com/?page_id=2171)"]
 voice_id_list = []
 
 generating_guilds = {}
@@ -81,7 +87,7 @@ handler = logging.FileHandler(filename=os.path.dirname(os.path.abspath(__file__)
                               encoding='utf-8', mode='w')
 handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
 logger.addHandler(handler)
-default_conn = aiohttp.TCPConnector(limit_per_host=24)
+default_conn = aiohttp.TCPConnector(limit_per_host=22)
 premium_conn = aiohttp.TCPConnector()
 
 
@@ -104,6 +110,7 @@ async def initdatabase():
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readjoin boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readurl boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readsan boolean;')
+        await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_joinnotice boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS premium_user char(20);')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS lang char(2);')
 
@@ -283,7 +290,10 @@ async def vc(ctx):
             title="Disconnect",
             color=discord.Colour.brand_red()
         )
-        await ctx.send_followup(embed=embed)
+        if await getdatabase(ctx.guild.id, "is_joinnotice", True, "guild"):
+            await ctx.send_followup(embed=embed)
+        else:
+            await ctx.send_followup(embed=embed, delete_after=0)
         return
     else:
         if ctx.author.voice.channel.user_limit != 0 and ctx.author.voice.channel.user_limit <= len(
@@ -334,8 +344,10 @@ async def vc(ctx):
             int(await getdatabase(ctx.guild.id, "premium_user", 0, "guild"))) in premium_user_list:
             embed.set_author(name="Premium")
             premium_server_list.append(ctx.guild.id)
-
-        await ctx.send_followup(embed=embed)
+        if await getdatabase(ctx.guild.id, "is_joinnotice", True, "guild"):
+            await ctx.send_followup(embed=embed)
+        else:
+            await ctx.send_followup(embed=embed, delete_after=0)
         return
 
 
@@ -468,7 +480,7 @@ async def set(ctx, key: discord.Option(str, choices=[
 
 async def get_server_set_value(ctx: discord.AutocompleteContext):
     setting_type = ctx.options["key"]
-    bool_settings = ["reademoji", "readname", "readurl", "readjoinleave", "readsan"]
+    bool_settings = ["reademoji", "readname", "readurl", "readjoinleave", "readsan", "joinnotice"]
     if setting_type in bool_settings:
         return ["off", "on"]
     elif setting_type == "lang":
@@ -487,7 +499,8 @@ async def server_set(ctx, key: discord.Option(str, choices=[
     discord.OptionChoice(name="readurl"),
     discord.OptionChoice(name="readjoinleave"),
     discord.OptionChoice(name="lang"),
-    discord.OptionChoice(name="readsan")], description="設定項目"),
+    discord.OptionChoice(name="readsan"),
+    discord.OptionChoice(name="joinnotice")], description="設定項目"),
                      value: discord.Option(str, description="設定値", required=False,
                                            autocomplete=get_server_set_value), ):
     await ctx.defer()
@@ -636,6 +649,26 @@ async def server_set(ctx, key: discord.Option(str, choices=[
         elif value == "on":
             embed.description = "さん付けをオンにしました"
             await setdatabase(ctx.guild.id, "is_readsan", True, "guild")
+        else:
+            embed.title = "Error"
+            embed.description = "on/offをvalueに指定してください。"
+            embed.color = discord.Colour.brand_red()
+        await ctx.send_followup(embed=embed)
+    elif key == "joinnotice":
+        embed = discord.Embed(
+            title="Changed readsan",
+            description="名前",
+            color=discord.Colour.brand_green()
+        )
+        if value is None:
+            embed.description = "参加退出表示をオンにしました（デフォルト）"
+            await setdatabase(ctx.guild.id, "is_joinnotice", True, "guild")
+        elif value == "off":
+            embed.description = "参加退出表示をオフにしました"
+            await setdatabase(ctx.guild.id, "is_joinnotice", False, "guild")
+        elif value == "on":
+            embed.description = "参加退出表示をオンにしました"
+            await setdatabase(ctx.guild.id, "is_joinnotice", True, "guild")
         else:
             embed.title = "Error"
             embed.description = "on/offをvalueに指定してください。"
@@ -924,7 +957,7 @@ async def generate_wav(text, speaker=1, filepath='audio.wav', target_host='local
     # COEIROINKAPI用に対応
     if coeiroink_host == target_host:
         # return await synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, filepath)
-        return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath)
+        return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, volume=0.8)
     else:
         return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath)
 
@@ -974,7 +1007,7 @@ async def synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, fi
         return False
 
 
-async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath):
+async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, volume=1.0):
     try:
         async with aiohttp.ClientSession(connector_owner=False, connector=conn) as private_session:
             async with private_session.post(f'http://{target_host}/audio_query',
@@ -987,6 +1020,17 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                 query_json["speedScale"] = int(speed) / 100
                 query_json["pitchScale"] = int(pitch) / 100
                 query_json["outputStereo"] = False
+                query_json["volumeScale"] = volume
+
+                '''print(query_json)
+
+                for phrase in query_json["accent_phrases"]:
+                    for mora in phrase["moras"]:
+                        mora["vowel_length"] /= 2
+                        if mora["consonant_length"] is not None:
+                            mora["consonant_length"] /= 2
+
+                print(query_json)'''
 
             if len(query_json["kana"]) > len_limit:
                 print(query_json["kana"])
@@ -1028,6 +1072,8 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                 except ReadTimeout:
                     return False
     except:
+        import traceback
+        traceback.print_exc()
         return False
 
 
@@ -1051,6 +1097,8 @@ async def yomiage(member, guild, text: str):
         generating_guilds[guild.id].clear()
         print(f"クリアしました。guild: {guild.id}")
         return
+    elif text.startswith("!") or text.startswith("！"):
+        return
     pattern = "https?://[\w/:%#\$&\?\(\)~\.=\+\-@]+"
     pattern_emoji = "\<.+?\>"
     pattern_voice = "\.v[0-9]*"
@@ -1069,15 +1117,20 @@ async def yomiage(member, guild, text: str):
             output = member.display_name + " " + output
 
     if is_premium:
-        if len(output) > 150:
-            output = output[:150]
+        '''if len(output) > text_limit_300 and guild.id in premium_server_list_300:
+            output = output[:(text_limit_300 + 50)]
+        elif len(output) > text_limit_500 and guild.id in premium_server_list_500:
+            output = output[:(text_limit_500 + 50)]
+        elif len(output) > text_limit_1000 and guild.id in premium_server_list_1000:
+            output = output[:(text_limit_1000 + 50)]
+        else:
+            output = output[:(text_limit_100 + 50)]'''
+        output = output[:(text_limit_100 + 50)]
     else:
         output = output[:100]
 
     output = await henkan_private_dict(guild.id, output)
     output = await henkan_private_dict(9686, output)
-
-
 
     if guild.id in premium_server_list:
         if re.search(pattern_voice, text) is not None:
@@ -1133,11 +1186,19 @@ async def yomiage(member, guild, text: str):
 
         if voice_id is None:
             voice_id = await getdatabase(member.id, "voiceid", 0)
-        if len(output) > 50:
-            if is_premium:
-                if len(output) > 100:
-                    output = output[:100] + "以下略"
-            else:
+
+        if is_premium:
+            '''if len(output) > text_limit_300 and guild.id in premium_server_list_300:
+                output = output[:(text_limit_300)] + "以下略"
+            elif len(output) > text_limit_500 and guild.id in premium_server_list_500:
+                output = output[:(text_limit_500)] + "以下略"
+            elif len(output) > text_limit_1000 and guild.id in premium_server_list_1000:
+                output = output[:(text_limit_1000)] + "以下略"
+            elif len(output) > text_limit_1000 and guild.id in premium_server_list:'''
+            if len(output) > text_limit_100:
+                output = output[:(text_limit_100)] + "以下略"
+        else:
+            if len(output) > 50:
                 output = output[:50] + "以下略"
 
     if len(output) <= 0:
@@ -1147,6 +1208,7 @@ async def yomiage(member, guild, text: str):
         if guild.voice_client is None:
             return
         generating_guilds.setdefault(guild.id, []).append(text)
+
         while guild.voice_client.playing or (
             generating_guilds[guild.id].index(text, 0) > 0) or guild.id in generating_guild_set:
             await asyncio.sleep(0.1)
@@ -1156,7 +1218,13 @@ async def yomiage(member, guild, text: str):
         time_sta = time.time()
         done = True
         retry_count = 0
-        while done and retry_count < 10:
+        output_list = []
+        if len(output) > 10000:
+            for i in range(0, len(output), 100):
+                output_list.append(output[i:i + 100])
+        else:
+            output_list.append(output)
+        while retry_count < 10 and done:
             filename = await text2wav(output, int(voice_id), is_premium,
                                       speed=await getdatabase(member.id, "speed", 100),
                                       pitch=await getdatabase(member.id, "pitch", 0))
@@ -1167,6 +1235,7 @@ async def yomiage(member, guild, text: str):
                 retry_count += 1
                 if retry_count >= 3:
                     return
+            del output_list[0]
 
         time_end = time.time()
         tim = time_end - time_sta
@@ -1180,7 +1249,8 @@ async def yomiage(member, guild, text: str):
         time_sta = time.time()
 
         if is_lavalink:
-            source = (await wavelink.Playable.search(os.path.dirname(os.path.abspath(__file__)) + "/" + filename, source=None))[
+            source = \
+            (await wavelink.Playable.search(os.path.dirname(os.path.abspath(__file__)) + "/" + filename, source=None))[
                 0]
         else:
             source = await discord.FFmpegOpusAudio.from_probe(source=filename)
@@ -1225,7 +1295,8 @@ async def on_voice_state_update(member, before, after):
                 int(await getdatabase(after.channel.guild.id, "premium_user", 0, "guild"))) in premium_user_list:
                 embed.set_author(name="Premium")
                 premium_server_list.append(after.channel.guild.id)
-            await after.channel.guild.get_channel(autojoin["text_channel_id"]).send(embed=embed)
+            if await getdatabase(after.channel.guild.id, "is_joinnotice", True, "guild"):
+                await after.channel.guild.get_channel(autojoin["text_channel_id"]).send(embed=embed)
             try:
                 await after.channel.connect(cls=wavelink.Player)
             except Exception as e:
