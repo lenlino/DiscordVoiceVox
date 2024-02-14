@@ -1366,7 +1366,7 @@ async def status_update_loop():
     else:
         avarage = 0
         avarage_p = 0
-    text = f"{str(len(vclist))}/{str(len(bot.guilds))}読み上げ中\n 負荷 N:{avarage} P:{avarage_p}"
+    text = f"{str(len(vclist))}/{str(len(bot.guilds))}読み上げ中\n 生成時間平均 N:{round(avarage, 1)}s P:{round(avarage_p, 1)}s"
     logger.error(text)
     voice_generate_time_list_p.clear()
     voice_generate_time_list.clear()
