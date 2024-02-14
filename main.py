@@ -23,6 +23,7 @@ from discord.ext import tasks, pages
 from requests import ReadTimeout
 from ko2kana import toKana
 from dotenv import load_dotenv
+from translate import Translator
 
 import emoji
 import romajitable
@@ -89,6 +90,9 @@ handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(me
 logger.addHandler(handler)
 default_conn = aiohttp.TCPConnector(limit_per_host=22)
 premium_conn = aiohttp.TCPConnector()
+
+translator_ja = Translator(to_lang="ja")
+translator_ko = Translator(to_lang="ko")
 
 
 async def initdatabase():
@@ -1179,6 +1183,9 @@ async def yomiage(member, guild, text: str):
         output = toKana(output)
         output = output.replace(" ", "")
     elif lang == "ja":
+        if is_premium and re.match("^[ぁ-んァ-ヶー一-龯]+$", output) is None:
+            output = "ホンヤク" + translator_ja.translate(output)
+
         output = re.sub(pattern, "ユーアールエル省略", output)
         output = (await romajitable.to_kana(output)).katakana
         if len(output) <= 0:
@@ -1189,6 +1196,9 @@ async def yomiage(member, guild, text: str):
 
         if voice_id is None:
             voice_id = await getdatabase(member.id, "voiceid", 0)
+
+
+
 
         if is_premium:
             '''if len(output) > text_limit_300 and guild.id in premium_server_list_300:
