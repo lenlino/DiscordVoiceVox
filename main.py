@@ -1022,6 +1022,16 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                 query_json["outputStereo"] = False
                 query_json["volumeScale"] = volume
 
+                '''print(query_json)
+
+                for phrase in query_json["accent_phrases"]:
+                    for mora in phrase["moras"]:
+                        mora["vowel_length"] /= 2
+                        if mora["consonant_length"] is not None:
+                            mora["consonant_length"] /= 2
+
+                print(query_json)'''
+
             if len(query_json["kana"]) > len_limit:
                 print(query_json["kana"])
                 ikaryaku = query_json["kana"][:len_limit]
@@ -1062,6 +1072,8 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                 except ReadTimeout:
                     return False
     except:
+        import traceback
+        traceback.print_exc()
         return False
 
 
@@ -1105,21 +1117,20 @@ async def yomiage(member, guild, text: str):
             output = member.display_name + " " + output
 
     if is_premium:
-        if len(output) > text_limit_300 and guild.id in premium_server_list_300:
+        '''if len(output) > text_limit_300 and guild.id in premium_server_list_300:
             output = output[:(text_limit_300 + 50)]
         elif len(output) > text_limit_500 and guild.id in premium_server_list_500:
             output = output[:(text_limit_500 + 50)]
         elif len(output) > text_limit_1000 and guild.id in premium_server_list_1000:
             output = output[:(text_limit_1000 + 50)]
         else:
-            output = output[:(text_limit_100 + 50)]
+            output = output[:(text_limit_100 + 50)]'''
+        output = output[:(text_limit_100 + 50)]
     else:
         output = output[:100]
 
     output = await henkan_private_dict(guild.id, output)
     output = await henkan_private_dict(9686, output)
-
-
 
     if guild.id in premium_server_list:
         if re.search(pattern_voice, text) is not None:
@@ -1177,18 +1188,18 @@ async def yomiage(member, guild, text: str):
             voice_id = await getdatabase(member.id, "voiceid", 0)
 
         if is_premium:
-            if len(output) > text_limit_300 and guild.id in premium_server_list_300:
-                output = output[:(text_limit_300)]
+            '''if len(output) > text_limit_300 and guild.id in premium_server_list_300:
+                output = output[:(text_limit_300)] + "以下略"
             elif len(output) > text_limit_500 and guild.id in premium_server_list_500:
-                output = output[:(text_limit_500)]
+                output = output[:(text_limit_500)] + "以下略"
             elif len(output) > text_limit_1000 and guild.id in premium_server_list_1000:
-                output = output[:(text_limit_1000)]
-            else:
-                output = output[:(text_limit_100)]
+                output = output[:(text_limit_1000)] + "以下略"
+            elif len(output) > text_limit_1000 and guild.id in premium_server_list:'''
+            if len(output) > text_limit_100:
+                output = output[:(text_limit_100)] + "以下略"
         else:
             if len(output) > 50:
                 output = output[:50] + "以下略"
-
 
     if len(output) <= 0:
         return
@@ -1208,14 +1219,13 @@ async def yomiage(member, guild, text: str):
         done = True
         retry_count = 0
         output_list = []
-        if len(output) > 100:
+        if len(output) > 10000:
             for i in range(0, len(output), 100):
                 output_list.append(output[i:i + 100])
         else:
             output_list.append(output)
-        while done and retry_count < 10 and len(output_list) >= 0:
-            print(output_list[0])
-            filename = await text2wav(output_list[0], int(voice_id), is_premium,
+        while retry_count < 10 and done:
+            filename = await text2wav(output, int(voice_id), is_premium,
                                       speed=await getdatabase(member.id, "speed", 100),
                                       pitch=await getdatabase(member.id, "pitch", 0))
             if filename != "failed":
@@ -1239,7 +1249,8 @@ async def yomiage(member, guild, text: str):
         time_sta = time.time()
 
         if is_lavalink:
-            source = (await wavelink.Playable.search(os.path.dirname(os.path.abspath(__file__)) + "/" + filename, source=None))[
+            source = \
+            (await wavelink.Playable.search(os.path.dirname(os.path.abspath(__file__)) + "/" + filename, source=None))[
                 0]
         else:
             source = await discord.FFmpegOpusAudio.from_probe(source=filename)
