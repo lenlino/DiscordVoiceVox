@@ -278,6 +278,15 @@ class ActivateModal(discord.ui.Modal):
         embed = discord.Embed(title="success")
         embed.description = "プレミアムプランへの登録が完了しました。"
         premium_user_list.append(str(interaction.user.id))
+        amount = target_subscription[0]["plan"]["amount"]
+        if amount == 100:
+            await interaction.user.add_roles(discord.Object(1057789025731235860))
+        elif amount == 300:
+            await interaction.user.add_roles(discord.Object(1079176775675941064))
+        elif amount == 500:
+            await interaction.user.add_roles(discord.Object(1076650449534451792))
+        elif amount == 1000:
+            await interaction.user.add_roles(discord.Object(1057789043540242523))
         await interaction.response.send_message(embeds=[embed], ephemeral=True)
 
 
