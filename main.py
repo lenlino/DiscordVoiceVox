@@ -117,6 +117,7 @@ async def initdatabase():
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_joinnotice boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS premium_user char(20);')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS lang char(2);')
+        await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS mute_list bigint[];')
 
 
 async def init_voice_list():
@@ -481,7 +482,7 @@ async def set(ctx, key: discord.Option(str, choices=[
         before_guild_id = await getdatabase(ctx.author.id, key, "0")
         if before_guild_id.replace(" ", "") != "0":
             await setdatabase(before_guild_id, "premium_user", "0", "guild")
-        await setdatabase(ctx.author.id, key, value)
+        await setdatabase(ctx.author.id, key, ctx.guild.id)
         await setdatabase(ctx.guild.id, "premium_user", str(ctx.author.id), "guild")
         embed = discord.Embed(
             title="**Changed Premium Guild**",
@@ -1112,6 +1113,8 @@ async def yomiage(member, guild, text: str):
         return
     elif text.startswith("!") or text.startswith("！"):
         return
+    elif member.id in await getdatabase(guild.id, "mute_list", [], "guild"):
+        return
     pattern = "https?://[\w/:%#\$&\?\(\)~\.=\+\-@]+"
     pattern_emoji = "\<.+?\>"
     pattern_voice = "\.v[0-9]*"
@@ -1206,9 +1209,6 @@ async def yomiage(member, guild, text: str):
         if voice_id is None:
             voice_id = await getdatabase(member.id, "voiceid", 0)
 
-
-
-
         if is_premium:
             '''if len(output) > text_limit_300 and guild.id in premium_server_list_300:
                 output = output[:(text_limit_300)] + "以下略"
@@ -1272,8 +1272,9 @@ async def yomiage(member, guild, text: str):
 
         if is_lavalink:
             source = \
-            (await wavelink.Playable.search(os.path.dirname(os.path.abspath(__file__)) + "/" + filename, source=None))[
-                0]
+                (await wavelink.Playable.search(os.path.dirname(os.path.abspath(__file__)) + "/" + filename,
+                                                source=None))[
+                    0]
         else:
             source = await discord.FFmpegOpusAudio.from_probe(source=filename)
 
@@ -1411,13 +1412,25 @@ async def premium_user_check_loop():
                                         query="status:'active' AND -metadata['discord_user_id']:null").auto_paging_iter():
         user_id = d['metadata']['discord_user_id']
         premium_user_list.append(user_id)
+        premium_guild_list = []
+        for i in range(1,4):
+            p_guild = await getdatabase(str(user_id).replace(" ", ""), f"premium_guild{i}", "0")
+            if p_guild.replace(" ", "") == "0":
+                continue
+            premium_guild_list.append(p_guild)
+
         amount = d["plan"]["amount"]
         if amount == 300:
             premium_server_list_300.append(user_id)
+            premium_server_list_300.extend(premium_guild_list)
         elif amount == 500:
             premium_server_list_500.append(user_id)
+            premium_server_list_500.extend(premium_guild_list)
         elif amount == 1000:
             premium_server_list_1000.append(user_id)
+            premium_server_list_1000.extend(premium_guild_list)
+        else:
+            premium_user_list.extend(premium_guild_list)
 
     with open(os.path.dirname(os.path.abspath(__file__)) + "/cache/" + f"voice_cache.json", 'wt') as f:
         json.dump(voice_cache_dict, f, ensure_ascii=False)
@@ -1586,6 +1599,76 @@ async def showdict_local(ctx, ):
         return
 
     await ctx.respond(embed=embed, file=json_file)
+
+
+@bot.slash_command(description="ミュートを設定するのだ", default_member_permissions=discord.Permissions.manage_guild)
+@default_permissions(manage_messages=True)
+async def mute(ctx, target: discord.Option(discord.Member)):
+    mute_list = await getdatabase(ctx.guild.id, "mute_list", [], "guild")
+    if target.id in mute_list:
+        embed = discord.Embed(
+            title="**Error**",
+            description=f"すでにミュートされています",
+            color=discord.Colour.brand_red(),
+        )
+        await ctx.respond(embed=embed)
+        return
+    elif len(mute_list) >= 25:
+        embed = discord.Embed(
+            title="**Error**",
+            description=f"ミュート登録数上限に達しました",
+            color=discord.Colour.brand_red(),
+        )
+        await ctx.respond(embed=embed)
+        return
+    mute_list.append(target.id)
+    await setdatabase(ctx.guild.id, "mute_list", mute_list, "guild")
+    embed = discord.Embed(
+        title="**Success**",
+        description=f"{target.name}をミュートしました",
+        color=discord.Colour.brand_green(),
+    )
+    await ctx.respond(embed=embed)
+
+
+@bot.slash_command(description="ミュートを解除するのだ", default_member_permissions=discord.Permissions.manage_guild)
+@default_permissions(manage_messages=True)
+async def unmute(ctx, target: discord.Option(discord.Member)):
+    mute_list = await getdatabase(ctx.guild.id, "mute_list", [], "guild")
+    if target.id not in mute_list:
+        embed = discord.Embed(
+            title="**Error**",
+            description=f"すでにミュートされていません",
+            color=discord.Colour.brand_red(),
+        )
+        await ctx.respond(embed=embed)
+        return
+    mute_list.remove(target.id)
+    await setdatabase(ctx.guild.id, "mute_list", mute_list, "guild")
+    embed = discord.Embed(
+        title="**Success**",
+        description=f"{target.name}のミュートを解除しました",
+        color=discord.Colour.brand_green(),
+    )
+    await ctx.respond(embed=embed)
+
+
+@bot.command(description="ミュート一覧を表示するのだ", default_member_permissions=discord.Permissions.manage_guild)
+@default_permissions(manage_messages=True)
+async def showmute(ctx):
+    mute_list = await getdatabase(ctx.guild.id, "mute_list", [], "guild")
+    list_text = ""
+    for mute_id in mute_list:
+        mute_member = ctx.guild.get_member(mute_id)
+        if mute_member is None:
+            continue
+        list_text += f"{mute_member.mention}, "
+    embed = discord.Embed(
+        title="**ミュート一覧**",
+        description=f"{list_text}\n計{len(mute_list)}ユーザー",
+        color=discord.Colour.brand_green(),
+    )
+    await ctx.respond(embed=embed)
 
 
 async def henkan_private_dict(server_id, source):
