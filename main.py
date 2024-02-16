@@ -1195,8 +1195,8 @@ async def yomiage(member, guild, text: str):
         output = toKana(output)
         output = output.replace(" ", "")
     elif lang == "ja":
-        if is_premium and re.match("^[ぁ-んァ-ヶー一-龯]+$", output) is None:
-            output = translator_ja.translate(output)
+        ''' if is_premium and re.match("^[ぁ-んァ-ヶー一-龯]+$", output) is None:
+            output = translator_ja.translate(output) '''
 
         output = re.sub(pattern, "ユーアールエル省略", output)
         output = (await romajitable.to_kana(output)).katakana
