@@ -23,6 +23,8 @@ from discord.ext import tasks, pages
 from requests import ReadTimeout
 from ko2kana import toKana
 from dotenv import load_dotenv
+from stripe.api_resources.search_result_object import SearchResultObject
+from stripe.api_resources.subscription import Subscription
 from translate import Translator
 
 import emoji
@@ -258,37 +260,49 @@ class ActivateModal(discord.ui.Modal):
             discord.ui.InputText(label="メールアドレスを入力してください。(登録状況の参照にのみ使用されます。)"))
 
     async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        if str(interaction.user.id) in premium_user_list:
+            embed = discord.Embed(title="success", color=discord.Colour.brand_green())
+            embed.description = "すでにアクティベート済みです"
+            await interaction.followup.send(embeds=[embed], ephemeral=True)
+            return
         mail = self.children[0].value
         customer: list = stripe.Customer.search(query=f"email: '{mail}'")["data"]
         if len(customer) == 0:
             embed = discord.Embed(title="fail", color=discord.Colour.brand_red())
             embed.description = "ユーザーが存在しません。"
-            await interaction.response.send_message(embeds=[embed], ephemeral=True)
+            await interaction.followup.send(embeds=[embed], ephemeral=True)
             return
         customer_id = customer[0]["id"]
-        subscription: list = stripe.Subscription.search(query=f"status:'active' AND metadata['discord_user_id']:null")
-        target_subscription = list(filter(lambda item: item['customer'] == customer_id, subscription))
+        target_subscription = []
+        for subscription in stripe.Subscription.search(query=f"status:'active' AND metadata['discord_user_id']:null").auto_paging_iter():
+            if subscription["customer"] == customer_id:
+                target_subscription.append(subscription)
+                break
         if len(target_subscription) == 0:
             embed = discord.Embed(title="fail", color=discord.Colour.brand_red())
-            embed.description = "有効なサブスクリプションが存在しません。"
-            await interaction.response.send_message(embeds=[embed], ephemeral=True)
+            embed.description = "有効なサブスクリプションが存在しません"
+            await interaction.followup.send(embeds=[embed], ephemeral=True)
             return
 
         subscription_id = target_subscription[0]["id"]
         stripe.Subscription.modify(subscription_id, metadata={"discord_user_id": interaction.user.id})
-        embed = discord.Embed(title="success")
-        embed.description = "プレミアムプランへの登録が完了しました。"
+        embed = discord.Embed(title="success",color=discord.Colour.brand_green())
+        embed.description = "プレミアムプランへの登録が完了しました"
         premium_user_list.append(str(interaction.user.id))
         amount = target_subscription[0]["plan"]["amount"]
         if amount == 100:
             await interaction.user.add_roles(discord.Object(1057789025731235860))
         elif amount == 300:
+            premium_server_list_300.append(str(interaction.user.id))
             await interaction.user.add_roles(discord.Object(1079176775675941064))
         elif amount == 500:
+            premium_server_list_500.append(str(interaction.user.id))
             await interaction.user.add_roles(discord.Object(1076650449534451792))
         elif amount == 1000:
+            premium_server_list_1000.append(str(interaction.user.id))
             await interaction.user.add_roles(discord.Object(1057789043540242523))
-        await interaction.response.send_message(embeds=[embed], ephemeral=True)
+        await interaction.followup.send(embeds=[embed], ephemeral=True)
 
 
 @bot.slash_command(description="読み上げを開始・終了するのだ")
@@ -760,7 +774,7 @@ async def setname(ctx, name: discord.Option(input_type=str, description="自分�
 async def activate(ctx):
     embed = discord.Embed(
         title="Activate",
-        description=f"ボタンを",
+        description=f"Activateボタンを押してプランのアクティベートを行えます",
         color=discord.Colour.gold(),
     )
     await ctx.respond(embed=embed, view=ActivateButtonView())
