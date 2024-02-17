@@ -496,8 +496,8 @@ async def set(ctx, key: discord.Option(str, choices=[
         before_guild_id = await getdatabase(ctx.author.id, key, "0")
         if before_guild_id.replace(" ", "") != "0":
             await setdatabase(before_guild_id, "premium_user", "0", "guild")
-        await setdatabase(ctx.author.id, key, ctx.guild.id)
-        await setdatabase(ctx.guild.id, "premium_user", str(ctx.author.id), "guild")
+        await setdatabase(str(ctx.author.id), key, str(ctx.guild.id))
+        await setdatabase(str(ctx.guild.id), "premium_user", str(ctx.author.id), "guild")
         embed = discord.Embed(
             title="**Changed Premium Guild**",
             description=f"{key}　のサーバーを サーバーid({ctx.guild.id}) に設定したのだ",
