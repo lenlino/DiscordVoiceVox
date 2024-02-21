@@ -1456,7 +1456,6 @@ async def premium_user_check_loop():
 
     with open(os.path.dirname(os.path.abspath(__file__)) + "/cache/" + f"voice_cache.json", 'wt') as f:
         json.dump(voice_cache_dict, f, ensure_ascii=False)
-    voice_cache_dict.clear()
     voice_cache_counter_dict.clear()
 
     await bot.wait_until_ready()
