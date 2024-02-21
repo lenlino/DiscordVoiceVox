@@ -29,6 +29,7 @@ from translate import Translator
 
 import emoji
 import romajitable
+import unicodedata
 
 load_dotenv()
 
@@ -275,7 +276,8 @@ class ActivateModal(discord.ui.Modal):
             return
         customer_id = customer[0]["id"]
         target_subscription = []
-        for subscription in stripe.Subscription.search(query=f"status:'active' AND metadata['discord_user_id']:null").auto_paging_iter():
+        for subscription in stripe.Subscription.search(
+            query=f"status:'active' AND metadata['discord_user_id']:null").auto_paging_iter():
             if subscription["customer"] == customer_id:
                 target_subscription.append(subscription)
                 break
@@ -287,7 +289,7 @@ class ActivateModal(discord.ui.Modal):
 
         subscription_id = target_subscription[0]["id"]
         stripe.Subscription.modify(subscription_id, metadata={"discord_user_id": interaction.user.id})
-        embed = discord.Embed(title="success",color=discord.Colour.brand_green())
+        embed = discord.Embed(title="success", color=discord.Colour.brand_green())
         embed.description = "プレミアムプランへの登録が完了しました"
         premium_user_list.append(str(interaction.user.id))
         amount = target_subscription[0]["plan"]["amount"]
@@ -1162,8 +1164,7 @@ async def yomiage(member, guild, text: str):
     else:
         output = output[:100]
 
-    output = await henkan_private_dict(guild.id, output)
-    output = await henkan_private_dict(9686, output)
+    lang = await getdatabase(guild.id, "lang", "ja", "guild")
 
     if guild.id in premium_server_list:
         if re.search(pattern_voice, text) is not None:
@@ -1182,16 +1183,24 @@ async def yomiage(member, guild, text: str):
                             output = re.sub(pattern, "ユーアールエル " + title, output)
                         else:
                             output = re.sub(pattern, "ユーアールエル画像省略", output)
+
+    if lang == "ko":
+        output = re.sub(pattern, "유알엘생략", output)
+    elif lang == "ja":
+        output = re.sub(pattern, "ユーアールエル省略", output)
+
     if await getdatabase(guild.id, "is_reademoji", True, "guild"):
         output = emoji.demojize(output, language="ja")
 
-    lang = await getdatabase(guild.id, "lang", "ja", "guild")
+    output = await henkan_private_dict(guild.id, output)
+    output = await henkan_private_dict(9686, output)
+
     output = re.sub(pattern_emoji, "", output)
     output = re.sub(pattern_voice, "", output)
     output = re.sub(pattern_spoiler, "", output)
 
     if lang == "ko":
-        output = re.sub(pattern, "유알엘생략", output)
+
         if len(output) <= 0:
             return
         output = re.sub("w{4,100}", "ㅋ", output)
@@ -1212,7 +1221,6 @@ async def yomiage(member, guild, text: str):
         ''' if is_premium and re.match("^[ぁ-んァ-ヶー一-龯]+$", output) is None:
             output = translator_ja.translate(output) '''
 
-        output = re.sub(pattern, "ユーアールエル省略", output)
         output = (await romajitable.to_kana(output)).katakana
         if len(output) <= 0:
             return
@@ -1427,7 +1435,7 @@ async def premium_user_check_loop():
         user_id = d['metadata']['discord_user_id']
         premium_user_list.append(user_id)
         premium_guild_list = []
-        for i in range(1,4):
+        for i in range(1, 4):
             p_guild = await getdatabase(str(user_id).replace(" ", ""), f"premium_guild{i}", "0")
             if p_guild.replace(" ", "") == "0":
                 continue
@@ -1692,6 +1700,7 @@ async def henkan_private_dict(server_id, source):
             json_data = json.load(f)
     except:
         json_data = {}
+    source = toLowerCase(source)
     dict_data = sorted(json_data.keys(), key=len)
     dict_data.reverse()
     for k in dict_data:
@@ -1708,7 +1717,7 @@ async def update_private_dict(server_id, source, kana):
         json_data = {}
     if len(json_data) > 1000:
         return False
-    json_data[source] = kana
+    json_data[toLowerCase(source)] = kana
     sorted_json_data = json_data
     with open(os.path.dirname(os.path.abspath(__file__)) + "/user_dict/" + f"{server_id}.json", 'wt',
               encoding='utf-8') as f:
@@ -1723,11 +1732,17 @@ async def delete_private_dict(server_id, source):
             json_data = json.load(f)
     except:
         json_data = {}
-    json_data.pop(source)
+    json_data.pop(toLowerCase(source))
     sorted_json_data = json_data
     with open(os.path.dirname(os.path.abspath(__file__)) + "/user_dict/" + f"{server_id}.json", 'wt',
               encoding='utf-8') as f:
         json.dump(sorted_json_data, f, ensure_ascii=False)
+
+
+def toLowerCase(text):
+    text = unicodedata.normalize('NFKC', text)
+    text = text.lower()
+    return text
 
 
 if __name__ == '__main__':
