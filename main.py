@@ -1513,7 +1513,7 @@ async def init_loop():
     pool = await get_connection()
 
     global voice_cache_dict
-    with open("./cache/voice_cache.json") as f:
+    with open(os.path.dirname(os.path.abspath(__file__)) +"/cache/voice_cache.json") as f:
         voice_cache_dict = json.load(f)
 
     await initdatabase()
