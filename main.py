@@ -1207,11 +1207,11 @@ async def yomiage(member, guild, text: str):
     elif lang == "ja":
         output = re.sub(pattern, "ユーアールエル省略", output)
 
-    if await getdatabase(guild.id, "is_reademoji", True, "guild"):
-        output = emoji.demojize(output, language="ja")
-
     output = await henkan_private_dict(guild.id, output)
     output = await henkan_private_dict(9686, output)
+
+    if await getdatabase(guild.id, "is_reademoji", True, "guild"):
+        output = emoji.demojize(output, language="ja")
 
     output = re.sub(pattern_emoji, "", output)
     output = re.sub(pattern_voice, "", output)
