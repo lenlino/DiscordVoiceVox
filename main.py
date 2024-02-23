@@ -42,6 +42,7 @@ is_lavalink = True
 coeiroink_host = os.environ.get("COEIROINK_HOST", "127.0.0.1:50032")
 sharevox_host = os.environ.get("SHAREVOX_HOST", "127.0.0.1:50025")
 lavalink_host_list = os.environ.get("LAVALINK_HOST", "http://127.0.0.1:2333").split(",")
+gpu_host = os.environ.get("GPU_HOST", host)
 DictChannel = 1057517276674400336
 ManagerGuilds = [888020016660893726]
 intents = discord.Intents.none()
@@ -96,6 +97,11 @@ premium_conn = aiohttp.TCPConnector()
 
 translator_ja = Translator(to_lang="ja")
 translator_ko = Translator(to_lang="ko")
+
+is_use_gpu_server_enabled = os.getenv("IS_GPU", False)
+is_use_gpu_server = False
+gpu_start_time = datetime.datetime.strptime(os.getenv("START_TIME", "21:00"), "%H:%M").time()
+gpu_end_time = datetime.datetime.strptime(os.getenv("END_TIME", "02:00"), "%H:%M").time()
 
 
 async def initdatabase():
@@ -947,6 +953,7 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0"):
     else:
         target_port = 50021
         global voiceapi_counter
+
         target_host = premium_host_list[voiceapi_counter]
         if voiceapi_counter + 1 >= len(premium_host_list):
             voiceapi_counter = 0
@@ -1039,11 +1046,17 @@ async def synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, fi
 
 async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, volume=1.0):
     try:
+        global is_use_gpu_server
+        use_gpu_server = is_use_gpu_server and speaker == 3
+        if use_gpu_server:
+            target_host = gpu_host
         async with aiohttp.ClientSession(connector_owner=False, connector=conn) as private_session:
             async with private_session.post(f'http://{target_host}/audio_query',
                                             params=params,
                                             timeout=30) as response1:
                 if response1.status != 200:
+                    if use_gpu_server:
+                        is_use_gpu_server = False
                     return False
                 headers = {'Content-Type': 'application/json', }
                 query_json = await response1.json()
@@ -1278,8 +1291,8 @@ async def yomiage(member, guild, text: str):
                 print("合成失敗")
                 retry_count += 1
                 if retry_count >= 3:
-                    return
-            del output_list[0]
+                    break
+        del output_list[0]
 
         time_end = time.time()
         tim = time_end - time_sta
@@ -1327,6 +1340,7 @@ async def on_voice_state_update(member, before, after):
         if json_str is None:
             return
         autojoin = json.loads(json_str)
+        print(autojoin)
         if int(autojoin["voice_channel_id"]) == int(after.channel.id):
             vclist[after.channel.guild.id] = autojoin["text_channel_id"]
             embed = discord.Embed(
@@ -1416,6 +1430,12 @@ async def status_update_loop():
     voice_generate_time_list_p.clear()
     voice_generate_time_list.clear()
     await bot.change_presence(activity=discord.CustomActivity(text))
+
+    if is_use_gpu_server_enabled:
+        now_time = datetime.datetime.now().time()
+        global is_use_gpu_server
+        # 日を跨ぐもののみ対応
+        is_use_gpu_server = gpu_start_time < now_time or now_time < gpu_end_time
 
 
 @tasks.loop(hours=24)
