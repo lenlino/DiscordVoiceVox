@@ -1058,6 +1058,11 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                     if use_gpu_server:
                         is_use_gpu_server = False
                     return False
+
+                # 同一IPで出力
+                if response1.headers.get("x-address"):
+                    target_host = response1.headers.get("x-address")
+
                 headers = {'Content-Type': 'application/json', }
                 query_json = await response1.json()
                 query_json["speedScale"] = int(speed) / 100
@@ -1202,11 +1207,11 @@ async def yomiage(member, guild, text: str):
     elif lang == "ja":
         output = re.sub(pattern, "ユーアールエル省略", output)
 
-    if await getdatabase(guild.id, "is_reademoji", True, "guild"):
-        output = emoji.demojize(output, language="ja")
-
     output = await henkan_private_dict(guild.id, output)
     output = await henkan_private_dict(9686, output)
+
+    if await getdatabase(guild.id, "is_reademoji", True, "guild"):
+        output = emoji.demojize(output, language="ja")
 
     output = re.sub(pattern_emoji, "", output)
     output = re.sub(pattern_voice, "", output)
@@ -1513,7 +1518,7 @@ async def init_loop():
     pool = await get_connection()
 
     global voice_cache_dict
-    with open("./cache/voice_cache.json") as f:
+    with open(os.path.dirname(os.path.abspath(__file__)) +"/cache/voice_cache.json") as f:
         voice_cache_dict = json.load(f)
 
     await initdatabase()
