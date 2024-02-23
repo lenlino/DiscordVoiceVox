@@ -1058,6 +1058,11 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                     if use_gpu_server:
                         is_use_gpu_server = False
                     return False
+
+                # 同一IPで出力
+                if response1.headers.get("x-address"):
+                    target_host = response1.headers.get("x-address")
+
                 headers = {'Content-Type': 'application/json', }
                 query_json = await response1.json()
                 query_json["speedScale"] = int(speed) / 100
