@@ -26,6 +26,7 @@ from dotenv import load_dotenv
 from stripe.api_resources.search_result_object import SearchResultObject
 from stripe.api_resources.subscription import Subscription
 from translate import Translator
+from watchfiles import watch, awatch
 
 import emoji
 import romajitable
@@ -791,13 +792,19 @@ async def activate(ctx):
 @bot.slash_command(description="ユーザーをプレミアム登録するのだ(modonly)", guild_ids=ManagerGuilds, name="stop")
 async def stop_bot(ctx, message: discord.Option(input_type=str, description="カスタムメッセージ",
                                                 default="ずんだもんの再起動を行います。数分程度ご利用いただけません。")):
+    await ctx.defer()
+    await stop(message)
+    await ctx.send_followup("送信しました。")
+    await bot.close()
+
+
+async def stop(message="ずんだもんの再起動を行います。数分程度ご利用いただけません。"):
     embed = discord.Embed(
         title="Notice",
         description=message,
         color=discord.Colour.red(),
     )
     savelist = []
-    await ctx.defer()
     for server_id, text_ch_id in vclist.copy().items():
         guild = bot.get_guild(server_id)
         if guild.voice_client is None:
@@ -807,9 +814,8 @@ async def stop_bot(ctx, message: discord.Option(input_type=str, description="カ
             await guild.get_channel(text_ch_id).send(embed=embed)
         except:
             pass
-    with open('bot_stop.json', 'wt') as f:
+    with open('bot_stop.json', 'wt', encoding='utf-8') as f:
         json.dump(savelist, f, ensure_ascii=False)
-    await ctx.send_followup("送信しました。", embed=embed)
     await bot.close()
 
 
@@ -1442,6 +1448,12 @@ async def status_update_loop():
         # 日を跨ぐもののみ対応
         is_use_gpu_server = gpu_start_time < now_time or now_time < gpu_end_time
 
+    # ファイル変更検知・自動再起動
+    async for changes in awatch(os.path.dirname(os.path.abspath(__file__)) + "/main.py"):
+        print(changes)
+        await stop()
+        break
+
 
 @tasks.loop(hours=24)
 async def premium_user_check_loop():
@@ -1479,7 +1491,8 @@ async def premium_user_check_loop():
         else:
             premium_user_list.extend(premium_guild_list)
 
-    with open(os.path.dirname(os.path.abspath(__file__)) + "/cache/" + f"voice_cache.json", 'wt', encoding='utf-8') as f:
+    with open(os.path.dirname(os.path.abspath(__file__)) + "/cache/" + f"voice_cache.json", 'wt',
+              encoding='utf-8') as f:
         json.dump(voice_cache_dict, f, ensure_ascii=False)
     voice_cache_counter_dict.clear()
 
@@ -1518,7 +1531,7 @@ async def init_loop():
     pool = await get_connection()
 
     global voice_cache_dict
-    with open(os.path.dirname(os.path.abspath(__file__)) +"/cache/voice_cache.json", "r", encoding='utf-8') as f:
+    with open(os.path.dirname(os.path.abspath(__file__)) + "/cache/voice_cache.json", "r", encoding='utf-8') as f:
         voice_cache_dict = json.load(f)
 
     await initdatabase()
