@@ -1479,7 +1479,7 @@ async def premium_user_check_loop():
         else:
             premium_user_list.extend(premium_guild_list)
 
-    with open(os.path.dirname(os.path.abspath(__file__)) + "/cache/" + f"voice_cache.json", 'wt') as f:
+    with open(os.path.dirname(os.path.abspath(__file__)) + "/cache/" + f"voice_cache.json", 'wt', encoding='utf-8') as f:
         json.dump(voice_cache_dict, f, ensure_ascii=False)
     voice_cache_counter_dict.clear()
 
@@ -1518,7 +1518,7 @@ async def init_loop():
     pool = await get_connection()
 
     global voice_cache_dict
-    with open(os.path.dirname(os.path.abspath(__file__)) +"/cache/voice_cache.json") as f:
+    with open(os.path.dirname(os.path.abspath(__file__)) +"/cache/voice_cache.json", "r", encoding='utf-8') as f:
         voice_cache_dict = json.load(f)
 
     await initdatabase()
