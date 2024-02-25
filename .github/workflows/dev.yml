@@ -1,0 +1,19 @@
+name: CD
+on:
+  push:
+    branches: [dev]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install SSH Key for Deploy
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USER }}
+          password: ${{ secrets.SECRET_KEY }}
+          script: |
+            cd bots/DiscordVoiceVox
+            git pull
+
