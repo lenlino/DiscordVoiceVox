@@ -104,6 +104,8 @@ is_use_gpu_server = False
 gpu_start_time = datetime.datetime.strptime(os.getenv("START_TIME", "21:00"), "%H:%M").time()
 gpu_end_time = datetime.datetime.strptime(os.getenv("END_TIME", "02:00"), "%H:%M").time()
 
+user_dict_loc = os.getenv("DICT_LOC", os.path.dirname(os.path.abspath(__file__)) + "/user_dict")
+
 
 async def initdatabase():
     async with pool.acquire() as conn:
@@ -1651,7 +1653,7 @@ async def showdict_local(ctx, ):
         color=discord.Colour.brand_green(),
     )
     try:
-        json_file = discord.File(os.path.dirname(os.path.abspath(__file__)) + "/user_dict/" + f"{ctx.guild.id}.json")
+        json_file = discord.File(user_dict_loc + "/" + f"{ctx.guild.id}.json")
     except:
         embed.description = "辞書は設定されていません。"
         await ctx.respond(embed=embed)
@@ -1732,7 +1734,7 @@ async def showmute(ctx):
 
 async def henkan_private_dict(server_id, source):
     try:
-        with open(os.path.dirname(os.path.abspath(__file__)) + "/user_dict/" + f"{server_id}.json", "r",
+        with open(user_dict_loc + "/" + f"{server_id}.json", "r",
                   encoding='utf-8') as f:
             json_data = json.load(f)
     except:
@@ -1747,7 +1749,7 @@ async def henkan_private_dict(server_id, source):
 
 async def update_private_dict(server_id, source, kana):
     try:
-        with open(os.path.dirname(os.path.abspath(__file__)) + "/user_dict/" + f"{server_id}.json", "r",
+        with open(user_dict_loc + "/" + f"{server_id}.json", "r",
                   encoding='utf-8') as f:
             json_data = json.load(f)
     except:
@@ -1756,7 +1758,7 @@ async def update_private_dict(server_id, source, kana):
         return False
     json_data[toLowerCase(source)] = kana
     sorted_json_data = json_data
-    with open(os.path.dirname(os.path.abspath(__file__)) + "/user_dict/" + f"{server_id}.json", 'wt',
+    with open(user_dict_loc + "/" + f"{server_id}.json", 'wt',
               encoding='utf-8') as f:
         json.dump(sorted_json_data, f, ensure_ascii=False)
     return True
@@ -1764,14 +1766,14 @@ async def update_private_dict(server_id, source, kana):
 
 async def delete_private_dict(server_id, source):
     try:
-        with open(os.path.dirname(os.path.abspath(__file__)) + "/user_dict/" + f"{server_id}.json", "r",
+        with open(user_dict_loc + "/" + f"{server_id}.json", "r",
                   encoding='utf-8') as f:
             json_data = json.load(f)
     except:
         json_data = {}
     json_data.pop(toLowerCase(source))
     sorted_json_data = json_data
-    with open(os.path.dirname(os.path.abspath(__file__)) + "/user_dict/" + f"{server_id}.json", 'wt',
+    with open(user_dict_loc + "/" + f"{server_id}.json", 'wt',
               encoding='utf-8') as f:
         json.dump(sorted_json_data, f, ensure_ascii=False)
 
