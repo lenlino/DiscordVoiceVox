@@ -545,8 +545,8 @@ async def server_set(ctx, key: discord.Option(str, choices=[
     if key == "autojoin":
         text_channel_id = ctx.channel_id
         if value == "off":
-            setting_json = json.dumps({"text_channel_id": 1, "voice_channel_id": 1})
-            await setdatabase(ctx.guild.id, "auto_join", setting_json, "guild")
+            await update_guild_setting(ctx.guild.id, "text_channel_id", 1)
+            await update_guild_setting(ctx.guild.id, "voice_channel_id", 1)
             embed = discord.Embed(
                 title="Changed AutoJoin",
                 description="自動接続を削除しました。",
@@ -563,8 +563,8 @@ async def server_set(ctx, key: discord.Option(str, choices=[
             await ctx.send_followup(embed=embed)
             return
         voice_channel_id = ctx.author.voice.channel.id
-        setting_json = json.dumps({"text_channel_id": text_channel_id, "voice_channel_id": voice_channel_id})
-        await setdatabase(ctx.guild.id, "auto_join", setting_json, "guild")
+        await update_guild_setting(ctx.guild.id, "text_channel_id", text_channel_id)
+        await update_guild_setting(ctx.guild.id, "voice_channel_id", voice_channel_id)
         embed = discord.Embed(
             title="Changed AutoJoin",
             description="現在の接続している音声チャンネル、テキストチャンネルで設定したのだ。(OFFにする際はoffをvalueに設定して実行してください。)",
@@ -1347,12 +1347,12 @@ async def on_voice_state_update(member, before, after):
         elif member.guild.me.timed_out is True:
             return
 
-        json_str = await getdatabase(after.channel.guild.id, "auto_join", None, "guild")
+        json_str = await get_guild_setting(after.channel.guild.id)
         if json_str is None:
             return
-        autojoin = json.loads(json_str)
+        autojoin = json_str
         print(autojoin)
-        if int(autojoin["voice_channel_id"]) == int(after.channel.id):
+        if int(autojoin.get("voice_channel_id", 1)) == int(after.channel.id):
             vclist[after.channel.guild.id] = autojoin["text_channel_id"]
             embed = discord.Embed(
                 title="Connect",
@@ -1774,6 +1774,29 @@ async def delete_private_dict(server_id, source):
     with open(os.path.dirname(os.path.abspath(__file__)) + "/user_dict/" + f"{server_id}.json", 'wt',
               encoding='utf-8') as f:
         json.dump(sorted_json_data, f, ensure_ascii=False)
+
+
+async def update_guild_setting(server_id, setting, value):
+    try:
+        with open(os.path.dirname(os.path.abspath(__file__)) + f"/guild_setting/{server_id}.json", "r",
+                  encoding='utf-8') as f:
+            setting_dict = json.load(f)
+    except:
+        setting_dict = {}
+    setting_dict[setting] = value
+    with open(os.path.dirname(os.path.abspath(__file__)) + f"/guild_setting/{server_id}.json", 'wt',
+              encoding='utf-8') as f:
+        json.dump(setting_dict, f, ensure_ascii=False)
+
+
+async def get_guild_setting(server_id):
+    try:
+        with open(os.path.dirname(os.path.abspath(__file__)) + f"/guild_setting/{server_id}.json", "r",
+                  encoding='utf-8') as f:
+            setting_dict = json.load(f)
+    except:
+        setting_dict = {}
+    return setting_dict
 
 
 def toLowerCase(text):
