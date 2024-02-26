@@ -79,10 +79,7 @@ DB_USER = os.getenv("DB_USER", "postgres")
 DB_PASS = os.getenv("DB_PASS", "maikura123")
 tips_list = ["/setvc　で自分の声を変更できます。",
              "[プレミアムプラン](https://lenlino.com/?page_id=2510)(月100円～)あります。",
-             "[要望・不具合募集中](https://discord.gg/MWnnkbXSDJ)",
-             "[VOICEVOX規約](https://voicevox.hiroshiba.jp/term/)の遵守をお願いします。",
-             "1/12 [VOICEVOX](https://voicevox.hiroshiba.jp/)より音声が追加されました。/setvcより音声の変更が可能です。追加スタイル：ずんだもん、小夜、もち子さん、青山龍星",
-             "/vc コマンドで「考え中...」のまま動かない場合は[サポートサーバー](https://discord.gg/MWnnkbXSDJ)へお問い合わせください。",
+             "[要望・不具合募集中](https://forms.gle/1TvbqzHRz6Q1vSfq9)",
              "使い方やコマンド一覧は[こちら](https://lenlino.com/?page_id=2171)"]
 voice_id_list = []
 
