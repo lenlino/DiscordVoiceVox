@@ -83,6 +83,7 @@ tips_list = ["/setvc　で自分の声を変更できます。",
              "使い方やコマンド一覧は[こちら](https://lenlino.com/?page_id=2171)"]
 USAGE_LIMIT_PRICE = int(os.getenv("USAGE_LIMIT_PRICE", 0))
 GLOBAL_DICT_CHECK = os.getenv("GLOBAL_DICT_CHECK", True)
+BOT_NICKNAME = os.getenv("BOT_NICKNAME", "ずんだもんβ")
 voice_id_list = []
 
 generating_guilds = {}
@@ -1439,7 +1440,7 @@ async def on_voice_state_update(member, before, after):
 
 @bot.event
 async def on_guild_join(guild):
-    await guild.get_member(bot.user.id).edit(nick="ずんだもんβ")
+    await guild.get_member(bot.user.id).edit(nick=BOT_NICKNAME)
 
 
 @tasks.loop(minutes=1)
