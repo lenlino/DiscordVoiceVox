@@ -82,6 +82,7 @@ tips_list = ["/setvc　で自分の声を変更できます。",
              "[要望・不具合募集中](https://forms.gle/1TvbqzHRz6Q1vSfq9)",
              "使い方やコマンド一覧は[こちら](https://lenlino.com/?page_id=2171)"]
 USAGE_LIMIT_PRICE = int(os.getenv("USAGE_LIMIT_PRICE", 0))
+GLOBAL_DICT_CHECK = os.getenv("GLOBAL_DICT_CHECK", True)
 voice_id_list = []
 
 generating_guilds = {}
@@ -1517,31 +1518,33 @@ async def premium_user_check_loop():
     voice_cache_counter_dict.clear()
 
     await bot.wait_until_ready()
-    # 辞書登録チェック
-    channel = bot.get_channel(DictChannel)
-    async for mes in channel.history(before=(datetime.datetime.now() + datetime.timedelta(days=-1))):
-        if len(mes.embeds) == 0:
-            continue
-        embed = mes.embeds[0]
-        embed_fields = embed.fields
-        reactions = mes.reactions
-        if embed.description == "グローバル辞書に単語登録を申請しました。":
-            tango = embed_fields[0].value
-            yomi = embed_fields[1].value
-            if reactions[0].count >= reactions[1].count:
-                await update_private_dict(9686, tango, yomi)
-                embed.description = "グローバル辞書に単語が登録されました。"
-            else:
-                embed.description = "適切な登録ではないため登録が拒否されました。"
-            await mes.edit(embed=embed)
-        elif embed.description == "グローバル辞書に単語削除を申請しました。":
-            tango = embed_fields[0].value
-            if reactions[0].count >= reactions[1].count:
-                await delete_private_dict(9686, tango)
-                embed.description = "グローバル辞書から単語が削除されました。"
-            else:
-                embed.description = "適切な削除ではないため削除が拒否されました。"
-            await mes.edit(embed=embed)
+    if GLOBAL_DICT_CHECK:
+        # 辞書登録チェック
+        channel = bot.get_channel(DictChannel)
+        async for mes in channel.history(before=(datetime.datetime.now() + datetime.timedelta(days=-1))):
+            if len(mes.embeds) == 0:
+                continue
+            embed = mes.embeds[0]
+            embed_fields = embed.fields
+            reactions = mes.reactions
+            if embed.description == "グローバル辞書に単語登録を申請しました。":
+                tango = embed_fields[0].value
+                yomi = embed_fields[1].value
+                if reactions[0].count >= reactions[1].count:
+                    await update_private_dict(9686, tango, yomi)
+                    embed.description = "グローバル辞書に単語が登録されました。"
+                else:
+                    embed.description = "適切な登録ではないため登録が拒否されました。"
+                await mes.edit(embed=embed)
+            elif embed.description == "グローバル辞書に単語削除を申請しました。":
+                tango = embed_fields[0].value
+                if reactions[0].count >= reactions[1].count:
+                    await delete_private_dict(9686, tango)
+                    embed.description = "グローバル辞書から単語が削除されました。"
+                else:
+                    embed.description = "適切な削除ではないため削除が拒否されました。"
+                await mes.edit(embed=embed)
+
 
 
 @tasks.loop(minutes=1)
