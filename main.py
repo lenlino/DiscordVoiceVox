@@ -81,6 +81,7 @@ tips_list = ["/setvc　で自分の声を変更できます。",
              "[プレミアムプラン](https://lenlino.com/?page_id=2510)(月100円～)あります。",
              "[要望・不具合募集中](https://forms.gle/1TvbqzHRz6Q1vSfq9)",
              "使い方やコマンド一覧は[こちら](https://lenlino.com/?page_id=2171)"]
+USAGE_LIMIT_PRICE = int(os.getenv("USAGE_LIMIT_PRICE", 0))
 voice_id_list = []
 
 generating_guilds = {}
@@ -239,7 +240,7 @@ class VoiceSelectView2(discord.ui.Select):
         if 1000 <= id < 2000 and str(interaction.user.id) not in premium_user_list:
             embed = discord.Embed(
                 title="**Error**",
-                description=f"この音声はプレミアムプラン限定です。",
+                description=f"この音声はプレミアムプラン限定です",
                 color=discord.Colour.brand_red(),
             )
         else:
@@ -332,6 +333,7 @@ async def vc(ctx):
             await ctx.send_followup(embed=embed, delete_after=0)
         return
     else:
+        guild_premium_user_id = int(await getdatabase(ctx.guild.id, "premium_user", 0, "guild"))
         if ctx.author.voice.channel.user_limit != 0 and ctx.author.voice.channel.user_limit <= len(
             ctx.author.voice.channel.members):
             embed = discord.Embed(
@@ -359,6 +361,14 @@ async def vc(ctx):
             )
             await ctx.send_followup(embed=embed)
             return
+        elif (USAGE_LIMIT_PRICE > 0 and (is_premium(ctx.author.id, USAGE_LIMIT_PRICE) or is_premium(guild_premium_user_id, USAGE_LIMIT_PRICE)) is False):
+            embed = discord.Embed(
+                title="Error",
+                color=discord.Colour.brand_red(),
+                description=f"{USAGE_LIMIT_PRICE}円以上のプランが必要です"
+            )
+            await ctx.send_followup(embed=embed)
+            return
         vclist[ctx.guild.id] = ctx.channel.id
         if is_lavalink:
             try:
@@ -377,7 +387,7 @@ async def vc(ctx):
         if ctx.guild.id in premium_server_list:
             premium_server_list.remove(ctx.guild.id)
         if str(ctx.author.id) in premium_user_list or str(
-            int(await getdatabase(ctx.guild.id, "premium_user", 0, "guild"))) in premium_user_list:
+            int(guild_premium_user_id)) in premium_user_list:
             embed.set_author(name="Premium")
             premium_server_list.append(ctx.guild.id)
         if await getdatabase(ctx.guild.id, "is_joinnotice", True, "guild"):
@@ -808,12 +818,12 @@ async def stop(message="ずんだもんの再起動を行います。数分程�
         guild = bot.get_guild(server_id)
         if guild.voice_client is None:
             continue
-        savelist.append({"guild": server_id, "text_ch_id": text_ch_id, "voice_ch_id": guild.voice_client.channel.id})
+        savelist.append({"guild": server_id, "text_ch_id": text_ch_id, "voice_ch_id": guild.voice_client.channel.id, "is_premium": server_id in premium_server_list})
         try:
             await guild.get_channel(text_ch_id).send(embed=embed)
         except:
             pass
-    with open('bot_stop.json', 'wt', encoding='utf-8') as f:
+    with open(os.path.dirname(os.path.abspath(__file__)) + "/" + 'bot_stop.json', 'wt', encoding='utf-8') as f:
         json.dump(savelist, f, ensure_ascii=False)
     await bot.close()
 
@@ -821,15 +831,18 @@ async def stop(message="ずんだもんの再起動を行います。数分程�
 async def auto_join():
     embed = discord.Embed(
         title="Notice",
-        description="復帰しました。",
+        description="復帰しました",
         color=discord.Colour.green(),
     )
-    with open("bot_stop.json", ) as f:
+    with open(os.path.dirname(os.path.abspath(__file__)) + "/" + "bot_stop.json", encoding='utf-8') as f:
         json_list = json.load(f)
         for server_json in json_list:
             guild = bot.get_guild(server_json["guild"])
             await guild.get_channel(server_json["voice_ch_id"]).connect(cls=wavelink.Player)
             await guild.get_channel(server_json["text_ch_id"]).send(embed=embed)
+            vclist[guild.id] = server_json["text_ch_id"]
+            if server_json["is_premium"]:
+                premium_server_list.append(guild.id)
 
 
 @bot.slash_command(description="辞書に単語を追加するのだ(全サーバー)", guild_ids=ManagerGuilds)
@@ -1353,6 +1366,11 @@ async def on_voice_state_update(member, before, after):
         print(autojoin)
         if int(autojoin.get("voice_channel_id", 1)) == int(after.channel.id):
             vclist[after.channel.guild.id] = autojoin["text_channel_id"]
+            guild_premium_user_id = await getdatabase(after.channel.guild.id, "premium_user", 0, "guild")
+            if (USAGE_LIMIT_PRICE > 0 and (
+                    is_premium(member.id, USAGE_LIMIT_PRICE) or is_premium(guild_premium_user_id,
+                                                                               USAGE_LIMIT_PRICE)) is False):
+                return
             embed = discord.Embed(
                 title="Connect",
                 color=discord.Colour.brand_green(),
@@ -1361,7 +1379,7 @@ async def on_voice_state_update(member, before, after):
             if after.channel.guild.id in premium_server_list:
                 premium_server_list.remove(after.channel.guild.id)
             if str(member.id) in premium_user_list or str(
-                int(await getdatabase(after.channel.guild.id, "premium_user", 0, "guild"))) in premium_user_list:
+                int(guild_premium_user_id)) in premium_user_list:
                 embed.set_author(name="Premium")
                 premium_server_list.append(after.channel.guild.id)
             if await getdatabase(after.channel.guild.id, "is_joinnotice", True, "guild"):
@@ -1376,6 +1394,9 @@ async def on_voice_state_update(member, before, after):
         return
 
     if voicestate is None:
+        return
+
+    if bot.user.id == member.id:
         return
 
     if (voicestate.client.user.id == member.id and after.channel is None) or (
@@ -1540,6 +1561,7 @@ async def init_loop():
     bot.add_view(ActivateButtonView())
     bot.loop.create_task(connect_nodes())
     await updatedict()
+    await auto_join()
     while datetime.datetime.now().minute % 10 != 0:
         await asyncio.sleep(0.1)
 
@@ -1802,6 +1824,19 @@ def toLowerCase(text):
     text = unicodedata.normalize('NFKC', text)
     text = text.lower()
     return text
+
+def is_premium(id, value):
+    id = str(id)
+    if 100 >= value > 0:
+        return id in premium_user_list or id in premium_server_list_300 or id in premium_server_list_500 or id in premium_server_list_1000
+    elif 300 >= value > 100:
+        return id in premium_server_list_300 or id in premium_server_list_500 or id in premium_server_list_1000
+    elif 500 >= value > 300:
+        return id in premium_server_list_500 or id in premium_server_list_1000
+    elif 1000 >= value > 500:
+        return id in premium_server_list_1000
+    else:
+        return True
 
 
 if __name__ == '__main__':
