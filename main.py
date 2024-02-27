@@ -1519,6 +1519,7 @@ async def premium_user_check_loop():
     voice_cache_counter_dict.clear()
 
     await bot.wait_until_ready()
+    global GLOBAL_DICT_CHECK
     if GLOBAL_DICT_CHECK:
         # 辞書登録チェック
         channel = bot.get_channel(DictChannel)
