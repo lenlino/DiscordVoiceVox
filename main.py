@@ -1520,7 +1520,7 @@ async def premium_user_check_loop():
 
     await bot.wait_until_ready()
     global GLOBAL_DICT_CHECK
-    if GLOBAL_DICT_CHECK:
+    if GLOBAL_DICT_CHECK is True:
         # 辞書登録チェック
         channel = bot.get_channel(DictChannel)
         async for mes in channel.history(before=(datetime.datetime.now() + datetime.timedelta(days=-1))):
