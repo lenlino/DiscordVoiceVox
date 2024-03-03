@@ -1401,7 +1401,7 @@ async def on_voice_state_update(member, before, after):
     if bot.user.id == member.id:
         return
 
-    if (voicestate.client.user.id == member.id and after.channel is None) or (
+    if (bot.user.id == member.id and after.channel is None) or (
         len(voicestate.channel.members) == 1 and (member.bot is False or voicestate.channel.members[0].bot)):
         await voicestate.disconnect()
 
