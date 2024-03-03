@@ -1471,11 +1471,7 @@ async def status_update_loop():
         # 日を跨ぐもののみ対応
         is_use_gpu_server = gpu_start_time < now_time or now_time < gpu_end_time
 
-    # ファイル変更検知・自動再起動
-    async for changes in awatch(os.path.dirname(os.path.abspath(__file__)) + "/main.py"):
-        print(changes)
-        await stop()
-        break
+
 
 
 @tasks.loop(hours=24)
@@ -1568,6 +1564,11 @@ async def init_loop():
     bot.loop.create_task(connect_nodes())
     await updatedict()
     await auto_join()
+    # ファイル変更検知・自動再起動
+    async for changes in awatch(os.path.dirname(os.path.abspath(__file__)) + "/main.py"):
+        print(changes)
+        await stop()
+        break
     while datetime.datetime.now().minute % 10 != 0:
         await asyncio.sleep(0.1)
 
