@@ -1462,6 +1462,7 @@ async def status_update_loop():
     logger.error(text)
     voice_generate_time_list_p.clear()
     voice_generate_time_list.clear()
+    await bot.wait_until_ready()
     await bot.change_presence(activity=discord.CustomActivity(text))
 
     if is_use_gpu_server_enabled:
