@@ -966,7 +966,7 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0"):
         voice_cache_counter_dict[voiceid] = {}
         voice_cache_dict[voiceid] = {}
     voice_cache_counter_dict[voiceid][text] = voice_cache_counter_dict.get(voiceid, {}).get(text, 0) + 1
-    if voice_cache_counter_dict[voiceid][text] > 100:
+    if voice_cache_counter_dict[voiceid][text] > 10:
         filename = f"cache/{text}-{voiceid}.wav"
         voice_cache_dict[voiceid][text] = filename
     if await generate_wav(text, voiceid, filename, target_host=target_host,
@@ -1434,6 +1434,7 @@ async def status_update_loop():
     logger.error(text)
     voice_generate_time_list_p.clear()
     voice_generate_time_list.clear()
+    voice_cache_counter_dict.clear()
     await bot.change_presence(activity=discord.CustomActivity(text))
 
     if is_use_gpu_server_enabled:
@@ -1481,7 +1482,6 @@ async def premium_user_check_loop():
 
     with open(os.path.dirname(os.path.abspath(__file__)) + "/cache/" + f"voice_cache.json", 'wt') as f:
         json.dump(voice_cache_dict, f, ensure_ascii=False)
-    voice_cache_counter_dict.clear()
 
     await bot.wait_until_ready()
     # 辞書登録チェック
