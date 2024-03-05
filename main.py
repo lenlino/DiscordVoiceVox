@@ -1727,8 +1727,11 @@ async def henkan_private_dict(server_id, source):
     source = toLowerCase(source)
     dict_data = sorted(json_data.keys(), key=len)
     dict_data.reverse()
+    limit = text_limit_100 + 50
     for k in dict_data:
         source = source.replace(k, json_data[k])
+        if len(source) > limit:
+            source = source[:(text_limit_100 + 50)]
     return source
 
 
