@@ -1209,7 +1209,7 @@ async def yomiage(member, guild, text: str):
             cmd = re.search(pattern_voice, text).group()
             if re.search("[0-9]", cmd) is not None:
                 voice_id = re.sub(r"\D", "", cmd)
-        if re.search(pattern, text) is not None and await getdatabase(guild.id, "is_readurl", True,
+        '''if re.search(pattern, text) is not None and await getdatabase(guild.id, "is_readurl", True,
                                                                       "guild"):
             url = re.search(pattern, text).group()
             async with aiohttp.ClientSession() as session:
@@ -1220,7 +1220,7 @@ async def yomiage(member, guild, text: str):
                         if len(re.findall('<img(.*)>', html)) != 1:
                             output = re.sub(pattern, "ユーアールエル " + title, output)
                         else:
-                            output = re.sub(pattern, "ユーアールエル画像省略", output)
+                            output = re.sub(pattern, "ユーアールエル画像省略", output)'''
 
     if lang == "ko":
         output = re.sub(pattern, "유알엘생략", output)
@@ -1256,8 +1256,9 @@ async def yomiage(member, guild, text: str):
         output = toKana(output)
         output = output.replace(" ", "")
     elif lang == "ja":
-        ''' if is_premium and re.match("^[ぁ-んァ-ヶー一-龯]+$", output) is None:
-            output = translator_ja.translate(output) '''
+        if guild.id in premium_server_list_1000 and re.match("[ぁ-んァ-ヶー一-龯]", output) is None:
+            output = translator_ja.translate(output)
+            print("翻訳")
 
         output = (await romajitable.to_kana(output)).katakana
         if len(output) <= 0:
