@@ -1565,6 +1565,7 @@ async def init_loop():
     bot.add_view(ActivateButtonView())
     bot.loop.create_task(connect_nodes())
     await updatedict()
+    await bot.wait_until_ready()
     await auto_join()
     # ファイル変更検知・自動再起動
     async for changes in awatch(os.path.dirname(os.path.abspath(__file__)) + "/main.py"):
