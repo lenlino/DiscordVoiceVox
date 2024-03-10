@@ -1441,6 +1441,7 @@ async def on_voice_state_update(member, before, after):
             await yomiage(member.guild.me, member.guild, f"{name}が退出したのだ、")
 
 
+# ボットのみか確認
 def is_bot_only(channel):
     for member in channel.members:
         if member.bot is False:
@@ -1555,7 +1556,6 @@ async def premium_user_check_loop():
 
 @tasks.loop(minutes=1)
 async def init_loop():
-    await bot.change_presence(activity=discord.Game("起動中..."))
     global pool
     pool = await get_connection()
 
@@ -1568,7 +1568,7 @@ async def init_loop():
     status_update_loop.start()
     premium_user_check_loop.start()
     bot.add_view(ActivateButtonView())
-    bot.loop.create_task(connect_nodes())
+    await bot.loop.create_task(connect_nodes())
     await updatedict()
     await bot.wait_until_ready()
     await auto_join()
