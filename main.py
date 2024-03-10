@@ -363,7 +363,9 @@ async def vc(ctx):
             )
             await ctx.send_followup(embed=embed)
             return
-        elif (USAGE_LIMIT_PRICE > 0 and (is_premium(ctx.author.id, USAGE_LIMIT_PRICE) or is_premium(guild_premium_user_id, USAGE_LIMIT_PRICE)) is False):
+        elif (USAGE_LIMIT_PRICE > 0 and (
+            is_premium(ctx.author.id, USAGE_LIMIT_PRICE) or is_premium(guild_premium_user_id,
+                                                                       USAGE_LIMIT_PRICE)) is False):
             embed = discord.Embed(
                 title="Error",
                 color=discord.Colour.brand_red(),
@@ -820,7 +822,8 @@ async def stop(message="ずんだもんの再起動を行います。数分程�
         guild = bot.get_guild(server_id)
         if guild.voice_client is None:
             continue
-        savelist.append({"guild": server_id, "text_ch_id": text_ch_id, "voice_ch_id": guild.voice_client.channel.id, "is_premium": server_id in premium_server_list})
+        savelist.append({"guild": server_id, "text_ch_id": text_ch_id, "voice_ch_id": guild.voice_client.channel.id,
+                         "is_premium": server_id in premium_server_list})
         try:
             await guild.get_channel(text_ch_id).send(embed=embed)
         except:
@@ -1371,8 +1374,8 @@ async def on_voice_state_update(member, before, after):
             vclist[after.channel.guild.id] = autojoin["text_channel_id"]
             guild_premium_user_id = await getdatabase(after.channel.guild.id, "premium_user", 0, "guild")
             if (USAGE_LIMIT_PRICE > 0 and (
-                    is_premium(member.id, USAGE_LIMIT_PRICE) or is_premium(guild_premium_user_id,
-                                                                               USAGE_LIMIT_PRICE)) is False):
+                is_premium(member.id, USAGE_LIMIT_PRICE) or is_premium(guild_premium_user_id,
+                                                                       USAGE_LIMIT_PRICE)) is False):
                 return
             embed = discord.Embed(
                 title="Connect",
@@ -1402,8 +1405,7 @@ async def on_voice_state_update(member, before, after):
     if bot.user.id == member.id:
         return
 
-    if (bot.user.id == member.id and after.channel is None) or (
-        len(voicestate.channel.members) == 1 and (member.bot is False or voicestate.channel.members[0].bot)):
+    if (bot.user.id == member.id and after.channel is None) or is_bot_only(voicestate.channel):
         await voicestate.disconnect()
 
         del vclist[voicestate.guild.id]
@@ -1439,6 +1441,13 @@ async def on_voice_state_update(member, before, after):
             await yomiage(member.guild.me, member.guild, f"{name}が退出したのだ、")
 
 
+def is_bot_only(channel):
+    for member in channel.members:
+        if member.bot is False:
+            return False
+    return True
+
+
 @bot.event
 async def on_guild_join(guild):
     await guild.get_member(bot.user.id).edit(nick=BOT_NICKNAME)
@@ -1472,8 +1481,6 @@ async def status_update_loop():
         global is_use_gpu_server
         # 日を跨ぐもののみ対応
         is_use_gpu_server = gpu_start_time < now_time or now_time < gpu_end_time
-
-
 
 
 @tasks.loop(hours=24)
@@ -1516,7 +1523,6 @@ async def premium_user_check_loop():
               encoding='utf-8') as f:
         json.dump(voice_cache_dict, f, ensure_ascii=False)
 
-
     await bot.wait_until_ready()
     global GLOBAL_DICT_CHECK
     if GLOBAL_DICT_CHECK is True:
@@ -1545,7 +1551,6 @@ async def premium_user_check_loop():
                 else:
                     embed.description = "適切な削除ではないため削除が拒否されました。"
                 await mes.edit(embed=embed)
-
 
 
 @tasks.loop(minutes=1)
@@ -1838,6 +1843,7 @@ def toLowerCase(text):
     text = unicodedata.normalize('NFKC', text)
     text = text.lower()
     return text
+
 
 def is_premium(id, value):
     id = str(id)
