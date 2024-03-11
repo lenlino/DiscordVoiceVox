@@ -16,7 +16,6 @@ import aiofiles as aiofiles
 import aiohttp
 import asyncpg as asyncpg
 import discord
-import rel
 import stripe
 import wavelink
 import websockets
@@ -33,7 +32,6 @@ from watchfiles import watch, awatch
 import emoji
 import romajitable
 import unicodedata
-from websockets import serve
 
 load_dotenv()
 
