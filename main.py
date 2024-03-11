@@ -87,6 +87,7 @@ GLOBAL_DICT_CHECK = os.getenv("GLOBAL_DICT_CHECK", True)
 BOT_NICKNAME = os.getenv("BOT_NICKNAME", "ずんだもんβ")
 EEW_WEBHOOK_URL = os.getenv("EEW_WEBHOOK_URL", None)
 voice_id_list = []
+non_premium_user = []
 
 generating_guilds = {}
 pool = None
@@ -302,20 +303,27 @@ class ActivateModal(discord.ui.Modal):
         stripe.Subscription.modify(subscription_id, metadata={"discord_user_id": interaction.user.id})
         embed = discord.Embed(title="success", color=discord.Colour.brand_green())
         embed.description = "プレミアムプランへの登録が完了しました"
-        premium_user_list.append(str(interaction.user.id))
         amount = target_subscription[0]["plan"]["amount"]
+        add_premium_user(interaction.user.id, amount)
         if amount == 100:
             await interaction.user.add_roles(discord.Object(1057789025731235860))
         elif amount == 300:
-            premium_server_list_300.append(str(interaction.user.id))
             await interaction.user.add_roles(discord.Object(1079176775675941064))
         elif amount == 500:
-            premium_server_list_500.append(str(interaction.user.id))
             await interaction.user.add_roles(discord.Object(1076650449534451792))
         elif amount == 1000:
-            premium_server_list_1000.append(str(interaction.user.id))
             await interaction.user.add_roles(discord.Object(1057789043540242523))
         await interaction.followup.send(embeds=[embed], ephemeral=True)
+
+
+def add_premium_user(user_id, amount):
+    premium_user_list.append(str(user_id))
+    if amount == 300:
+        premium_server_list_300.append(str(user_id))
+    elif amount == 500:
+        premium_server_list_500.append(str(user_id))
+    elif amount == 1000:
+        premium_server_list_1000.append(str(user_id))
 
 
 @bot.slash_command(description="読み上げを開始・終了するのだ")
@@ -1475,6 +1483,7 @@ async def status_update_loop():
     logger.error(text)
     voice_generate_time_list_p.clear()
     voice_generate_time_list.clear()
+    non_premium_user.clear()
     await bot.wait_until_ready()
     await bot.change_presence(activity=discord.CustomActivity(text))
 
@@ -1582,7 +1591,6 @@ async def init_loop():
         break
     while datetime.datetime.now().minute % 10 != 0:
         await asyncio.sleep(0.1)
-
 
 
 async def connect_nodes():
@@ -1859,6 +1867,12 @@ def is_premium(id, value):
         return id in premium_server_list_500 or id in premium_server_list_1000
     elif 1000 >= value > 500:
         return id in premium_server_list_1000
+    elif id not in non_premium_user and value > 0:
+        non_premium_user.append(id)
+        for d in stripe.Subscription.search(limit=100,
+                                            query=f"status:'active' AND -metadata['discord_user_id']:{id}").auto_paging_iter():
+            add_premium_user(id, value)
+            return d["plan"]["amount"] > value
     else:
         return True
 
@@ -1904,7 +1918,6 @@ async def connect_websocket():
                     await yomiage(guild.me, guild, f"緊急地震速報　{prefs_str}")
         except websockets.ConnectionClosed:
             continue
-
 
 
 if __name__ == '__main__':
