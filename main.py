@@ -16,8 +16,10 @@ import aiofiles as aiofiles
 import aiohttp
 import asyncpg as asyncpg
 import discord
+import rel
 import stripe
 import wavelink
+import websockets
 from discord import default_permissions
 from discord.ext import tasks, pages
 from requests import ReadTimeout
@@ -31,6 +33,7 @@ from watchfiles import watch, awatch
 import emoji
 import romajitable
 import unicodedata
+from websockets import serve
 
 load_dotenv()
 
@@ -84,6 +87,7 @@ tips_list = ["/setvc　で自分の声を変更できます。",
 USAGE_LIMIT_PRICE = int(os.getenv("USAGE_LIMIT_PRICE", 0))
 GLOBAL_DICT_CHECK = os.getenv("GLOBAL_DICT_CHECK", True)
 BOT_NICKNAME = os.getenv("BOT_NICKNAME", "ずんだもんβ")
+EEW_WEBHOOK_URL = os.getenv("EEW_WEBHOOK_URL", None)
 voice_id_list = []
 
 generating_guilds = {}
@@ -989,7 +993,7 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0"):
         voice_cache_counter_dict[voiceid] = {}
         voice_cache_dict[voiceid] = {}
     voice_cache_counter_dict[voiceid][text] = voice_cache_counter_dict.get(voiceid, {}).get(text, 0) + 1
-    if voice_cache_counter_dict[voiceid][text] > 10:
+    if voice_cache_counter_dict[voiceid][text] > 100:
         filename = f"cache/{text}-{voiceid}.wav"
         voice_cache_dict[voiceid][text] = filename
     if await generate_wav(text, voiceid, filename, target_host=target_host,
@@ -1474,7 +1478,6 @@ async def status_update_loop():
     voice_generate_time_list_p.clear()
     voice_generate_time_list.clear()
     await bot.wait_until_ready()
-    voice_cache_counter_dict.clear()
     await bot.change_presence(activity=discord.CustomActivity(text))
 
     if is_use_gpu_server_enabled:
@@ -1523,6 +1526,7 @@ async def premium_user_check_loop():
     with open(os.path.dirname(os.path.abspath(__file__)) + "/cache/" + f"voice_cache.json", 'wt',
               encoding='utf-8') as f:
         json.dump(voice_cache_dict, f, ensure_ascii=False)
+    voice_cache_counter_dict.clear()
 
     await bot.wait_until_ready()
     global GLOBAL_DICT_CHECK
@@ -1568,7 +1572,8 @@ async def init_loop():
     status_update_loop.start()
     premium_user_check_loop.start()
     bot.add_view(ActivateButtonView())
-    await bot.loop.create_task(connect_nodes())
+    bot.loop.create_task(connect_nodes())
+    bot.loop.create_task(connect_websocket())
     await updatedict()
     await bot.wait_until_ready()
     await auto_join()
@@ -1579,6 +1584,7 @@ async def init_loop():
         break
     while datetime.datetime.now().minute % 10 != 0:
         await asyncio.sleep(0.1)
+
 
 
 async def connect_nodes():
@@ -1857,6 +1863,50 @@ def is_premium(id, value):
         return id in premium_server_list_1000
     else:
         return True
+
+
+# 地震情報WebSocket
+async def connect_websocket():
+    if EEW_WEBHOOK_URL is None:
+        return
+    async for websocket in websockets.connect(EEW_WEBHOOK_URL):
+        try:
+            eew_dict = json.loads(await websocket.recv())
+            if eew_dict["code"] == 556:
+
+                prefs = []
+                prefs_str = ""
+                is_first = True
+                for area in eew_dict["points"]:
+                    pref = area["pref"]
+                    if pref in prefs:
+                        continue
+                    prefs.append(pref)
+                    if is_first:
+                        is_first = False
+                        prefs_str += pref
+                    else:
+                        prefs_str += f"、{pref}"
+
+                print(prefs)
+                embed = discord.Embed(
+                    title="**緊急地震速報（警報）**",
+                    description=f"{prefs_str}\n\n以上の地域で震度4以上の揺れが予測されます\n\n"
+                                f"[Yahoo地震情報](https://typhoon.yahoo.co.jp/weather/jp/earthquake/) | "
+                                f"[BSC24](https://www.youtube.com/watch?v=ZeZ049BUy8Q)",
+                    color=discord.Colour.brand_red(),
+                )
+                embed.set_thumbnail(url="https://free-icons.net/wp-content/uploads/2020/09/symbol018.png")
+                embed.set_footer(text="気象庁の情報を利用")
+                logger.error(prefs_str)
+                for guild_id in premium_server_list:
+                    guild = bot.get_guild(guild_id)
+                    channel = guild.get_channel(vclist[guild.id])
+                    await channel.send(embed=embed)
+                    await yomiage(guild.me, guild, f"緊急地震速報　{prefs_str}")
+        except websockets.ConnectionClosed:
+            continue
+
 
 
 if __name__ == '__main__':
