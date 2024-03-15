@@ -1884,6 +1884,8 @@ async def connect_websocket():
     async for websocket in websockets.connect(EEW_WEBHOOK_URL):
         try:
             eew_dict = json.loads(await websocket.recv())
+            print(eew_dict)
+            logger.error(eew_dict)
             if eew_dict["code"] == 556:
 
                 prefs = []
