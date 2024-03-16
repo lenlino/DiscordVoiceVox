@@ -1383,7 +1383,7 @@ async def on_voice_state_update(member, before, after):
         print(autojoin)
         if int(autojoin.get("voice_channel_id", 1)) == int(after.channel.id):
             vclist[after.channel.guild.id] = autojoin["text_channel_id"]
-            guild_premium_user_id = await getdatabase(after.channel.guild.id, "premium_user", 0, "guild")
+            guild_premium_user_id = int(await getdatabase(after.channel.guild.id, "premium_user", 0, "guild"))
             print(guild_premium_user_id)
             print(type(guild_premium_user_id))
             if (USAGE_LIMIT_PRICE > 0 and (
