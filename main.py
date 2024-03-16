@@ -1167,7 +1167,7 @@ async def on_ready():
 async def on_message(message):
     voice = message.guild.voice_client
 
-    if voice is not None and message.channel.id == vclist[message.guild.id]:
+    if voice is not None and message.guild.id in vclist.keys() and message.channel.id == vclist[message.guild.id]:
         await yomiage(message.author, message.guild, message.content)
     else:
         return
@@ -1389,6 +1389,9 @@ async def on_voice_state_update(member, before, after):
             if (USAGE_LIMIT_PRICE > 0 and (
                 is_premium(member.id, USAGE_LIMIT_PRICE) or is_premium(guild_premium_user_id,
                                                                        USAGE_LIMIT_PRICE)) is False):
+                print(is_premium(guild_premium_user_id,
+                                                                       USAGE_LIMIT_PRICE))
+                print(is_premium(member.id, USAGE_LIMIT_PRICE))
                 return
             embed = discord.Embed(
                 title="Connect",
