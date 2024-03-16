@@ -1387,10 +1387,8 @@ async def on_voice_state_update(member, before, after):
             print(guild_premium_user_id)
             print(type(guild_premium_user_id))
             if (USAGE_LIMIT_PRICE > 0 and (
-                is_premium(member.id, USAGE_LIMIT_PRICE) or is_premium(guild_premium_user_id,
-                                                                       USAGE_LIMIT_PRICE)) is False):
-                print(is_premium(guild_premium_user_id,
-                                                                       USAGE_LIMIT_PRICE))
+                is_premium(member.id, USAGE_LIMIT_PRICE) or is_premium(guild_premium_user_id, USAGE_LIMIT_PRICE)) is False):
+                print(is_premium(guild_premium_user_id, USAGE_LIMIT_PRICE))
                 print(is_premium(member.id, USAGE_LIMIT_PRICE))
                 return
             embed = discord.Embed(
@@ -1880,7 +1878,6 @@ def is_premium(id, value):
             add_premium_user(id, value)
             return d["plan"]["amount"] > value'''
     return False
-
 
 
 # 地震情報WebSocket
