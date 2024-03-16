@@ -1384,6 +1384,7 @@ async def on_voice_state_update(member, before, after):
         if int(autojoin.get("voice_channel_id", 1)) == int(after.channel.id):
             vclist[after.channel.guild.id] = autojoin["text_channel_id"]
             guild_premium_user_id = await getdatabase(after.channel.guild.id, "premium_user", 0, "guild")
+            print(guild_premium_user_id+type(guild_premium_user_id))
             if (USAGE_LIMIT_PRICE > 0 and (
                 is_premium(member.id, USAGE_LIMIT_PRICE) or is_premium(guild_premium_user_id,
                                                                        USAGE_LIMIT_PRICE)) is False):
@@ -1859,15 +1860,15 @@ def toLowerCase(text):
 
 
 def is_premium(id, value):
-    id = str(id)
+    id_str = str(id)
     if 100 >= value > 0:
-        return id in premium_user_list or id in premium_server_list_300 or id in premium_server_list_500 or id in premium_server_list_1000
+        return id_str in premium_user_list or id_str in premium_server_list_300 or id_str in premium_server_list_500 or id_str in premium_server_list_1000
     elif 300 >= value > 100:
-        return id in premium_server_list_300 or id in premium_server_list_500 or id in premium_server_list_1000
+        return id_str in premium_server_list_300 or id_str in premium_server_list_500 or id_str in premium_server_list_1000
     elif 500 >= value > 300:
-        return id in premium_server_list_500 or id in premium_server_list_1000
+        return id_str in premium_server_list_500 or id_str in premium_server_list_1000
     elif 1000 >= value > 500:
-        return id in premium_server_list_1000
+        return id_str in premium_server_list_1000
     '''elif id not in non_premium_user and value > 0:
         non_premium_user.append(id)
         for d in stripe.Subscription.search(limit=100,
