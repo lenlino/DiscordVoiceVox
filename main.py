@@ -1367,7 +1367,8 @@ async def yomiage(member, guild, text: str):
 @bot.event
 async def on_voice_state_update(member, before, after):
     voicestate = member.guild.voice_client
-    if after.channel is not None and voicestate is None and member.bot is False and len(after.channel.members) == 1:
+    if after.channel is not None and voicestate is None and member.bot is False and (len(after.channel.members) == 1
+                                                                                     or after.channel.guild.id in vclist.keys()):
         if after.channel.user_limit != 0 and after.channel.user_limit <= len(after.channel.members):
             return
         elif (after.channel.permissions_for(member.guild.me)).connect is False:
@@ -1867,14 +1868,14 @@ def is_premium(id, value):
         return id in premium_server_list_500 or id in premium_server_list_1000
     elif 1000 >= value > 500:
         return id in premium_server_list_1000
-    elif id not in non_premium_user and value > 0:
+    '''elif id not in non_premium_user and value > 0:
         non_premium_user.append(id)
         for d in stripe.Subscription.search(limit=100,
                                             query=f"status:'active' AND -metadata['discord_user_id']:{id}").auto_paging_iter():
             add_premium_user(id, value)
-            return d["plan"]["amount"] > value
-    else:
-        return True
+            return d["plan"]["amount"] > value'''
+    return False
+
 
 
 # 地震情報WebSocket
