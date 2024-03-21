@@ -1894,7 +1894,7 @@ async def connect_websocket():
                 prefs = []
                 prefs_str = ""
                 is_first = True
-                for area in eew_dict["points"]:
+                for area in eew_dict["areas"]:
                     pref = area["pref"]
                     if pref in prefs:
                         continue
@@ -1921,7 +1921,8 @@ async def connect_websocket():
                     channel = guild.get_channel(vclist[guild.id])
                     await channel.send(embed=embed)
                     await yomiage(guild.me, guild, f"緊急地震速報　{prefs_str}")
-        except websockets.ConnectionClosed:
+        except websockets.ConnectionClosed as e:
+            print(e)
             continue
 
 
