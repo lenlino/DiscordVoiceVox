@@ -18,6 +18,7 @@ import asyncpg as asyncpg
 import discord
 import stripe
 import wavelink
+import websockets
 from discord import default_permissions
 from discord.ext import tasks, pages
 from requests import ReadTimeout
@@ -25,7 +26,8 @@ from ko2kana import toKana
 from dotenv import load_dotenv
 from stripe.api_resources.search_result_object import SearchResultObject
 from stripe.api_resources.subscription import Subscription
-from translate import Translator
+from googletrans import Translator
+from watchfiles import watch, awatch
 
 import emoji
 import romajitable
@@ -78,12 +80,14 @@ DB_USER = os.getenv("DB_USER", "postgres")
 DB_PASS = os.getenv("DB_PASS", "maikura123")
 tips_list = ["/setvc　で自分の声を変更できます。",
              "[プレミアムプラン](https://lenlino.com/?page_id=2510)(月100円～)あります。",
-             "[要望・不具合募集中](https://discord.gg/MWnnkbXSDJ)",
-             "[VOICEVOX規約](https://voicevox.hiroshiba.jp/term/)の遵守をお願いします。",
-             "1/12 [VOICEVOX](https://voicevox.hiroshiba.jp/)より音声が追加されました。/setvcより音声の変更が可能です。追加スタイル：ずんだもん、小夜、もち子さん、青山龍星",
-             "/vc コマンドで「考え中...」のまま動かない場合は[サポートサーバー](https://discord.gg/MWnnkbXSDJ)へお問い合わせください。",
+             "[要望・不具合募集中](https://forms.gle/1TvbqzHRz6Q1vSfq9)",
              "使い方やコマンド一覧は[こちら](https://lenlino.com/?page_id=2171)"]
+USAGE_LIMIT_PRICE = int(os.getenv("USAGE_LIMIT_PRICE", 0))
+GLOBAL_DICT_CHECK = os.getenv("GLOBAL_DICT_CHECK", True)
+BOT_NICKNAME = os.getenv("BOT_NICKNAME", "ずんだもんβ")
+EEW_WEBHOOK_URL = os.getenv("EEW_WEBHOOK_URL", None)
 voice_id_list = []
+non_premium_user = []
 
 generating_guilds = {}
 pool = None
@@ -95,13 +99,14 @@ logger.addHandler(handler)
 default_conn = aiohttp.TCPConnector(limit_per_host=22)
 premium_conn = aiohttp.TCPConnector()
 
-translator_ja = Translator(to_lang="ja")
-translator_ko = Translator(to_lang="ko")
-
 is_use_gpu_server_enabled = os.getenv("IS_GPU", False)
 is_use_gpu_server = False
 gpu_start_time = datetime.datetime.strptime(os.getenv("START_TIME", "21:00"), "%H:%M").time()
 gpu_end_time = datetime.datetime.strptime(os.getenv("END_TIME", "02:00"), "%H:%M").time()
+
+user_dict_loc = os.getenv("DICT_LOC", os.path.dirname(os.path.abspath(__file__)) + "/user_dict")
+
+translator = Translator()
 
 
 async def initdatabase():
@@ -239,7 +244,7 @@ class VoiceSelectView2(discord.ui.Select):
         if 1000 <= id < 2000 and str(interaction.user.id) not in premium_user_list:
             embed = discord.Embed(
                 title="**Error**",
-                description=f"この音声はプレミアムプラン限定です。",
+                description=f"この音声はプレミアムプラン限定です",
                 color=discord.Colour.brand_red(),
             )
         else:
@@ -297,20 +302,27 @@ class ActivateModal(discord.ui.Modal):
         stripe.Subscription.modify(subscription_id, metadata={"discord_user_id": interaction.user.id})
         embed = discord.Embed(title="success", color=discord.Colour.brand_green())
         embed.description = "プレミアムプランへの登録が完了しました"
-        premium_user_list.append(str(interaction.user.id))
         amount = target_subscription[0]["plan"]["amount"]
+        add_premium_user(interaction.user.id, amount)
         if amount == 100:
             await interaction.user.add_roles(discord.Object(1057789025731235860))
         elif amount == 300:
-            premium_server_list_300.append(str(interaction.user.id))
             await interaction.user.add_roles(discord.Object(1079176775675941064))
         elif amount == 500:
-            premium_server_list_500.append(str(interaction.user.id))
             await interaction.user.add_roles(discord.Object(1076650449534451792))
         elif amount == 1000:
-            premium_server_list_1000.append(str(interaction.user.id))
             await interaction.user.add_roles(discord.Object(1057789043540242523))
         await interaction.followup.send(embeds=[embed], ephemeral=True)
+
+
+def add_premium_user(user_id, amount):
+    premium_user_list.append(str(user_id))
+    if amount == 300:
+        premium_server_list_300.append(str(user_id))
+    elif amount == 500:
+        premium_server_list_500.append(str(user_id))
+    elif amount == 1000:
+        premium_server_list_1000.append(str(user_id))
 
 
 @bot.slash_command(description="読み上げを開始・終了するのだ")
@@ -332,6 +344,7 @@ async def vc(ctx):
             await ctx.send_followup(embed=embed, delete_after=0)
         return
     else:
+        guild_premium_user_id = int(await getdatabase(ctx.guild.id, "premium_user", 0, "guild"))
         if ctx.author.voice.channel.user_limit != 0 and ctx.author.voice.channel.user_limit <= len(
             ctx.author.voice.channel.members):
             embed = discord.Embed(
@@ -359,6 +372,16 @@ async def vc(ctx):
             )
             await ctx.send_followup(embed=embed)
             return
+        elif (USAGE_LIMIT_PRICE > 0 and (
+            is_premium_check(ctx.author.id, USAGE_LIMIT_PRICE) or is_premium_check(guild_premium_user_id,
+                                                                       USAGE_LIMIT_PRICE)) is False):
+            embed = discord.Embed(
+                title="Error",
+                color=discord.Colour.brand_red(),
+                description=f"{USAGE_LIMIT_PRICE}円以上のプランが必要です"
+            )
+            await ctx.send_followup(embed=embed)
+            return
         vclist[ctx.guild.id] = ctx.channel.id
         if is_lavalink:
             try:
@@ -377,7 +400,7 @@ async def vc(ctx):
         if ctx.guild.id in premium_server_list:
             premium_server_list.remove(ctx.guild.id)
         if str(ctx.author.id) in premium_user_list or str(
-            int(await getdatabase(ctx.guild.id, "premium_user", 0, "guild"))) in premium_user_list:
+            int(guild_premium_user_id)) in premium_user_list:
             embed.set_author(name="Premium")
             premium_server_list.append(ctx.guild.id)
         if await getdatabase(ctx.guild.id, "is_joinnotice", True, "guild"):
@@ -544,8 +567,8 @@ async def server_set(ctx, key: discord.Option(str, choices=[
     if key == "autojoin":
         text_channel_id = ctx.channel_id
         if value == "off":
-            setting_json = json.dumps({"text_channel_id": 1, "voice_channel_id": 1})
-            await setdatabase(ctx.guild.id, "auto_join", setting_json, "guild")
+            await update_guild_setting(ctx.guild.id, "text_channel_id", 1)
+            await update_guild_setting(ctx.guild.id, "voice_channel_id", 1)
             embed = discord.Embed(
                 title="Changed AutoJoin",
                 description="自動接続を削除しました。",
@@ -562,8 +585,8 @@ async def server_set(ctx, key: discord.Option(str, choices=[
             await ctx.send_followup(embed=embed)
             return
         voice_channel_id = ctx.author.voice.channel.id
-        setting_json = json.dumps({"text_channel_id": text_channel_id, "voice_channel_id": voice_channel_id})
-        await setdatabase(ctx.guild.id, "auto_join", setting_json, "guild")
+        await update_guild_setting(ctx.guild.id, "text_channel_id", text_channel_id)
+        await update_guild_setting(ctx.guild.id, "voice_channel_id", voice_channel_id)
         embed = discord.Embed(
             title="Changed AutoJoin",
             description="現在の接続している音声チャンネル、テキストチャンネルで設定したのだ。(OFFにする際はoffをvalueに設定して実行してください。)",
@@ -791,40 +814,49 @@ async def activate(ctx):
 @bot.slash_command(description="ユーザーをプレミアム登録するのだ(modonly)", guild_ids=ManagerGuilds, name="stop")
 async def stop_bot(ctx, message: discord.Option(input_type=str, description="カスタムメッセージ",
                                                 default="ずんだもんの再起動を行います。数分程度ご利用いただけません。")):
+    await ctx.defer()
+    await stop(message)
+    await ctx.send_followup("送信しました。")
+    await bot.close()
+
+
+async def stop(message="ずんだもんの再起動を行います。数分程度ご利用いただけません。"):
     embed = discord.Embed(
         title="Notice",
         description=message,
         color=discord.Colour.red(),
     )
     savelist = []
-    await ctx.defer()
     for server_id, text_ch_id in vclist.copy().items():
         guild = bot.get_guild(server_id)
         if guild.voice_client is None:
             continue
-        savelist.append({"guild": server_id, "text_ch_id": text_ch_id, "voice_ch_id": guild.voice_client.channel.id})
+        savelist.append({"guild": server_id, "text_ch_id": text_ch_id, "voice_ch_id": guild.voice_client.channel.id,
+                         "is_premium": server_id in premium_server_list})
         try:
             await guild.get_channel(text_ch_id).send(embed=embed)
         except:
             pass
-    with open('bot_stop.json', 'wt') as f:
+    with open(os.path.dirname(os.path.abspath(__file__)) + "/" + 'bot_stop.json', 'wt', encoding='utf-8') as f:
         json.dump(savelist, f, ensure_ascii=False)
-    await ctx.send_followup("送信しました。", embed=embed)
     await bot.close()
 
 
 async def auto_join():
     embed = discord.Embed(
         title="Notice",
-        description="復帰しました。",
+        description="復帰しました",
         color=discord.Colour.green(),
     )
-    with open("bot_stop.json", ) as f:
+    with open(os.path.dirname(os.path.abspath(__file__)) + "/" + "bot_stop.json", encoding='utf-8') as f:
         json_list = json.load(f)
         for server_json in json_list:
             guild = bot.get_guild(server_json["guild"])
             await guild.get_channel(server_json["voice_ch_id"]).connect(cls=wavelink.Player)
             await guild.get_channel(server_json["text_ch_id"]).send(embed=embed)
+            vclist[guild.id] = server_json["text_ch_id"]
+            if server_json["is_premium"]:
+                premium_server_list.append(guild.id)
 
 
 @bot.slash_command(description="辞書に単語を追加するのだ(全サーバー)", guild_ids=ManagerGuilds)
@@ -1134,7 +1166,7 @@ async def on_ready():
 async def on_message(message):
     voice = message.guild.voice_client
 
-    if voice is not None and message.channel.id == vclist[message.guild.id]:
+    if voice is not None and message.guild.id in vclist.keys() and message.channel.id == vclist[message.guild.id]:
         await yomiage(message.author, message.guild, message.content)
     else:
         return
@@ -1236,8 +1268,9 @@ async def yomiage(member, guild, text: str):
         output = toKana(output)
         output = output.replace(" ", "")
     elif lang == "ja":
-        ''' if is_premium and re.match("^[ぁ-んァ-ヶー一-龯]+$", output) is None:
-            output = translator_ja.translate(output) '''
+        if is_premium_check(guild.id, 300) and re.match("[ぁ-んァ-ヶー一-龯]", output) is None:
+            output = translator.translate(output, dest='ja')
+            print("翻訳")
 
         output = (await romajitable.to_kana(output)).katakana
         if len(output) <= 0:
@@ -1333,7 +1366,8 @@ async def yomiage(member, guild, text: str):
 @bot.event
 async def on_voice_state_update(member, before, after):
     voicestate = member.guild.voice_client
-    if after.channel is not None and voicestate is None and member.bot is False and len(after.channel.members) == 1:
+    if after.channel is not None and voicestate is None and member.bot is False and (len(after.channel.members) == 1
+                                                                                     or after.channel.guild.id in vclist.keys()):
         if after.channel.user_limit != 0 and after.channel.user_limit <= len(after.channel.members):
             return
         elif (after.channel.permissions_for(member.guild.me)).connect is False:
@@ -1341,13 +1375,21 @@ async def on_voice_state_update(member, before, after):
         elif member.guild.me.timed_out is True:
             return
 
-        json_str = await getdatabase(after.channel.guild.id, "auto_join", None, "guild")
+        json_str = await get_guild_setting(after.channel.guild.id)
         if json_str is None:
             return
-        autojoin = json.loads(json_str)
+        autojoin = json_str
         print(autojoin)
-        if int(autojoin["voice_channel_id"]) == int(after.channel.id):
+        if int(autojoin.get("voice_channel_id", 1)) == int(after.channel.id):
             vclist[after.channel.guild.id] = autojoin["text_channel_id"]
+            guild_premium_user_id = int(await getdatabase(after.channel.guild.id, "premium_user", 0, "guild"))
+            print(guild_premium_user_id)
+            print(type(guild_premium_user_id))
+            if (USAGE_LIMIT_PRICE > 0 and (
+                is_premium_check(member.id, USAGE_LIMIT_PRICE) or is_premium_check(guild_premium_user_id, USAGE_LIMIT_PRICE)) is False):
+                print(is_premium_check(guild_premium_user_id, USAGE_LIMIT_PRICE))
+                print(is_premium_check(member.id, USAGE_LIMIT_PRICE))
+                return
             embed = discord.Embed(
                 title="Connect",
                 color=discord.Colour.brand_green(),
@@ -1356,7 +1398,7 @@ async def on_voice_state_update(member, before, after):
             if after.channel.guild.id in premium_server_list:
                 premium_server_list.remove(after.channel.guild.id)
             if str(member.id) in premium_user_list or str(
-                int(await getdatabase(after.channel.guild.id, "premium_user", 0, "guild"))) in premium_user_list:
+                int(guild_premium_user_id)) in premium_user_list:
                 embed.set_author(name="Premium")
                 premium_server_list.append(after.channel.guild.id)
             if await getdatabase(after.channel.guild.id, "is_joinnotice", True, "guild"):
@@ -1373,8 +1415,10 @@ async def on_voice_state_update(member, before, after):
     if voicestate is None:
         return
 
-    if (voicestate.client.user.id == member.id and after.channel is None) or (
-        len(voicestate.channel.members) == 1 and (member.bot is False or voicestate.channel.members[0].bot)):
+    if bot.user.id == member.id:
+        return
+
+    if (bot.user.id == member.id and after.channel is None) or is_bot_only(voicestate.channel):
         await voicestate.disconnect()
 
         del vclist[voicestate.guild.id]
@@ -1410,9 +1454,17 @@ async def on_voice_state_update(member, before, after):
             await yomiage(member.guild.me, member.guild, f"{name}が退出したのだ、")
 
 
+# ボットのみか確認
+def is_bot_only(channel):
+    for member in channel.members:
+        if member.bot is False:
+            return False
+    return True
+
+
 @bot.event
 async def on_guild_join(guild):
-    await guild.get_member(bot.user.id).edit(nick="ずんだもんβ")
+    await guild.get_member(bot.user.id).edit(nick=BOT_NICKNAME)
 
 
 @tasks.loop(minutes=1)
@@ -1434,6 +1486,8 @@ async def status_update_loop():
     logger.error(text)
     voice_generate_time_list_p.clear()
     voice_generate_time_list.clear()
+    non_premium_user.clear()
+    await bot.wait_until_ready()
     voice_cache_counter_dict.clear()
     await bot.change_presence(activity=discord.CustomActivity(text))
 
@@ -1480,45 +1534,47 @@ async def premium_user_check_loop():
         else:
             premium_user_list.extend(premium_guild_list)
 
-    with open(os.path.dirname(os.path.abspath(__file__)) + "/cache/" + f"voice_cache.json", 'wt') as f:
+    with open(os.path.dirname(os.path.abspath(__file__)) + "/cache/" + f"voice_cache.json", 'wt',
+              encoding='utf-8') as f:
         json.dump(voice_cache_dict, f, ensure_ascii=False)
 
     await bot.wait_until_ready()
-    # 辞書登録チェック
-    channel = bot.get_channel(DictChannel)
-    async for mes in channel.history(before=(datetime.datetime.now() + datetime.timedelta(days=-1))):
-        if len(mes.embeds) == 0:
-            continue
-        embed = mes.embeds[0]
-        embed_fields = embed.fields
-        reactions = mes.reactions
-        if embed.description == "グローバル辞書に単語登録を申請しました。":
-            tango = embed_fields[0].value
-            yomi = embed_fields[1].value
-            if reactions[0].count >= reactions[1].count:
-                await update_private_dict(9686, tango, yomi)
-                embed.description = "グローバル辞書に単語が登録されました。"
-            else:
-                embed.description = "適切な登録ではないため登録が拒否されました。"
-            await mes.edit(embed=embed)
-        elif embed.description == "グローバル辞書に単語削除を申請しました。":
-            tango = embed_fields[0].value
-            if reactions[0].count >= reactions[1].count:
-                await delete_private_dict(9686, tango)
-                embed.description = "グローバル辞書から単語が削除されました。"
-            else:
-                embed.description = "適切な削除ではないため削除が拒否されました。"
-            await mes.edit(embed=embed)
+    global GLOBAL_DICT_CHECK
+    if GLOBAL_DICT_CHECK is True:
+        # 辞書登録チェック
+        channel = bot.get_channel(DictChannel)
+        async for mes in channel.history(before=(datetime.datetime.now() + datetime.timedelta(days=-1))):
+            if len(mes.embeds) == 0:
+                continue
+            embed = mes.embeds[0]
+            embed_fields = embed.fields
+            reactions = mes.reactions
+            if embed.description == "グローバル辞書に単語登録を申請しました。":
+                tango = embed_fields[0].value
+                yomi = embed_fields[1].value
+                if reactions[0].count >= reactions[1].count:
+                    await update_private_dict(9686, tango, yomi)
+                    embed.description = "グローバル辞書に単語が登録されました。"
+                else:
+                    embed.description = "適切な登録ではないため登録が拒否されました。"
+                await mes.edit(embed=embed)
+            elif embed.description == "グローバル辞書に単語削除を申請しました。":
+                tango = embed_fields[0].value
+                if reactions[0].count >= reactions[1].count:
+                    await delete_private_dict(9686, tango)
+                    embed.description = "グローバル辞書から単語が削除されました。"
+                else:
+                    embed.description = "適切な削除ではないため削除が拒否されました。"
+                await mes.edit(embed=embed)
 
 
 @tasks.loop(minutes=1)
 async def init_loop():
-    await bot.change_presence(activity=discord.Game("起動中..."))
     global pool
     pool = await get_connection()
 
     global voice_cache_dict
-    with open(os.path.dirname(os.path.abspath(__file__)) +"/cache/voice_cache.json") as f:
+    with open(os.path.dirname(os.path.abspath(__file__)) + "/cache/voice_cache.json", "r", encoding='utf-8') as f:
         voice_cache_dict = json.load(f)
 
     await initdatabase()
@@ -1527,7 +1583,15 @@ async def init_loop():
     premium_user_check_loop.start()
     bot.add_view(ActivateButtonView())
     bot.loop.create_task(connect_nodes())
+    bot.loop.create_task(connect_websocket())
     await updatedict()
+    await bot.wait_until_ready()
+    await auto_join()
+    # ファイル変更検知・自動再起動
+    async for changes in awatch(os.path.dirname(os.path.abspath(__file__)) + "/main.py"):
+        print(changes)
+        await stop()
+        break
     while datetime.datetime.now().minute % 10 != 0:
         await asyncio.sleep(0.1)
 
@@ -1638,7 +1702,7 @@ async def showdict_local(ctx, ):
         color=discord.Colour.brand_green(),
     )
     try:
-        json_file = discord.File(os.path.dirname(os.path.abspath(__file__)) + "/user_dict/" + f"{ctx.guild.id}.json")
+        json_file = discord.File(user_dict_loc + "/" + f"{ctx.guild.id}.json")
     except:
         embed.description = "辞書は設定されていません。"
         await ctx.respond(embed=embed)
@@ -1719,7 +1783,7 @@ async def showmute(ctx):
 
 async def henkan_private_dict(server_id, source):
     try:
-        with open(os.path.dirname(os.path.abspath(__file__)) + "/user_dict/" + f"{server_id}.json", "r",
+        with open(user_dict_loc + "/" + f"{server_id}.json", "r",
                   encoding='utf-8') as f:
             json_data = json.load(f)
     except:
@@ -1737,7 +1801,7 @@ async def henkan_private_dict(server_id, source):
 
 async def update_private_dict(server_id, source, kana):
     try:
-        with open(os.path.dirname(os.path.abspath(__file__)) + "/user_dict/" + f"{server_id}.json", "r",
+        with open(user_dict_loc + "/" + f"{server_id}.json", "r",
                   encoding='utf-8') as f:
             json_data = json.load(f)
     except:
@@ -1746,7 +1810,7 @@ async def update_private_dict(server_id, source, kana):
         return False
     json_data[toLowerCase(source)] = kana
     sorted_json_data = json_data
-    with open(os.path.dirname(os.path.abspath(__file__)) + "/user_dict/" + f"{server_id}.json", 'wt',
+    with open(user_dict_loc + "/" + f"{server_id}.json", 'wt',
               encoding='utf-8') as f:
         json.dump(sorted_json_data, f, ensure_ascii=False)
     return True
@@ -1754,22 +1818,110 @@ async def update_private_dict(server_id, source, kana):
 
 async def delete_private_dict(server_id, source):
     try:
-        with open(os.path.dirname(os.path.abspath(__file__)) + "/user_dict/" + f"{server_id}.json", "r",
+        with open(user_dict_loc + "/" + f"{server_id}.json", "r",
                   encoding='utf-8') as f:
             json_data = json.load(f)
     except:
         json_data = {}
     json_data.pop(toLowerCase(source))
     sorted_json_data = json_data
-    with open(os.path.dirname(os.path.abspath(__file__)) + "/user_dict/" + f"{server_id}.json", 'wt',
+    with open(user_dict_loc + "/" + f"{server_id}.json", 'wt',
               encoding='utf-8') as f:
         json.dump(sorted_json_data, f, ensure_ascii=False)
+
+
+async def update_guild_setting(server_id, setting, value):
+    try:
+        with open(os.path.dirname(os.path.abspath(__file__)) + f"/guild_setting/{server_id}.json", "r",
+                  encoding='utf-8') as f:
+            setting_dict = json.load(f)
+    except:
+        setting_dict = {}
+    setting_dict[setting] = value
+    with open(os.path.dirname(os.path.abspath(__file__)) + f"/guild_setting/{server_id}.json", 'wt',
+              encoding='utf-8') as f:
+        json.dump(setting_dict, f, ensure_ascii=False)
+
+
+async def get_guild_setting(server_id):
+    try:
+        with open(os.path.dirname(os.path.abspath(__file__)) + f"/guild_setting/{server_id}.json", "r",
+                  encoding='utf-8') as f:
+            setting_dict = json.load(f)
+    except:
+        setting_dict = {}
+    return setting_dict
 
 
 def toLowerCase(text):
     text = unicodedata.normalize('NFKC', text)
     text = text.lower()
     return text
+
+
+def is_premium_check(id, value):
+    id_str = str(id)
+    if 100 >= value > 0:
+        return id_str in premium_user_list or id_str in premium_server_list_300 or id_str in premium_server_list_500 or id_str in premium_server_list_1000
+    elif 300 >= value > 100:
+        return id_str in premium_server_list_300 or id_str in premium_server_list_500 or id_str in premium_server_list_1000
+    elif 500 >= value > 300:
+        return id_str in premium_server_list_500 or id_str in premium_server_list_1000
+    elif 1000 >= value > 500:
+        return id_str in premium_server_list_1000
+    '''elif id not in non_premium_user and value > 0:
+        non_premium_user.append(id)
+        for d in stripe.Subscription.search(limit=100,
+                                            query=f"status:'active' AND -metadata['discord_user_id']:{id}").auto_paging_iter():
+            add_premium_user(id, value)
+            return d["plan"]["amount"] > value'''
+    return False
+
+
+# 地震情報WebSocket
+async def connect_websocket():
+    if EEW_WEBHOOK_URL is None:
+        return
+    async for websocket in websockets.connect(EEW_WEBHOOK_URL):
+        try:
+            eew_dict = json.loads(await websocket.recv())
+            print(eew_dict)
+            logger.error(eew_dict)
+            if eew_dict["code"] == 556:
+
+                prefs = []
+                prefs_str = ""
+                is_first = True
+                for area in eew_dict["areas"]:
+                    pref = area["pref"]
+                    if pref in prefs:
+                        continue
+                    prefs.append(pref)
+                    if is_first:
+                        is_first = False
+                        prefs_str += pref
+                    else:
+                        prefs_str += f"、{pref}"
+
+                print(prefs)
+                embed = discord.Embed(
+                    title="**緊急地震速報（警報）**",
+                    description=f"{prefs_str}\n\n以上の地域で震度4以上の揺れが予測されます\n\n"
+                                f"[Yahoo地震情報](https://typhoon.yahoo.co.jp/weather/jp/earthquake/) | "
+                                f"[BSC24](https://www.youtube.com/watch?v=ZeZ049BUy8Q)",
+                    color=discord.Colour.brand_red(),
+                )
+                embed.set_thumbnail(url="https://free-icons.net/wp-content/uploads/2020/09/symbol018.png")
+                embed.set_footer(text="気象庁の情報を利用")
+                logger.error(prefs_str)
+                for guild_id in premium_server_list:
+                    guild = bot.get_guild(guild_id)
+                    channel = guild.get_channel(vclist[guild.id])
+                    await channel.send(embed=embed)
+                    await yomiage(guild.me, guild, f"緊急地震速報　{prefs_str}")
+        except websockets.ConnectionClosed as e:
+            print(e)
+            continue
 
 
 if __name__ == '__main__':
