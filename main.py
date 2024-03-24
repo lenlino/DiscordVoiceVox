@@ -26,7 +26,7 @@ from ko2kana import toKana
 from dotenv import load_dotenv
 from stripe.api_resources.search_result_object import SearchResultObject
 from stripe.api_resources.subscription import Subscription
-from translate import Translator
+from googletrans import Translator
 from watchfiles import watch, awatch
 
 import emoji
@@ -99,15 +99,14 @@ logger.addHandler(handler)
 default_conn = aiohttp.TCPConnector(limit_per_host=22)
 premium_conn = aiohttp.TCPConnector()
 
-translator_ja = Translator(to_lang="ja")
-translator_ko = Translator(to_lang="ko")
-
 is_use_gpu_server_enabled = os.getenv("IS_GPU", False)
 is_use_gpu_server = False
 gpu_start_time = datetime.datetime.strptime(os.getenv("START_TIME", "21:00"), "%H:%M").time()
 gpu_end_time = datetime.datetime.strptime(os.getenv("END_TIME", "02:00"), "%H:%M").time()
 
 user_dict_loc = os.getenv("DICT_LOC", os.path.dirname(os.path.abspath(__file__)) + "/user_dict")
+
+translator = Translator()
 
 
 async def initdatabase():
@@ -1270,7 +1269,7 @@ async def yomiage(member, guild, text: str):
         output = output.replace(" ", "")
     elif lang == "ja":
         if guild.id in premium_server_list_1000 and re.match("[ぁ-んァ-ヶー一-龯]", output) is None:
-            output = translator_ja.translate(output)
+            output = translator.translate(output, dest='ja')
             print("翻訳")
 
         output = (await romajitable.to_kana(output)).katakana
