@@ -373,7 +373,7 @@ async def vc(ctx):
             await ctx.send_followup(embed=embed)
             return
         elif (USAGE_LIMIT_PRICE > 0 and (
-            is_premium(ctx.author.id, USAGE_LIMIT_PRICE) or is_premium(guild_premium_user_id,
+            is_premium_check(ctx.author.id, USAGE_LIMIT_PRICE) or is_premium_check(guild_premium_user_id,
                                                                        USAGE_LIMIT_PRICE)) is False):
             embed = discord.Embed(
                 title="Error",
@@ -1268,7 +1268,7 @@ async def yomiage(member, guild, text: str):
         output = toKana(output)
         output = output.replace(" ", "")
     elif lang == "ja":
-        if guild.id in premium_server_list_1000 and re.match("[ぁ-んァ-ヶー一-龯]", output) is None:
+        if is_premium_check(guild.id, 300) and re.match("[ぁ-んァ-ヶー一-龯]", output) is None:
             output = translator.translate(output, dest='ja')
             print("翻訳")
 
@@ -1386,9 +1386,9 @@ async def on_voice_state_update(member, before, after):
             print(guild_premium_user_id)
             print(type(guild_premium_user_id))
             if (USAGE_LIMIT_PRICE > 0 and (
-                is_premium(member.id, USAGE_LIMIT_PRICE) or is_premium(guild_premium_user_id, USAGE_LIMIT_PRICE)) is False):
-                print(is_premium(guild_premium_user_id, USAGE_LIMIT_PRICE))
-                print(is_premium(member.id, USAGE_LIMIT_PRICE))
+                is_premium_check(member.id, USAGE_LIMIT_PRICE) or is_premium_check(guild_premium_user_id, USAGE_LIMIT_PRICE)) is False):
+                print(is_premium_check(guild_premium_user_id, USAGE_LIMIT_PRICE))
+                print(is_premium_check(member.id, USAGE_LIMIT_PRICE))
                 return
             embed = discord.Embed(
                 title="Connect",
@@ -1860,7 +1860,7 @@ def toLowerCase(text):
     return text
 
 
-def is_premium(id, value):
+def is_premium_check(id, value):
     id_str = str(id)
     if 100 >= value > 0:
         return id_str in premium_user_list or id_str in premium_server_list_300 or id_str in premium_server_list_500 or id_str in premium_server_list_1000
