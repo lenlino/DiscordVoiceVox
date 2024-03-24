@@ -998,7 +998,7 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0"):
         voice_cache_counter_dict[voiceid] = {}
         voice_cache_dict[voiceid] = {}
     voice_cache_counter_dict[voiceid][text] = voice_cache_counter_dict.get(voiceid, {}).get(text, 0) + 1
-    if voice_cache_counter_dict[voiceid][text] > 100:
+    if voice_cache_counter_dict[voiceid][text] > 10:
         filename = f"cache/{text}-{voiceid}.wav"
         voice_cache_dict[voiceid][text] = filename
     if await generate_wav(text, voiceid, filename, target_host=target_host,
@@ -1488,6 +1488,7 @@ async def status_update_loop():
     voice_generate_time_list.clear()
     non_premium_user.clear()
     await bot.wait_until_ready()
+    voice_cache_counter_dict.clear()
     await bot.change_presence(activity=discord.CustomActivity(text))
 
     if is_use_gpu_server_enabled:
@@ -1536,7 +1537,6 @@ async def premium_user_check_loop():
     with open(os.path.dirname(os.path.abspath(__file__)) + "/cache/" + f"voice_cache.json", 'wt',
               encoding='utf-8') as f:
         json.dump(voice_cache_dict, f, ensure_ascii=False)
-    voice_cache_counter_dict.clear()
 
     await bot.wait_until_ready()
     global GLOBAL_DICT_CHECK
@@ -1796,7 +1796,6 @@ async def henkan_private_dict(server_id, source):
         source = source.replace(k, json_data[k])
         if len(source) > limit:
             source = source[:(text_limit_100 + 50)]
-
     return source
 
 
