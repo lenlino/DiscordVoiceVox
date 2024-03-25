@@ -82,8 +82,8 @@ tips_list = ["/setvc　で自分の声を変更できます。",
              "[プレミアムプラン](https://lenlino.com/?page_id=2510)(月100円～)あります。",
              "[要望・不具合募集中](https://forms.gle/1TvbqzHRz6Q1vSfq9)",
              "使い方やコマンド一覧は[こちら](https://lenlino.com/?page_id=2171)"]
-USAGE_LIMIT_PRICE = int(os.getenv("USAGE_LIMIT_PRICE", 0))
-GLOBAL_DICT_CHECK = os.getenv("GLOBAL_DICT_CHECK", True)
+USAGE_LIMIT_PRICE: int = int(os.getenv("USAGE_LIMIT_PRICE", 0))
+GLOBAL_DICT_CHECK: bool = bool(os.getenv("GLOBAL_DICT_CHECK", "True") == "True")
 BOT_NICKNAME = os.getenv("BOT_NICKNAME", "ずんだもんβ")
 EEW_WEBHOOK_URL = os.getenv("EEW_WEBHOOK_URL", None)
 voice_id_list = []
@@ -99,7 +99,7 @@ logger.addHandler(handler)
 default_conn = aiohttp.TCPConnector(limit_per_host=22)
 premium_conn = aiohttp.TCPConnector()
 
-is_use_gpu_server_enabled = os.getenv("IS_GPU", False)
+is_use_gpu_server_enabled: bool = bool(os.getenv("IS_GPU", "False") == "True")
 is_use_gpu_server = False
 gpu_start_time = datetime.datetime.strptime(os.getenv("START_TIME", "21:00"), "%H:%M").time()
 gpu_end_time = datetime.datetime.strptime(os.getenv("END_TIME", "02:00"), "%H:%M").time()
@@ -1541,6 +1541,7 @@ async def premium_user_check_loop():
     await bot.wait_until_ready()
     global GLOBAL_DICT_CHECK
     if GLOBAL_DICT_CHECK is True:
+        print("実行")
         # 辞書登録チェック
         channel = bot.get_channel(DictChannel)
         async for mes in channel.history(before=(datetime.datetime.now() + datetime.timedelta(days=-1))):
