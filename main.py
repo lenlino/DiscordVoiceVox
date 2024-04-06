@@ -1267,9 +1267,7 @@ async def yomiage(member, guild, text: str):
         output = toKana(output)
         output = output.replace(" ", "")
     elif lang == "ja":
-        print(await is_premium_check(guild.id, 100))
-        print(re.match("[ぁ-んァ-ヶー一-龯]", output) is None)
-        if await is_premium_check(guild.id, 100) and re.match("[ぁ-んァ-ヶー一-龯]", output) is None:
+        if await is_premium_check(guild.id, 300) and re.match("[ぁ-んァ-ヶー一-龯]", output) is None:
             print(output)
             output = ts.translate_text(output, to_language="ja")
             print("翻訳")
