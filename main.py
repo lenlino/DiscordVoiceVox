@@ -1921,7 +1921,7 @@ async def connect_websocket():
                     await channel.send(embed=embed)
                     await yomiage(guild.me, guild, f"緊急地震速報　{prefs_str}")
         except websockets.ConnectionClosed as e:
-            print(e)
+            logger.error(e)
             continue
 
 
