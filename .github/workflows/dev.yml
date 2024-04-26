@@ -15,6 +15,6 @@ jobs:
           username: ${{ secrets.USER }}
           key: ${{ secrets.SECRET_KEY }}
           script: |
-            cd bots/DiscordVoiceVox-a
+            cd /root/bots/DiscordVoiceVox-a
             git pull
 
