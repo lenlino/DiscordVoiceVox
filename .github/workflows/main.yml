@@ -11,9 +11,10 @@ jobs:
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.HOST }}
+          port: ${{ secrets.PORT }}
           username: ${{ secrets.USER }}
-          password: ${{ secrets.SECRET_KEY }}
+          key: ${{ secrets.SECRET_KEY }}
           script: |
-            cd DiscordVoiceVox
+            cd /root/DiscordVoiceVox
             git pull
 

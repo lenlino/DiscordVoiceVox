@@ -26,7 +26,7 @@ from ko2kana import toKana
 from dotenv import load_dotenv
 from stripe.api_resources.search_result_object import SearchResultObject
 from stripe.api_resources.subscription import Subscription
-from googletrans import Translator
+import translators as ts
 from watchfiles import watch, awatch
 
 import emoji
@@ -106,7 +106,6 @@ gpu_end_time = datetime.datetime.strptime(os.getenv("END_TIME", "02:00"), "%H:%M
 
 user_dict_loc = os.getenv("DICT_LOC", os.path.dirname(os.path.abspath(__file__)) + "/user_dict")
 
-translator = Translator()
 
 
 async def initdatabase():
@@ -373,7 +372,7 @@ async def vc(ctx):
             await ctx.send_followup(embed=embed)
             return
         elif (USAGE_LIMIT_PRICE > 0 and (
-            is_premium_check(ctx.author.id, USAGE_LIMIT_PRICE) or is_premium_check(guild_premium_user_id,
+            await is_premium_check(ctx.author.id, USAGE_LIMIT_PRICE) or await is_premium_check(guild_premium_user_id,
                                                                        USAGE_LIMIT_PRICE)) is False):
             embed = discord.Embed(
                 title="Error",
@@ -1077,6 +1076,7 @@ async def synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, fi
 
 
 async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, volume=1.0):
+    use_gpu_server = False
     try:
         global is_use_gpu_server
         use_gpu_server = is_use_gpu_server and speaker == 3
@@ -1152,6 +1152,9 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                 except ReadTimeout:
                     return False
     except:
+        if use_gpu_server:
+            is_use_gpu_server = False
+        print("aa")
         import traceback
         traceback.print_exc()
         return False
@@ -1268,8 +1271,9 @@ async def yomiage(member, guild, text: str):
         output = toKana(output)
         output = output.replace(" ", "")
     elif lang == "ja":
-        if is_premium_check(guild.id, 300) and re.match("[ぁ-んァ-ヶー一-龯]", output) is None:
-            output = translator.translate(output, dest='ja')
+        if await is_premium_check(guild.id, 300) and re.match("[ぁ-んァ-ヶー一-龯]", output) is None:
+            print(output)
+            output = ts.translate_text(output, to_language="ja")
             print("翻訳")
 
         output = (await romajitable.to_kana(output)).katakana
@@ -1386,9 +1390,7 @@ async def on_voice_state_update(member, before, after):
             print(guild_premium_user_id)
             print(type(guild_premium_user_id))
             if (USAGE_LIMIT_PRICE > 0 and (
-                is_premium_check(member.id, USAGE_LIMIT_PRICE) or is_premium_check(guild_premium_user_id, USAGE_LIMIT_PRICE)) is False):
-                print(is_premium_check(guild_premium_user_id, USAGE_LIMIT_PRICE))
-                print(is_premium_check(member.id, USAGE_LIMIT_PRICE))
+                await is_premium_check(member.id, USAGE_LIMIT_PRICE) or await is_premium_check(guild_premium_user_id, USAGE_LIMIT_PRICE)) is False):
                 return
             embed = discord.Embed(
                 title="Connect",
@@ -1519,7 +1521,7 @@ async def premium_user_check_loop():
             p_guild = await getdatabase(str(user_id).replace(" ", ""), f"premium_guild{i}", "0")
             if p_guild.replace(" ", "") == "0":
                 continue
-            premium_guild_list.append(p_guild)
+            premium_guild_list.append(str(p_guild))
 
         amount = d["plan"]["amount"]
         if amount == 300:
@@ -1860,23 +1862,34 @@ def toLowerCase(text):
     return text
 
 
-def is_premium_check(id, value):
+async def is_premium_check(id, value):
+
     id_str = str(id)
+    is_check = False
     if 100 >= value > 0:
-        return id_str in premium_user_list or id_str in premium_server_list_300 or id_str in premium_server_list_500 or id_str in premium_server_list_1000
+        is_check = id_str in premium_user_list or id_str in premium_server_list_300 or id_str in premium_server_list_500 or id_str in premium_server_list_1000
     elif 300 >= value > 100:
-        return id_str in premium_server_list_300 or id_str in premium_server_list_500 or id_str in premium_server_list_1000
+        is_check = id_str in premium_server_list_300 or id_str in premium_server_list_500 or id_str in premium_server_list_1000
     elif 500 >= value > 300:
-        return id_str in premium_server_list_500 or id_str in premium_server_list_1000
+        is_check = id_str in premium_server_list_500 or id_str in premium_server_list_1000
     elif 1000 >= value > 500:
-        return id_str in premium_server_list_1000
+        is_check = id_str in premium_server_list_1000
+
+    if is_check is False and id not in non_premium_user:
+        non_premium_user.append(id)
+        guild_premium_user_id = int(await getdatabase(id, "premium_user", 0, "guild"))
+        if guild_premium_user_id != 0:
+            is_check = await is_premium_check(guild_premium_user_id, value)
+            if is_check is True:
+                add_premium_user(id, value)
+
     '''elif id not in non_premium_user and value > 0:
         non_premium_user.append(id)
         for d in stripe.Subscription.search(limit=100,
                                             query=f"status:'active' AND -metadata['discord_user_id']:{id}").auto_paging_iter():
             add_premium_user(id, value)
             return d["plan"]["amount"] > value'''
-    return False
+    return is_check
 
 
 # 地震情報WebSocket
@@ -1921,7 +1934,7 @@ async def connect_websocket():
                     await channel.send(embed=embed)
                     await yomiage(guild.me, guild, f"緊急地震速報　{prefs_str}")
         except websockets.ConnectionClosed as e:
-            print(e)
+            logger.error(e)
             continue
 
 
