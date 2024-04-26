@@ -12,7 +12,7 @@ jobs:
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USER }}
-          password: ${{ secrets.SECRET_KEY }}
+          key: ${{ secrets.SECRET_KEY }}
           script: |
             cd DiscordVoiceVox
             git pull
