@@ -1076,6 +1076,7 @@ async def synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, fi
 
 
 async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, volume=1.0):
+    use_gpu_server = False
     try:
         global is_use_gpu_server
         use_gpu_server = is_use_gpu_server and speaker == 3
@@ -1151,6 +1152,9 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                 except ReadTimeout:
                     return False
     except:
+        if use_gpu_server:
+            is_use_gpu_server = False
+        print("aa")
         import traceback
         traceback.print_exc()
         return False
