@@ -94,7 +94,8 @@ non_premium_user = []
 generating_guilds = {}
 pool = None
 logger = logging.getLogger('discord')
-handler = logging.FileHandler(filename=os.path.dirname(os.path.abspath(__file__)) + "/" + 'discord.log',
+handler = logging.FileHandler(filename=os.path.dirname(os.path.abspath(__file__)) + "/logs/"
+                                       + f'discord-{"{:%Y-%m-%d-%H-%M}".format(datetime.datetime.now())}.log',
                               encoding='utf-8', mode='w')
 handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
 logger.addHandler(handler)
@@ -1371,6 +1372,7 @@ async def yomiage(member, guild, text: str):
     finally:
         generating_guilds.get(guild.id, []).remove(text)
         generating_guild_set.remove(guild.id)
+
     if is_lavalink:
         await guild.voice_client.play(source)
     else:
