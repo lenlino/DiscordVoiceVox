@@ -19,6 +19,7 @@ import discord
 import stripe
 import wavelink
 import websockets
+from aiohttp import FormData
 from discord import default_permissions
 from discord.ext import tasks, pages
 from requests import ReadTimeout
@@ -44,6 +45,7 @@ is_lavalink = True
 coeiroink_host = os.environ.get("COEIROINK_HOST", "127.0.0.1:50032")
 sharevox_host = os.environ.get("SHAREVOX_HOST", "127.0.0.1:50025")
 lavalink_host_list = os.environ.get("LAVALINK_HOST", "http://127.0.0.1:2333").split(",")
+lavalink_uploader = os.environ.get("LAVALINK_UPLOADER", None)
 gpu_host = os.environ.get("GPU_HOST", host)
 DictChannel = 1057517276674400336
 ManagerGuilds = [888020016660893726]
@@ -1000,11 +1002,8 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0"):
     if voice_cache_counter_dict[voiceid][text] > 10:
         filename = f"cache/{text}-{voiceid}.wav"
         voice_cache_dict[voiceid][text] = filename
-    if await generate_wav(text, voiceid, filename, target_host=target_host,
-                          is_premium=is_premium, speed=speed, pitch=pitch):
-        return filename
-    else:
-        return "failed"
+    return await generate_wav(text, voiceid, filename, target_host=target_host,
+                       is_premium=is_premium, speed=speed, pitch=pitch)
 
 
 async def generate_wav(text, speaker=1, filepath='audio.wav', target_host='localhost', target_port=50021,
@@ -1089,7 +1088,7 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                 if response1.status != 200:
                     if use_gpu_server:
                         is_use_gpu_server = False
-                    return False
+                    return "failed"
 
                 # 同一IPで出力
                 if response1.headers.get("x-address"):
@@ -1142,15 +1141,27 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                                             data=json.dumps(query_json),
                                             timeout=30) as response2:
                 if response2.status != 200:
-                    return False
-
+                    return "failed"
+                dir = os.path.dirname(os.path.abspath(__file__)) + "/" + filepath
                 try:
-                    async with aiofiles.open(os.path.dirname(os.path.abspath(__file__)) + "/" + filepath,
-                                             mode='wb') as f:
-                        await f.write(await response2.read())
-                    return True
+                    if lavalink_uploader is None:
+                        async with aiofiles.open(dir,
+                                                mode='wb') as f:
+                            await f.write(await response2.read())
+                    else:
+                        formdata = FormData()
+                        formdata.add_field('file', await response2.read())
+                        async with private_session.post(f'http://{lavalink_uploader}/send_wav',
+                                                    data=formdata,
+                                                    timeout=30) as response3:
+                            res_text = await response3.text()
+                            if res_text != "error":
+                                return res_text
+                            else:
+                                return "failed"
+                    return dir
                 except ReadTimeout:
-                    return False
+                    return "failed"
     except:
         if use_gpu_server:
             is_use_gpu_server = False
@@ -1346,10 +1357,9 @@ async def yomiage(member, guild, text: str):
             voice_generate_time_list.append(tim)
         print(premium_text + "音声合成:" + str(tim))
         time_sta = time.time()
-
         if is_lavalink:
             source = \
-                (await wavelink.Playable.search(os.path.dirname(os.path.abspath(__file__)) + "/" + filename,
+                (await wavelink.Playable.search(filename.replace("\"", ""),
                                                 source=None))[
                     0]
         else:
@@ -1383,7 +1393,6 @@ async def on_voice_state_update(member, before, after):
         if json_str is None:
             return
         autojoin = json_str
-        print(autojoin)
         if int(autojoin.get("voice_channel_id", 1)) == int(after.channel.id):
             vclist[after.channel.guild.id] = autojoin["text_channel_id"]
             guild_premium_user_id = int(await getdatabase(after.channel.guild.id, "premium_user", 0, "guild"))
@@ -1899,8 +1908,6 @@ async def connect_websocket():
     async for websocket in websockets.connect(EEW_WEBHOOK_URL):
         try:
             eew_dict = json.loads(await websocket.recv())
-            print(eew_dict)
-            logger.error(eew_dict)
             if eew_dict["code"] == 556:
 
                 prefs = []
