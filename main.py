@@ -1000,7 +1000,7 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0"):
         voice_cache_counter_dict[voiceid] = {}
         voice_cache_dict[voiceid] = {}
     voice_cache_counter_dict[voiceid][text] = voice_cache_counter_dict.get(voiceid, {}).get(text, 0) + 1
-    if voice_cache_counter_dict[voiceid][text] > 10:
+    if voice_cache_counter_dict[voiceid][text] > 50:
         filename = f"cache/{text}-{voiceid}.wav"
         voice_cache_dict[voiceid][text] = filename
     return await generate_wav(text, voiceid, filename, target_host=target_host,
@@ -1501,7 +1501,6 @@ async def status_update_loop():
     voice_generate_time_list.clear()
     non_premium_user.clear()
     await bot.wait_until_ready()
-    voice_cache_counter_dict.clear()
     await bot.change_presence(activity=discord.CustomActivity(text))
 
     if is_use_gpu_server_enabled:
@@ -1523,6 +1522,7 @@ async def premium_user_check_loop():
     premium_server_list_300.clear()
     premium_server_list_500.clear()
     premium_server_list_1000.clear()
+
     for d in stripe.Subscription.search(limit=100,
                                         query="status:'active' AND -metadata['discord_user_id']:null").auto_paging_iter():
         user_id = d['metadata']['discord_user_id']
@@ -1550,7 +1550,7 @@ async def premium_user_check_loop():
     with open(os.path.dirname(os.path.abspath(__file__)) + "/cache/" + f"voice_cache.json", 'wt',
               encoding='utf-8') as f:
         json.dump(voice_cache_dict, f, ensure_ascii=False)
-
+    voice_cache_counter_dict.clear()
     await bot.wait_until_ready()
     global GLOBAL_DICT_CHECK
     if GLOBAL_DICT_CHECK is True:
