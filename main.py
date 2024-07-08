@@ -251,7 +251,7 @@ class VoiceSelectView2(discord.ui.Select):
             )
         else:
             await setdatabase(interaction.user.id, "voiceid", str(id))
-        print(f"**{self.name}({self.values[0]})**")
+        #print(f"**{self.name}({self.values[0]})**")
         await interaction.response.send_message(embed=embed)
         await interaction.message.delete()
 
@@ -786,7 +786,7 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=int,
         description=f"**{name}** id:{voiceid}に変更したのだ",
         color=discord.Colour.brand_green(),
     )
-    print(f"**{name}**")
+    #print(f"**{name}**")
     await ctx.send_followup(embed=embed)
 
 
@@ -1000,7 +1000,7 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0"):
         voice_cache_counter_dict[voiceid] = {}
         voice_cache_dict[voiceid] = {}
     voice_cache_counter_dict[voiceid][text] = voice_cache_counter_dict.get(voiceid, {}).get(text, 0) + 1
-    if voice_cache_counter_dict[voiceid][text] > 10:
+    if voice_cache_counter_dict[voiceid][text] > 50:
         filename = f"cache/{text}-{voiceid}.wav"
         voice_cache_dict[voiceid][text] = filename
     return await generate_wav(text, voiceid, filename, target_host=target_host,
@@ -1113,7 +1113,7 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                 print(query_json)'''
 
             if len(query_json["kana"]) > len_limit:
-                print(query_json["kana"])
+                #print(query_json["kana"])
                 ikaryaku = query_json["kana"][:len_limit]
                 if ikaryaku[-1] == "'":
                     ikaryaku += "イカリャク"
@@ -1125,7 +1125,7 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                     ikaryaku += "/イカリャク'"
                 else:
                     ikaryaku += "'/イカリャク'"
-                print(ikaryaku)
+                #print(ikaryaku)
                 params_len = (
                     ('text', ikaryaku),
                     ('speaker', speaker),
@@ -1166,7 +1166,7 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
     except:
         if use_gpu_server:
             is_use_gpu_server = False
-        print("aa")
+        #print("aa")
         import traceback
         traceback.print_exc()
         return False
@@ -1284,9 +1284,9 @@ async def yomiage(member, guild, text: str):
         output = output.replace(" ", "")
     elif lang == "ja":
         if await is_premium_check(guild.id, 300) and re.match("[ぁ-んァ-ヶー一-龯]", output) is None:
-            print(output)
+            #print(output)
             output = ts.translate_text(output, to_language="ja")
-            print("翻訳")
+            #print("翻訳")
 
         output = (await romajitable.to_kana(output)).katakana
         if len(output) <= 0:
@@ -1324,7 +1324,7 @@ async def yomiage(member, guild, text: str):
             generating_guilds[guild.id].index(text, 0) > 0) or guild.id in generating_guild_set:
             await asyncio.sleep(0.1)
         generating_guild_set.add(guild.id)
-        print(output)
+        #print(output)
         filename = ""
         time_sta = time.time()
         done = True
@@ -1356,8 +1356,10 @@ async def yomiage(member, guild, text: str):
         else:
             premium_text = ""
             voice_generate_time_list.append(tim)
-        print(premium_text + "音声合成:" + str(tim))
-        time_sta = time.time()
+        if tim > 3:
+            print(premium_text + "音声合成:" + str(tim))
+
+
         if is_lavalink:
             source = \
                 (await wavelink.Playable.search(filename.replace("\"", ""),
@@ -1366,9 +1368,7 @@ async def yomiage(member, guild, text: str):
         else:
             source = await discord.FFmpegOpusAudio.from_probe(source=filename)
 
-        time_end = time.time()
-        tim = time_end - time_sta
-        print(premium_text + "ソース:" + str(tim))
+
     finally:
         generating_guilds.get(guild.id, []).remove(text)
         generating_guild_set.remove(guild.id)
@@ -1398,8 +1398,8 @@ async def on_voice_state_update(member, before, after):
         if int(autojoin.get("voice_channel_id", 1)) == int(after.channel.id):
             vclist[after.channel.guild.id] = autojoin["text_channel_id"]
             guild_premium_user_id = int(await getdatabase(after.channel.guild.id, "premium_user", 0, "guild"))
-            print(guild_premium_user_id)
-            print(type(guild_premium_user_id))
+            #print(guild_premium_user_id)
+            #print(type(guild_premium_user_id))
             if (USAGE_LIMIT_PRICE > 0 and (
                 await is_premium_check(member.id, USAGE_LIMIT_PRICE) or await is_premium_check(guild_premium_user_id, USAGE_LIMIT_PRICE)) is False):
                 return
@@ -1501,7 +1501,6 @@ async def status_update_loop():
     voice_generate_time_list.clear()
     non_premium_user.clear()
     await bot.wait_until_ready()
-    voice_cache_counter_dict.clear()
     await bot.change_presence(activity=discord.CustomActivity(text))
 
     if is_use_gpu_server_enabled:
@@ -1523,6 +1522,7 @@ async def premium_user_check_loop():
     premium_server_list_300.clear()
     premium_server_list_500.clear()
     premium_server_list_1000.clear()
+
     for d in stripe.Subscription.search(limit=100,
                                         query="status:'active' AND -metadata['discord_user_id']:null").auto_paging_iter():
         user_id = d['metadata']['discord_user_id']
@@ -1550,7 +1550,7 @@ async def premium_user_check_loop():
     with open(os.path.dirname(os.path.abspath(__file__)) + "/cache/" + f"voice_cache.json", 'wt',
               encoding='utf-8') as f:
         json.dump(voice_cache_dict, f, ensure_ascii=False)
-
+    voice_cache_counter_dict.clear()
     await bot.wait_until_ready()
     global GLOBAL_DICT_CHECK
     if GLOBAL_DICT_CHECK is True:
