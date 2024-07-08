@@ -1089,6 +1089,7 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                 if response1.status != 200:
                     if use_gpu_server:
                         is_use_gpu_server = False
+                    print(await response1.json())
                     return "failed"
 
                 # 同一IPで出力
@@ -1142,6 +1143,7 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                                             data=json.dumps(query_json),
                                             timeout=30) as response2:
                 if response2.status != 200:
+                    print(await response2.json())
                     return "failed"
                 dir = os.path.dirname(os.path.abspath(__file__)) + "/" + filepath
                 try:
@@ -1345,7 +1347,8 @@ async def yomiage(member, guild, text: str):
                 print("合成失敗")
                 retry_count += 1
                 if retry_count >= 3:
-                    break
+                    del output_list[0]
+                    return
         del output_list[0]
 
         time_end = time.time()
