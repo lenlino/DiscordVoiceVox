@@ -1599,7 +1599,8 @@ async def init_loop():
     global voice_cache_dict
     with open(os.path.dirname(os.path.abspath(__file__)) + "/cache/voice_cache.json", "r", encoding='utf-8') as f:
         voice_cache_dict = json.load(f)
-        print("起動"+voice_cache_dict)
+        print("起動")
+        print(voice_cache_dict)
 
     await initdatabase()
     await init_voice_list()
