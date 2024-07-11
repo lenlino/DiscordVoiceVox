@@ -1337,10 +1337,12 @@ async def yomiage(member, guild, text: str):
                 output_list.append(output[i:i + 100])
         else:
             output_list.append(output)
+        speed = await getdatabase(member.id, "speed", 100)
+        pitch = await getdatabase(member.id, "pitch", 0)
         while retry_count < 10 and done:
             filename = await text2wav(output, int(voice_id), is_premium,
-                                      speed=await getdatabase(member.id, "speed", 100),
-                                      pitch=await getdatabase(member.id, "pitch", 0))
+                                      speed=speed,
+                                      pitch=pitch)
             if filename != "failed":
                 done = False
             else:
@@ -1360,7 +1362,7 @@ async def yomiage(member, guild, text: str):
             premium_text = ""
             voice_generate_time_list.append(tim)
         if tim > 3:
-            print(premium_text + "音声合成:" + str(tim))
+            print(f"{premium_text} v:{voice_id} s:{speed} p:{pitch} t:{str(tim)} text:{output}")
 
 
         if is_lavalink:
