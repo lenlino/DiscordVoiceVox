@@ -995,7 +995,7 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0"):
             voiceapi_counter += 1
 
     if voice_cache_dict.get(voiceid, {}).get(text):
-        return voice_cache_dict.get(voiceid).get(text)
+        return os.path.dirname(os.path.abspath(__file__)) + "/" + voice_cache_dict.get(voiceid).get(text)
     if voice_cache_counter_dict.get(voiceid, None) is None:
         voice_cache_counter_dict[voiceid] = {}
         voice_cache_dict[voiceid] = {}
@@ -1171,7 +1171,7 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
         #print("aa")
         import traceback
         traceback.print_exc()
-        return False
+        return "failed"
 
 
 @bot.event
@@ -1555,6 +1555,7 @@ async def premium_user_check_loop():
         else:
             premium_user_list.extend(premium_guild_list)
 
+    print(voice_cache_dict)
     with open(os.path.dirname(os.path.abspath(__file__)) + "/cache/" + f"voice_cache.json", 'wt',
               encoding='utf-8') as f:
         json.dump(voice_cache_dict, f, ensure_ascii=False)
@@ -1598,6 +1599,7 @@ async def init_loop():
     global voice_cache_dict
     with open(os.path.dirname(os.path.abspath(__file__)) + "/cache/voice_cache.json", "r", encoding='utf-8') as f:
         voice_cache_dict = json.load(f)
+        print("起動"+voice_cache_dict)
 
     await initdatabase()
     await init_voice_list()
