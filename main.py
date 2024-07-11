@@ -1171,7 +1171,7 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
         #print("aa")
         import traceback
         traceback.print_exc()
-        return False
+        return "failed"
 
 
 @bot.event
