@@ -1370,6 +1370,7 @@ async def yomiage(member, guild, text: str):
             if len(source_serch) == 0:
                 print(filename)
                 return
+            source = source_serch[0]
         else:
             source = await discord.FFmpegOpusAudio.from_probe(source=filename)
 
