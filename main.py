@@ -1364,10 +1364,12 @@ async def yomiage(member, guild, text: str):
 
 
         if is_lavalink:
-            source = \
+            source_serch = \
                 (await wavelink.Playable.search(filename.replace("\"", ""),
-                                                source=None))[
-                    0]
+                                                source=None))
+            if len(source_serch) == 0:
+                print(filename)
+                return
         else:
             source = await discord.FFmpegOpusAudio.from_probe(source=filename)
 
