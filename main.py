@@ -1394,7 +1394,7 @@ async def yomiage(member, guild, text: str):
     if is_lavalink:
         player = guild.voice_client
         filters: wavelink.Filters = player.filters
-        filters.timescale.set(speed=0.5)
+        filters.timescale.set(speed=1)
         await player.play(source)
     else:
         guild.voice_client.play(source)
