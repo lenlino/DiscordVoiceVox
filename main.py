@@ -854,7 +854,10 @@ async def auto_join():
         for server_json in json_list:
             guild = bot.get_guild(server_json["guild"])
             await guild.get_channel(server_json["voice_ch_id"]).connect(cls=wavelink.Player)
-            await guild.get_channel(server_json["text_ch_id"]).send(embed=embed)
+            try:
+                await guild.get_channel(server_json["text_ch_id"]).send(embed=embed)
+            except:
+                pass
             vclist[guild.id] = server_json["text_ch_id"]
             if server_json["is_premium"]:
                 premium_server_list.append(guild.id)
@@ -1022,6 +1025,7 @@ async def generate_wav(text, speaker=1, filepath='audio.wav', target_host='local
         speed = 100
 
     global is_use_gpu_server
+    use_gpu_server = False
     if is_use_gpu_server_time and is_use_gpu_server and speaker == 3:
         use_gpu_server = True
     elif is_premium and speaker == 3 and is_premium_check(guild_id, 500):
@@ -1539,6 +1543,9 @@ async def premium_user_check_loop():
     premium_server_list_300.clear()
     premium_server_list_500.clear()
     premium_server_list_1000.clear()
+
+    global is_use_gpu_server
+    is_use_gpu_server = is_use_gpu_server_enabled
 
     for d in stripe.Subscription.search(limit=100,
                                         query="status:'active' AND -metadata['discord_user_id']:null").auto_paging_iter():
