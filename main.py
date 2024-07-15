@@ -20,19 +20,17 @@ import stripe
 import wavelink
 import websockets
 from aiohttp import FormData
-from discord import default_permissions
 from discord.ext import tasks, pages
 from requests import ReadTimeout
 from ko2kana import toKana
 from dotenv import load_dotenv
-from stripe.api_resources.search_result_object import SearchResultObject
-from stripe.api_resources.subscription import Subscription
 import translators as ts
 from watchfiles import watch, awatch
 
 import emoji
 import romajitable
 import unicodedata
+from wavelink import player
 
 load_dotenv()
 
@@ -54,6 +52,7 @@ intents.message_content = True
 intents.guilds = True
 intents.voice_states = True
 intents.guild_messages = True
+is_use_gpu_server_time = False
 bot = discord.AutoShardedBot(intents=intents)
 vclist = {}
 voice_select_dict = {}
@@ -552,7 +551,7 @@ async def get_server_set_value(ctx: discord.AutocompleteContext):
 
 @bot.slash_command(description="サーバーの色々な設定なのだ", name="server-set",
                    default_member_permissions=discord.Permissions.manage_guild)
-@default_permissions(manage_messages=True)
+@discord.commands.default_permissions(manage_messages=True)
 async def server_set(ctx, key: discord.Option(str, choices=[
     discord.OptionChoice(name="autojoin", value="autojoin"),
     discord.OptionChoice(name="reademoji"),
@@ -855,7 +854,10 @@ async def auto_join():
         for server_json in json_list:
             guild = bot.get_guild(server_json["guild"])
             await guild.get_channel(server_json["voice_ch_id"]).connect(cls=wavelink.Player)
-            await guild.get_channel(server_json["text_ch_id"]).send(embed=embed)
+            try:
+                await guild.get_channel(server_json["text_ch_id"]).send(embed=embed)
+            except:
+                pass
             vclist[guild.id] = server_json["text_ch_id"]
             if server_json["is_premium"]:
                 premium_server_list.append(guild.id)
@@ -971,7 +973,7 @@ async def setdatabase(userid, id, value, table="voice"):
         return rows[0]
 
 
-async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0"):
+async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0", guild_id="0"):
     global counter
     counter += 1
     if counter > 200:
@@ -1004,11 +1006,11 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0"):
         filename = f"cache/{text}-{voiceid}.wav"
         voice_cache_dict[voiceid][text] = filename
     return await generate_wav(text, voiceid, filename, target_host=target_host,
-                       is_premium=is_premium, speed=speed, pitch=pitch)
+                       is_premium=is_premium, speed=speed, pitch=pitch, guild_id=guild_id)
 
 
 async def generate_wav(text, speaker=1, filepath='audio.wav', target_host='localhost', target_port=50021,
-                       is_premium=False, speed="100", pitch="0"):
+                       is_premium=False, speed="100", pitch="0", guild_id="0"):
     params = (
         ('text', text),
         ('speaker', speaker),
@@ -1022,12 +1024,21 @@ async def generate_wav(text, speaker=1, filepath='audio.wav', target_host='local
     if int(speed) < 80:
         speed = 100
 
+    global is_use_gpu_server
+    use_gpu_server = False
+    if is_use_gpu_server_time and is_use_gpu_server and speaker == 3:
+        use_gpu_server = True
+    elif is_premium and speaker == 3:
+        use_gpu_server = True
+    elif is_premium and await is_premium_check(guild_id, 1000):
+        use_gpu_server = True
+
     # COEIROINKAPI用に対応
-    if coeiroink_host == target_host:
+    if coeiroink_host == target_host or sharevox_host == target_host:
         # return await synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, filepath)
         return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, volume=0.8)
     else:
-        return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath)
+        return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, use_gpu_server=use_gpu_server)
 
 
 async def synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, filepath):
@@ -1075,12 +1086,10 @@ async def synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, fi
         return False
 
 
-async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, volume=1.0):
-    use_gpu_server = False
+async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, volume=1.0, use_gpu_server=False):
     try:
         global is_use_gpu_server
-        use_gpu_server = is_use_gpu_server and speaker == 3
-        if use_gpu_server:
+        if use_gpu_server and is_use_gpu_server:
             target_host = gpu_host
         async with aiohttp.ClientSession(connector_owner=False, connector=conn) as private_session:
             async with private_session.post(f'http://{target_host}/audio_query',
@@ -1200,7 +1209,7 @@ async def yomiage(member, guild, text: str):
         return
     pattern = "https?://[\w/:%#\$&\?\(\)~\.=\+\-@]+"
     pattern_emoji = "\<.+?\>"
-    pattern_voice = "\.v[0-9]*"
+
     pattern_spoiler = "\|\|.*?\|\|"
     voice_id = None
     is_premium = guild.id in premium_server_list
@@ -1234,6 +1243,7 @@ async def yomiage(member, guild, text: str):
     lang = await getdatabase(guild.id, "lang", "ja", "guild")
 
     if guild.id in premium_server_list:
+        pattern_voice = "\.v[0-9]*"
         if re.search(pattern_voice, text) is not None:
             cmd = re.search(pattern_voice, text).group()
             if re.search("[0-9]", cmd) is not None:
@@ -1342,7 +1352,7 @@ async def yomiage(member, guild, text: str):
         while retry_count < 10 and done:
             filename = await text2wav(output, int(voice_id), is_premium,
                                       speed=speed,
-                                      pitch=pitch)
+                                      pitch=pitch, guild_id=guild.id)
             if filename != "failed":
                 done = False
             else:
@@ -1382,7 +1392,10 @@ async def yomiage(member, guild, text: str):
         generating_guild_set.remove(guild.id)
 
     if is_lavalink:
-        await guild.voice_client.play(source)
+        player = guild.voice_client
+        filters: wavelink.Filters = player.filters
+        filters.timescale.set(speed=1)
+        await player.play(source)
     else:
         guild.voice_client.play(source)
 
@@ -1513,12 +1526,12 @@ async def status_update_loop():
 
     if is_use_gpu_server_enabled:
         now_time = datetime.datetime.now().time()
-        global is_use_gpu_server
+        global is_use_gpu_server_time
         # 日を跨ぐもののみ対応
-        is_use_gpu_server = gpu_start_time < now_time or now_time < gpu_end_time
+        is_use_gpu_server_time = gpu_start_time < now_time or now_time < gpu_end_time
 
 
-@tasks.loop(hours=24)
+@tasks.loop(minutes=10)
 async def premium_user_check_loop():
     if stripe.api_key is None:
         return
@@ -1530,6 +1543,9 @@ async def premium_user_check_loop():
     premium_server_list_300.clear()
     premium_server_list_500.clear()
     premium_server_list_1000.clear()
+
+    global is_use_gpu_server
+    is_use_gpu_server = is_use_gpu_server_enabled
 
     for d in stripe.Subscription.search(limit=100,
                                         query="status:'active' AND -metadata['discord_user_id']:null").auto_paging_iter():
@@ -1737,7 +1753,7 @@ async def showdict_local(ctx, ):
 
 
 @bot.slash_command(description="ミュートを設定するのだ", default_member_permissions=discord.Permissions.manage_guild)
-@default_permissions(manage_messages=True)
+@discord.commands.default_permissions(manage_messages=True)
 async def mute(ctx, target: discord.Option(discord.Member)):
     mute_list = await getdatabase(ctx.guild.id, "mute_list", [], "guild")
     if target.id in mute_list:
@@ -1767,7 +1783,7 @@ async def mute(ctx, target: discord.Option(discord.Member)):
 
 
 @bot.slash_command(description="ミュートを解除するのだ", default_member_permissions=discord.Permissions.manage_guild)
-@default_permissions(manage_messages=True)
+@discord.commands.default_permissions(manage_messages=True)
 async def unmute(ctx, target: discord.Option(discord.Member)):
     mute_list = await getdatabase(ctx.guild.id, "mute_list", [], "guild")
     if target.id not in mute_list:
@@ -1789,7 +1805,7 @@ async def unmute(ctx, target: discord.Option(discord.Member)):
 
 
 @bot.command(description="ミュート一覧を表示するのだ", default_member_permissions=discord.Permissions.manage_guild)
-@default_permissions(manage_messages=True)
+@discord.commands.default_permissions(manage_messages=True)
 async def showmute(ctx):
     mute_list = await getdatabase(ctx.guild.id, "mute_list", [], "guild")
     list_text = ""

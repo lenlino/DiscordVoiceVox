@@ -17,4 +17,10 @@ jobs:
           script: |
             cd /root/DiscordVoiceVox
             git pull
+            cd /home/len/DiscordVoiceVox-c
+            git pull
+            cd /home/len/DiscordVoiceVox-d
+            git pull
+            cd /home/len/DiscordVoiceVox-e
+            git pull
 
