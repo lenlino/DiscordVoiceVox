@@ -1242,8 +1242,9 @@ async def yomiage(member, guild, text: str):
 
     lang = await getdatabase(guild.id, "lang", "ja", "guild")
 
+    pattern_voice = "\.v[0-9]*"
     if guild.id in premium_server_list:
-        pattern_voice = "\.v[0-9]*"
+
         if re.search(pattern_voice, text) is not None:
             cmd = re.search(pattern_voice, text).group()
             if re.search("[0-9]", cmd) is not None:
