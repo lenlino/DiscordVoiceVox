@@ -1026,11 +1026,9 @@ async def generate_wav(text, speaker=1, filepath='audio.wav', target_host='local
 
     global is_use_gpu_server
     use_gpu_server = False
-    if is_use_gpu_server_time and is_use_gpu_server and speaker == 3:
+    if is_use_gpu_server and speaker == 3:
         use_gpu_server = True
-    elif is_premium and speaker == 3:
-        use_gpu_server = True
-    elif is_premium and await is_premium_check(guild_id, 1000):
+    elif is_use_gpu_server and is_premium and await is_premium_check(guild_id, 500):
         use_gpu_server = True
 
     # COEIROINKAPI用に対応
