@@ -99,8 +99,8 @@ handler = logging.FileHandler(filename=os.path.dirname(os.path.abspath(__file__)
                               encoding='utf-8', mode='w')
 handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
 logger.addHandler(handler)
-default_conn = aiohttp.TCPConnector(limit_per_host=22)
-premium_conn = aiohttp.TCPConnector()
+default_conn = aiohttp.TCPConnector(limit=20)
+premium_conn = aiohttp.TCPConnector(limit=0)
 
 is_use_gpu_server_enabled: bool = bool(os.getenv("IS_GPU", "False") == "True")
 is_use_gpu_server = False
@@ -1123,7 +1123,7 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                 if response1.status != 200:
                     if use_gpu_server:
                         is_use_gpu_server = False
-                    print(await response1.json())
+                    logger.warning(await response1.json())
                     return "failed"
 
                 # 同一IPで出力
@@ -1177,7 +1177,7 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                                             data=json.dumps(query_json),
                                             timeout=30) as response2:
                 if response2.status != 200:
-                    print(await response2.json())
+                    logger.warning(await response2.json())
                     return "failed"
                 dir = os.path.dirname(os.path.abspath(__file__)) + "/" + filepath
                 try:
@@ -1512,7 +1512,7 @@ async def on_voice_state_update(member, before, after):
             name += "さん"
         if after.channel is not None and after.channel.id == voicestate.channel.id:
             await yomiage(member.guild.me, member.guild, f"{name}が入室したのだ、", no_read_name=True)
-        elif before.channel.id == voicestate.channel.id:
+        elif before.channel is not None and before.channel.id == voicestate.channel.id:
             await yomiage(member.guild.me, member.guild, f"{name}が退出したのだ、", no_read_name=True)
 
 
