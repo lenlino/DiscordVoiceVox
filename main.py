@@ -1576,7 +1576,8 @@ async def premium_user_check_loop():
     is_use_gpu_server = is_use_gpu_server_enabled
 
     for d in stripe.Subscription.search(limit=100,
-                                        query="status:'active' AND -metadata['discord_user_id']:null").auto_paging_iter():
+                                        query="status:'active' AND -metadata['discord_user_id']:null OR status:'trialing' "
+                                              "AND -metadata['discord_user_id']:null").auto_paging_iter():
         user_id = d['metadata']['discord_user_id']
         premium_user_list.append(user_id)
         premium_guild_list = []
