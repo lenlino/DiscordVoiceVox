@@ -430,6 +430,7 @@ def add_premium_guild_dict(search_id: str, guild_id: str):
         return 100
     return 0
 
+
 def remove_premium_guild_dict(id: str):
     premium_guild_dict.pop(id, None)
 
@@ -1558,7 +1559,12 @@ async def status_update_loop():
         # 日を跨ぐもののみ対応
         is_use_gpu_server_time = gpu_start_time < now_time or now_time < gpu_end_time
 
+
 async def add_premium_lopp(d):
+    global premium_user_list
+    global premium_server_list_300
+    global premium_server_list_500
+    global premium_server_list_1000
     user_id = d['metadata']['discord_user_id']
     premium_user_list.append(user_id)
     premium_guild_list = []
@@ -1580,6 +1586,7 @@ async def add_premium_lopp(d):
         premium_server_list_1000.extend(premium_guild_list)
     else:
         premium_user_list.extend(premium_guild_list)
+
 
 @tasks.loop(minutes=10)
 async def premium_user_check_loop():
