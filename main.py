@@ -1558,6 +1558,28 @@ async def status_update_loop():
         # 日を跨ぐもののみ対応
         is_use_gpu_server_time = gpu_start_time < now_time or now_time < gpu_end_time
 
+async def add_premium_lopp(d):
+    user_id = d['metadata']['discord_user_id']
+    premium_user_list.append(user_id)
+    premium_guild_list = []
+    for i in range(1, 4):
+        p_guild = await getdatabase(str(user_id).replace(" ", ""), f"premium_guild{i}", "0")
+        if p_guild.replace(" ", "") == "0":
+            continue
+        premium_guild_list.append(str(p_guild))
+
+    amount = d["plan"]["amount"]
+    if amount == 300:
+        premium_server_list_300.append(user_id)
+        premium_server_list_300.extend(premium_guild_list)
+    elif amount == 500:
+        premium_server_list_500.append(user_id)
+        premium_server_list_500.extend(premium_guild_list)
+    elif amount == 1000:
+        premium_server_list_1000.append(user_id)
+        premium_server_list_1000.extend(premium_guild_list)
+    else:
+        premium_user_list.extend(premium_guild_list)
 
 @tasks.loop(minutes=10)
 async def premium_user_check_loop():
@@ -1576,29 +1598,11 @@ async def premium_user_check_loop():
     is_use_gpu_server = is_use_gpu_server_enabled
 
     for d in stripe.Subscription.search(limit=100,
-                                        query="status:'active' AND -metadata['discord_user_id']:null OR status:'trialing' "
-                                              "AND -metadata['discord_user_id']:null").auto_paging_iter():
-        user_id = d['metadata']['discord_user_id']
-        premium_user_list.append(user_id)
-        premium_guild_list = []
-        for i in range(1, 4):
-            p_guild = await getdatabase(str(user_id).replace(" ", ""), f"premium_guild{i}", "0")
-            if p_guild.replace(" ", "") == "0":
-                continue
-            premium_guild_list.append(str(p_guild))
-
-        amount = d["plan"]["amount"]
-        if amount == 300:
-            premium_server_list_300.append(user_id)
-            premium_server_list_300.extend(premium_guild_list)
-        elif amount == 500:
-            premium_server_list_500.append(user_id)
-            premium_server_list_500.extend(premium_guild_list)
-        elif amount == 1000:
-            premium_server_list_1000.append(user_id)
-            premium_server_list_1000.extend(premium_guild_list)
-        else:
-            premium_user_list.extend(premium_guild_list)
+                                        query="status:'active' AND -metadata['discord_user_id']:null").auto_paging_iter():
+        await add_premium_lopp(d)
+    for d in stripe.Subscription.search(limit=100,
+                                        query="status:'trialing' AND -metadata['discord_user_id']:null").auto_paging_iter():
+        await add_premium_lopp(d)
 
     print(voice_cache_dict)
     with open(os.path.dirname(os.path.abspath(__file__)) + "/cache/" + f"voice_cache.json", 'wt',
