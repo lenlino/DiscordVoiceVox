@@ -61,6 +61,7 @@ premium_server_list = []
 premium_server_list_300 = []
 premium_server_list_500 = []
 premium_server_list_1000 = []
+premium_guild_dict = {}
 voice_cache_dict = {}
 voice_cache_counter_dict = {}
 generating_guild_set = set()
@@ -107,7 +108,6 @@ gpu_start_time = datetime.datetime.strptime(os.getenv("START_TIME", "21:00"), "%
 gpu_end_time = datetime.datetime.strptime(os.getenv("END_TIME", "02:00"), "%H:%M").time()
 
 user_dict_loc = os.getenv("DICT_LOC", os.path.dirname(os.path.abspath(__file__)) + "/user_dict")
-
 
 
 async def initdatabase():
@@ -334,6 +334,7 @@ async def vc(ctx):
         return
     if ctx.guild.voice_client is not None and ctx.guild.voice_client.connected and ctx.guild.id in vclist:
         del vclist[ctx.guild.id]
+        remove_premium_guild_dict(ctx.guild.id)
         await ctx.guild.voice_client.disconnect()
         embed = discord.Embed(
             title="Disconnect",
@@ -375,7 +376,7 @@ async def vc(ctx):
             return
         elif (USAGE_LIMIT_PRICE > 0 and (
             await is_premium_check(ctx.author.id, USAGE_LIMIT_PRICE) or await is_premium_check(guild_premium_user_id,
-                                                                       USAGE_LIMIT_PRICE)) is False):
+                                                                                               USAGE_LIMIT_PRICE)) is False):
             embed = discord.Embed(
                 title="Error",
                 color=discord.Colour.brand_red(),
@@ -400,15 +401,38 @@ async def vc(ctx):
         )
         if ctx.guild.id in premium_server_list:
             premium_server_list.remove(ctx.guild.id)
-        if str(ctx.author.id) in premium_user_list or str(
-            int(guild_premium_user_id)) in premium_user_list:
-            embed.set_author(name="Premium")
+        if str(ctx.author.id) in premium_user_list:
             premium_server_list.append(ctx.guild.id)
+            embed.set_author(name=f"Premium {await add_premium_guild_dict(ctx.author.id, ctx.guild.id)}")
+        elif str(
+            int(guild_premium_user_id)) in premium_user_list:
+            premium_server_list.append(ctx.guild.id)
+            embed.set_author(name=f"Premium {await add_premium_guild_dict(ctx.guild.id, ctx.guild.id)}")
         if await getdatabase(ctx.guild.id, "is_joinnotice", True, "guild"):
             await ctx.send_followup(embed=embed)
         else:
             await ctx.send_followup(embed=embed, delete_after=0)
         return
+
+
+async def add_premium_guild_dict(search_id: str, guild_id: str):
+    if await is_premium_check(search_id, 1000):
+        premium_guild_dict[guild_id] = 1000
+        return 1000
+    elif await is_premium_check(search_id, 500):
+        premium_guild_dict[guild_id] = 500
+        return 500
+    elif await is_premium_check(search_id, 300):
+        premium_guild_dict[guild_id] = 300
+        return 300
+    elif await is_premium_check(search_id, 100):
+        premium_guild_dict[guild_id] = 100
+        return 100
+    return 0
+
+
+def remove_premium_guild_dict(id: str):
+    premium_guild_dict.pop(id, None)
 
 
 @bot.slash_command(description="色々な設定なのだ")
@@ -833,7 +857,7 @@ async def stop(message="ずんだもんの再起動を行います。数分程�
         if guild.voice_client is None:
             continue
         savelist.append({"guild": server_id, "text_ch_id": text_ch_id, "voice_ch_id": guild.voice_client.channel.id,
-                         "is_premium": server_id in premium_server_list})
+                         "is_premium": server_id in premium_guild_dict, "premium_value": premium_guild_dict[server_id]})
         try:
             await guild.get_channel(text_ch_id).send(embed=embed)
         except:
@@ -861,6 +885,7 @@ async def auto_join():
             vclist[guild.id] = server_json["text_ch_id"]
             if server_json["is_premium"]:
                 premium_server_list.append(guild.id)
+                premium_guild_dict[server_json["guild"]] = premium_guild_dict["premium_value"]
 
 
 @bot.slash_command(description="辞書に単語を追加するのだ(全サーバー)", guild_ids=ManagerGuilds)
@@ -1006,7 +1031,7 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0", guil
         filename = f"cache/{text}-{voiceid}.wav"
         voice_cache_dict[voiceid][text] = filename
     return await generate_wav(text, voiceid, filename, target_host=target_host,
-                       is_premium=is_premium, speed=speed, pitch=pitch, guild_id=guild_id)
+                              is_premium=is_premium, speed=speed, pitch=pitch, guild_id=guild_id)
 
 
 async def generate_wav(text, speaker=1, filepath='audio.wav', target_host='localhost', target_port=50021,
@@ -1036,7 +1061,8 @@ async def generate_wav(text, speaker=1, filepath='audio.wav', target_host='local
         # return await synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, filepath)
         return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, volume=0.8)
     else:
-        return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, use_gpu_server=use_gpu_server)
+        return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath,
+                               use_gpu_server=use_gpu_server)
 
 
 async def synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, filepath):
@@ -1084,7 +1110,8 @@ async def synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, fi
         return False
 
 
-async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, volume=1.0, use_gpu_server=False):
+async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, volume=1.0,
+                    use_gpu_server=False):
     try:
         global is_use_gpu_server
         if use_gpu_server and is_use_gpu_server:
@@ -1156,14 +1183,14 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                 try:
                     if lavalink_uploader is None:
                         async with aiofiles.open(dir,
-                                                mode='wb') as f:
+                                                 mode='wb') as f:
                             await f.write(await response2.read())
                     else:
                         formdata = FormData()
                         formdata.add_field('file', await response2.read())
                         async with private_session.post(f'http://{lavalink_uploader}/send_wav',
-                                                    data=formdata,
-                                                    timeout=30) as response3:
+                                                        data=formdata,
+                                                        timeout=30) as response3:
                             res_text = await response3.text()
                             if res_text != "error":
                                 return res_text
@@ -1196,7 +1223,7 @@ async def on_message(message):
         return
 
 
-async def yomiage(member, guild, text: str):
+async def yomiage(member, guild, text: str, no_read_name=False):
     if text == "zundamon!!stop":
         generating_guilds[guild.id].clear()
         print(f"クリアしました。guild: {guild.id}")
@@ -1219,7 +1246,7 @@ async def yomiage(member, guild, text: str):
     if output == "":
         return
 
-    if await getdatabase(guild.id, "is_readname", False, "guild"):
+    if await getdatabase(guild.id, "is_readname", False, "guild") and not no_read_name:
         if await getdatabase(member.guild.id, "is_readsan", False, "guild"):
             output = member.display_name + "さん " + output
         else:
@@ -1373,7 +1400,6 @@ async def yomiage(member, guild, text: str):
         if tim > 3:
             print(f"{premium_text} v:{voice_id} s:{speed} p:{pitch} t:{str(tim)} text:{output}")
 
-
         if is_lavalink:
             source_serch = \
                 (await wavelink.Playable.search(filename.replace("\"", ""),
@@ -1421,7 +1447,8 @@ async def on_voice_state_update(member, before, after):
             #print(guild_premium_user_id)
             #print(type(guild_premium_user_id))
             if (USAGE_LIMIT_PRICE > 0 and (
-                await is_premium_check(member.id, USAGE_LIMIT_PRICE) or await is_premium_check(guild_premium_user_id, USAGE_LIMIT_PRICE)) is False):
+                await is_premium_check(member.id, USAGE_LIMIT_PRICE) or await is_premium_check(guild_premium_user_id,
+                                                                                               USAGE_LIMIT_PRICE)) is False):
                 return
             embed = discord.Embed(
                 title="Connect",
@@ -1432,7 +1459,7 @@ async def on_voice_state_update(member, before, after):
                 premium_server_list.remove(after.channel.guild.id)
             if str(member.id) in premium_user_list or str(
                 int(guild_premium_user_id)) in premium_user_list:
-                embed.set_author(name="Premium")
+                embed.set_author(name=f"Premium {await add_premium_guild_dict(member.id, after.channel.guild.id)}")
                 premium_server_list.append(after.channel.guild.id)
             if await getdatabase(after.channel.guild.id, "is_joinnotice", True, "guild"):
                 await after.channel.guild.get_channel(autojoin["text_channel_id"]).send(embed=embed)
@@ -1455,11 +1482,13 @@ async def on_voice_state_update(member, before, after):
         await voicestate.disconnect()
 
         del vclist[voicestate.guild.id]
+        remove_premium_guild_dict(voicestate.guild.id)
         return
 
     if after.channel is not None and after.channel.id == voicestate.channel.id and str(
         member.id) in premium_user_list and after.channel.guild.id not in premium_server_list:
         premium_server_list.append(after.channel.guild.id)
+        await add_premium_guild_dict(member.id, after.channel.guild.id)
         embed = discord.Embed(
             title="Premium Mode",
             color=discord.Colour.yellow(),
@@ -1482,9 +1511,9 @@ async def on_voice_state_update(member, before, after):
         if await getdatabase(member.guild.id, "is_readsan", False, "guild"):
             name += "さん"
         if after.channel is not None and after.channel.id == voicestate.channel.id:
-            await yomiage(member.guild.me, member.guild, f"{name}が入室したのだ、")
+            await yomiage(member.guild.me, member.guild, f"{name}が入室したのだ、", no_read_name=True)
         elif before.channel.id == voicestate.channel.id:
-            await yomiage(member.guild.me, member.guild, f"{name}が退出したのだ、")
+            await yomiage(member.guild.me, member.guild, f"{name}が退出したのだ、", no_read_name=True)
 
 
 # ボットのみか確認
@@ -1509,6 +1538,7 @@ async def status_update_loop():
             continue
         if guild.voice_client is None or guild.voice_client.channel is None:
             del vclist[key]
+            remove_premium_guild_dict(str(guild.id))
     if len(voice_generate_time_list) != 0 and len(voice_generate_time_list_p) != 0:
         avarage = sum(voice_generate_time_list) / len(voice_generate_time_list)
         avarage_p = sum(voice_generate_time_list_p) / len(voice_generate_time_list_p)
@@ -1530,6 +1560,34 @@ async def status_update_loop():
         is_use_gpu_server_time = gpu_start_time < now_time or now_time < gpu_end_time
 
 
+async def add_premium_lopp(d):
+    global premium_user_list
+    global premium_server_list_300
+    global premium_server_list_500
+    global premium_server_list_1000
+    user_id = d['metadata']['discord_user_id']
+    premium_user_list.append(user_id)
+    premium_guild_list = []
+    for i in range(1, 4):
+        p_guild = await getdatabase(str(user_id).replace(" ", ""), f"premium_guild{i}", "0")
+        if p_guild.replace(" ", "") == "0":
+            continue
+        premium_guild_list.append(str(p_guild))
+
+    amount = d["plan"]["amount"]
+    if amount == 300:
+        premium_server_list_300.append(user_id)
+        premium_server_list_300.extend(premium_guild_list)
+    elif amount == 500:
+        premium_server_list_500.append(user_id)
+        premium_server_list_500.extend(premium_guild_list)
+    elif amount == 1000:
+        premium_server_list_1000.append(user_id)
+        premium_server_list_1000.extend(premium_guild_list)
+    else:
+        premium_user_list.extend(premium_guild_list)
+
+
 @tasks.loop(minutes=10)
 async def premium_user_check_loop():
     if stripe.api_key is None:
@@ -1548,27 +1606,10 @@ async def premium_user_check_loop():
 
     for d in stripe.Subscription.search(limit=100,
                                         query="status:'active' AND -metadata['discord_user_id']:null").auto_paging_iter():
-        user_id = d['metadata']['discord_user_id']
-        premium_user_list.append(user_id)
-        premium_guild_list = []
-        for i in range(1, 4):
-            p_guild = await getdatabase(str(user_id).replace(" ", ""), f"premium_guild{i}", "0")
-            if p_guild.replace(" ", "") == "0":
-                continue
-            premium_guild_list.append(str(p_guild))
-
-        amount = d["plan"]["amount"]
-        if amount == 300:
-            premium_server_list_300.append(user_id)
-            premium_server_list_300.extend(premium_guild_list)
-        elif amount == 500:
-            premium_server_list_500.append(user_id)
-            premium_server_list_500.extend(premium_guild_list)
-        elif amount == 1000:
-            premium_server_list_1000.append(user_id)
-            premium_server_list_1000.extend(premium_guild_list)
-        else:
-            premium_user_list.extend(premium_guild_list)
+        await add_premium_lopp(d)
+    for d in stripe.Subscription.search(limit=100,
+                                        query="status:'trialing' AND -metadata['discord_user_id']:null").auto_paging_iter():
+        await add_premium_lopp(d)
 
     print(voice_cache_dict)
     with open(os.path.dirname(os.path.abspath(__file__)) + "/cache/" + f"voice_cache.json", 'wt',
@@ -1900,7 +1941,6 @@ def toLowerCase(text):
 
 
 async def is_premium_check(id, value):
-
     id_str = str(id)
     is_check = False
     if 100 >= value > 0:
@@ -1911,6 +1951,8 @@ async def is_premium_check(id, value):
         is_check = id_str in premium_server_list_500 or id_str in premium_server_list_1000
     elif 1000 >= value > 500:
         is_check = id_str in premium_server_list_1000
+    elif id in premium_guild_dict:
+        is_check = premium_guild_dict[id] >= value
 
     if is_check is False and id not in non_premium_user:
         non_premium_user.append(id)
