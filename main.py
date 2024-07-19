@@ -857,7 +857,7 @@ async def stop(message="ずんだもんの再起動を行います。数分程�
         if guild.voice_client is None:
             continue
         savelist.append({"guild": server_id, "text_ch_id": text_ch_id, "voice_ch_id": guild.voice_client.channel.id,
-                         "is_premium": server_id in premium_guild_dict, "premium_value": premium_guild_dict[server_id]})
+                         "is_premium": server_id in premium_guild_dict, "premium_value": premium_guild_dict.get(server_id, 0)})
         try:
             await guild.get_channel(text_ch_id).send(embed=embed)
         except:
