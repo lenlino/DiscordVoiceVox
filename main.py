@@ -1223,7 +1223,7 @@ async def on_message(message):
         return
 
 
-async def yomiage(member, guild, text: str):
+async def yomiage(member, guild, text: str, no_read_name=False):
     if text == "zundamon!!stop":
         generating_guilds[guild.id].clear()
         print(f"クリアしました。guild: {guild.id}")
@@ -1246,7 +1246,7 @@ async def yomiage(member, guild, text: str):
     if output == "":
         return
 
-    if await getdatabase(guild.id, "is_readname", False, "guild"):
+    if await getdatabase(guild.id, "is_readname", False, "guild") and not no_read_name:
         if await getdatabase(member.guild.id, "is_readsan", False, "guild"):
             output = member.display_name + "さん " + output
         else:
@@ -1511,9 +1511,9 @@ async def on_voice_state_update(member, before, after):
         if await getdatabase(member.guild.id, "is_readsan", False, "guild"):
             name += "さん"
         if after.channel is not None and after.channel.id == voicestate.channel.id:
-            await yomiage(member.guild.me, member.guild, f"{name}が入室したのだ、")
+            await yomiage(member.guild.me, member.guild, f"{name}が入室したのだ、", no_read_name=True)
         elif before.channel.id == voicestate.channel.id:
-            await yomiage(member.guild.me, member.guild, f"{name}が退出したのだ、")
+            await yomiage(member.guild.me, member.guild, f"{name}が退出したのだ、", no_read_name=True)
 
 
 # ボットのみか確認
