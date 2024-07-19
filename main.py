@@ -1050,11 +1050,9 @@ async def generate_wav(text, speaker=1, filepath='audio.wav', target_host='local
 
     global is_use_gpu_server
     use_gpu_server = False
-    if is_use_gpu_server_time and is_use_gpu_server and speaker == 3:
+    if is_use_gpu_server and speaker == 3:
         use_gpu_server = True
-    elif is_premium and speaker == 3 and await is_premium_check(guild_id, 500):
-        use_gpu_server = True
-    elif is_premium and await is_premium_check(guild_id, 1000):
+    elif is_use_gpu_server and is_premium and await is_premium_check(guild_id, 500):
         use_gpu_server = True
 
     # COEIROINKAPI用に対応
@@ -1268,8 +1266,9 @@ async def yomiage(member, guild, text: str):
 
     lang = await getdatabase(guild.id, "lang", "ja", "guild")
 
+    pattern_voice = "\.v[0-9]*"
     if guild.id in premium_server_list:
-        pattern_voice = "\.v[0-9]*"
+
         if re.search(pattern_voice, text) is not None:
             cmd = re.search(pattern_voice, text).group()
             if re.search("[0-9]", cmd) is not None:
