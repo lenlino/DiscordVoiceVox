@@ -908,7 +908,7 @@ async def auto_join():
             except:
                 pass
             vclist[guild.id] = server_json["text_ch_id"]
-            if server_json["is_premium"]:
+            if server_json["is_premium"] is True:
                 premium_server_list.append(guild.id)
                 premium_guild_dict[server_json["guild"]] = premium_guild_dict["premium_value"]
 
