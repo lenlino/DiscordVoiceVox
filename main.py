@@ -9,6 +9,7 @@ import logging
 import os
 import random
 import re
+import sys
 import time
 import importlib
 
@@ -873,6 +874,7 @@ async def stop(message="ずんだもんの再起動を行います。数分程�
         description=message,
         color=discord.Colour.red(),
     )
+    print("停止中...")
     savelist = []
     for server_id, text_ch_id in vclist.copy().items():
         guild = bot.get_guild(server_id)
@@ -887,7 +889,7 @@ async def stop(message="ずんだもんの再起動を行います。数分程�
             pass
     with open(os.path.dirname(os.path.abspath(__file__)) + "/" + 'bot_stop.json', 'wt', encoding='utf-8') as f:
         json.dump(savelist, f, ensure_ascii=False)
-    await bot.close()
+    sys.exit()
 
 
 async def auto_join():
