@@ -9,6 +9,7 @@ import logging
 import os
 import random
 import re
+import sys
 import time
 import importlib
 
@@ -130,6 +131,7 @@ async def initdatabase():
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readurl boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readsan boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_joinnotice boolean;')
+        await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_eew boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS premium_user char(20);')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS lang char(2);')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS mute_list bigint[];')
@@ -437,12 +439,12 @@ def remove_premium_guild_dict(id: str):
 
 @bot.slash_command(description="色々な設定なのだ")
 async def set(ctx, key: discord.Option(str, choices=[
-    discord.OptionChoice(name="voice", value="voice"),
-    discord.OptionChoice(name="speed", value="speed"),
-    discord.OptionChoice(name="pitch", value="pitch"),
-    discord.OptionChoice(name="premium_guild1", value="premium_guild1"),
-    discord.OptionChoice(name="premium_guild2", value="premium_guild2"),
-    discord.OptionChoice(name="premium_guild3", value="premium_guild3")], description="設定項目"),
+    discord.OptionChoice(name="ボイス(voice)", value="voice"),
+    discord.OptionChoice(name="速度(speed)", value="speed"),
+    discord.OptionChoice(name="ピッチ(pitch)", value="pitch"),
+    discord.OptionChoice(name="プレミアム利用サーバー1(premium_guild1)", value="premium_guild1"),
+    discord.OptionChoice(name="プレミアム利用サーバー2(premium_guild2)", value="premium_guild2"),
+    discord.OptionChoice(name="プレミアム利用サーバー3(premium_guild3)", value="premium_guild3")], description="設定項目"),
               value: discord.Option(str, description="設定値", required=False)):
     await ctx.defer()
     if key == "voice":
@@ -577,14 +579,15 @@ async def get_server_set_value(ctx: discord.AutocompleteContext):
                    default_member_permissions=discord.Permissions.manage_guild)
 @discord.commands.default_permissions(manage_messages=True)
 async def server_set(ctx, key: discord.Option(str, choices=[
-    discord.OptionChoice(name="autojoin", value="autojoin"),
-    discord.OptionChoice(name="reademoji"),
-    discord.OptionChoice(name="readname"),
-    discord.OptionChoice(name="readurl"),
-    discord.OptionChoice(name="readjoinleave"),
-    discord.OptionChoice(name="lang"),
-    discord.OptionChoice(name="readsan"),
-    discord.OptionChoice(name="joinnotice")], description="設定項目"),
+    discord.OptionChoice(name="自動接続(autojoin)", value="autojoin"),
+    discord.OptionChoice(name="絵文字の読み上げ(reademoji)", value="reademoji"),
+    discord.OptionChoice(name="名前の読み上げ(readname)", value="readname"),
+    discord.OptionChoice(name="URLの読み上げ(readurl)", value="readurl"),
+    discord.OptionChoice(name="入退室の読み上げ(readjoinleave)", value="readjoinleave"),
+    discord.OptionChoice(name="言語(lang)", value="lang"),
+    discord.OptionChoice(name="さん付け(readsan)", value="readsan"),
+    discord.OptionChoice(name="参加退出表示(joinnotice)", value="joinnotice"),
+    discord.OptionChoice(name="緊急地震速報通知(eew)", value="eew")], description="設定項目"),
                      value: discord.Option(str, description="設定値", required=False,
                                            autocomplete=get_server_set_value), ):
     await ctx.defer()
@@ -758,6 +761,26 @@ async def server_set(ctx, key: discord.Option(str, choices=[
             embed.description = "on/offをvalueに指定してください。"
             embed.color = discord.Colour.brand_red()
         await ctx.send_followup(embed=embed)
+    elif key == "eew":
+        embed = discord.Embed(
+            title="Changed readsan",
+            description="名前",
+            color=discord.Colour.brand_green()
+        )
+        if value is None:
+            embed.description = "緊急地震速報通知をオンにしました（デフォルト）"
+            await setdatabase(ctx.guild.id, "is_eew", True, "guild")
+        elif value == "off":
+            embed.description = "緊急地震速報通知をオフにしました"
+            await setdatabase(ctx.guild.id, "is_eew", False, "guild")
+        elif value == "on":
+            embed.description = "緊急地震速報通知をオンにしました"
+            await setdatabase(ctx.guild.id, "is_eew", True, "guild")
+        else:
+            embed.title = "Error"
+            embed.description = "on/offをvalueに指定してください。"
+            embed.color = discord.Colour.brand_red()
+        await ctx.send_followup(embed=embed)
 
 
 @bot.slash_command(description="自分の声を変更できるのだ")
@@ -851,20 +874,22 @@ async def stop(message="ずんだもんの再起動を行います。数分程�
         description=message,
         color=discord.Colour.red(),
     )
+    print("停止中...")
     savelist = []
     for server_id, text_ch_id in vclist.copy().items():
         guild = bot.get_guild(server_id)
         if guild.voice_client is None:
             continue
         savelist.append({"guild": server_id, "text_ch_id": text_ch_id, "voice_ch_id": guild.voice_client.channel.id,
-                         "is_premium": server_id in premium_guild_dict, "premium_value": premium_guild_dict.get(server_id, 0)})
+                         "is_premium": server_id in premium_guild_dict,
+                         "premium_value": premium_guild_dict.get(server_id, 0)})
         try:
             await guild.get_channel(text_ch_id).send(embed=embed)
         except:
             pass
     with open(os.path.dirname(os.path.abspath(__file__)) + "/" + 'bot_stop.json', 'wt', encoding='utf-8') as f:
         json.dump(savelist, f, ensure_ascii=False)
-    await bot.close()
+    sys.exit()
 
 
 async def auto_join():
@@ -883,7 +908,7 @@ async def auto_join():
             except:
                 pass
             vclist[guild.id] = server_json["text_ch_id"]
-            if server_json["is_premium"]:
+            if server_json["is_premium"] is True:
                 premium_server_list.append(guild.id)
                 premium_guild_dict[server_json["guild"]] = premium_guild_dict["premium_value"]
 
@@ -2007,9 +2032,14 @@ async def connect_websocket():
                 logger.error(prefs_str)
                 for guild_id in premium_server_list:
                     guild = bot.get_guild(guild_id)
-                    channel = guild.get_channel(vclist[guild.id])
-                    await channel.send(embed=embed)
-                    await yomiage(guild.me, guild, f"緊急地震速報　{prefs_str}")
+                    if await getdatabase(guild.id, "is_eew", True, "guild"):
+                        channel = guild.get_channel(vclist[guild.id])
+                        try:
+                            await channel.send(embed=embed)
+                        except:
+                            pass
+                        await yomiage(guild.me, guild, f"緊急地震速報　{prefs_str}")
+
         except websockets.ConnectionClosed as e:
             logger.error(e)
             continue
