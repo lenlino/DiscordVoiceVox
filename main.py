@@ -935,9 +935,9 @@ async def auto_join():
             except:
                 pass
             vclist[guild.id] = server_json["text_ch_id"]
-            if server_json["is_premium"] is True:
+            if server_json["is_premium"] is True and "premium_value" in server_json:
                 premium_server_list.append(guild.id)
-                premium_guild_dict[server_json["guild"]] = premium_guild_dict["premium_value"]
+                premium_guild_dict[server_json["guild"]] = server_json["premium_value"]
 
 
 @bot.slash_command(description="辞書に単語を追加するのだ(全サーバー)", guild_ids=ManagerGuilds)
