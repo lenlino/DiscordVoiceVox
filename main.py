@@ -278,6 +278,10 @@ class ActivateButtonView(discord.ui.View):  # Create a class called MyView that 
             query=f"status:'active' AND metadata['discord_user_id']:'{interaction.user.id}'").auto_paging_iter():
             target_subscription.append(subscription)
             break
+        for subscription in stripe.Subscription.search(
+            query=f"status:'trialing' AND metadata['discord_user_id']:'{interaction.user.id}'").auto_paging_iter():
+            target_subscription.append(subscription)
+            break
 
         amount = target_subscription[0]["plan"]["amount"]
 
