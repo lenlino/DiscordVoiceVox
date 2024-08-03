@@ -286,7 +286,7 @@ class ActivateButtonView(discord.ui.View):  # Create a class called MyView that 
             await interaction.followup.send(embeds=[embed], ephemeral=True)
             return
         subscription_id = target_subscription[0]["id"]
-        token = uuid.uuid4()
+        api_token = uuid.uuid4()
         stripe.Subscription.modify(subscription_id, metadata={"voicevox_token": str(token)})
         embed.title = "Success"
         embed.description = "APIトークンを発行しました。利用方法などはホームページをご確認ください。"
