@@ -12,6 +12,7 @@ import re
 import sys
 import time
 import importlib
+import uuid
 
 import aiofiles as aiofiles
 import aiohttp
@@ -265,6 +266,32 @@ class ActivateButtonView(discord.ui.View):  # Create a class called MyView that 
     @discord.ui.button(label="Activate", style=discord.ButtonStyle.primary, custom_id="activate_button")
     async def button_callback(self, button, interaction):
         await interaction.response.send_modal(ActivateModal(title="Activate"))
+
+    @discord.ui.button(label="API TOKEN生成(1000円プラン用)", style=discord.ButtonStyle.primary, custom_id="api_token_button")
+    async def button_callback(self, button, interaction):
+        embed = discord.Embed(title="Failed", description="有効なプレミアムプランが存在しないかアクティベートされていません。")
+        if str(interaction.user.id) not in premium_user_list:
+            await interaction.followup.send(embeds=[embed], ephemeral=True)
+            return
+        target_subscription = []
+        for subscription in stripe.Subscription.search(
+            query=f"status:'active' AND metadata['discord_user_id']:'{interaction.user.id}'").auto_paging_iter():
+            target_subscription.append(subscription)
+            break
+
+        amount = target_subscription[0]["plan"]["amount"]
+
+        if amount < 1000:
+            embed.description = "1000円未満のプランのため発行が行えませんでした。"
+            await interaction.followup.send(embeds=[embed], ephemeral=True)
+            return
+        subscription_id = target_subscription[0]["id"]
+        token = uuid.uuid4()
+        stripe.Subscription.modify(subscription_id, metadata={"voicevox_token": str(token)})
+        embed.title = "Success"
+        embed.description = "APIトークンを発行しました。利用方法などはホームページをご確認ください。"
+        embed.add_field(name="Token", value=str(token))
+        await interaction.followup.send(embeds=[embed], ephemeral=True)
 
 
 class ActivateModal(discord.ui.Modal):
