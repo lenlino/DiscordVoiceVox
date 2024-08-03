@@ -264,11 +264,11 @@ class ActivateButtonView(discord.ui.View):  # Create a class called MyView that 
         super().__init__(timeout=None)  # timeout of the view must be set to None
 
     @discord.ui.button(label="Activate", style=discord.ButtonStyle.primary, custom_id="activate_button")
-    async def button_callback(self, button, interaction):
+    async def activate_button_callback(self, button, interaction):
         await interaction.response.send_modal(ActivateModal(title="Activate"))
 
     @discord.ui.button(label="API TOKEN生成(1000円プラン用)", style=discord.ButtonStyle.primary, custom_id="api_token_button")
-    async def button_callback(self, button, interaction):
+    async def token_button_callback(self, button, interaction):
         embed = discord.Embed(title="Failed", description="有効なプレミアムプランが存在しないかアクティベートされていません。")
         if str(interaction.user.id) not in premium_user_list:
             await interaction.followup.send(embeds=[embed], ephemeral=True)
