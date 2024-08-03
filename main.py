@@ -269,6 +269,7 @@ class ActivateButtonView(discord.ui.View):  # Create a class called MyView that 
 
     @discord.ui.button(label="API TOKEN生成(1000円プラン用)", style=discord.ButtonStyle.primary, custom_id="api_token_button")
     async def token_button_callback(self, button, interaction):
+        await interaction.response.defer()
         embed = discord.Embed(title="Failed", description="有効なプレミアムプランが存在しないかアクティベートされていません。")
         if str(interaction.user.id) not in premium_user_list:
             await interaction.followup.send(embeds=[embed], ephemeral=True)
