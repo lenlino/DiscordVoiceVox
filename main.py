@@ -44,6 +44,7 @@ stripe.api_key = os.environ.get("STRIPE_TOKEN", None)
 is_lavalink = True
 coeiroink_host = os.environ.get("COEIROINK_HOST", "127.0.0.1:50032")
 sharevox_host = os.environ.get("SHAREVOX_HOST", "127.0.0.1:50025")
+aivoice_host = os.environ.get("AIVOICE_HOST", "127.0.0.1:8001")
 lavalink_host_list = os.environ.get("LAVALINK_HOST", "http://127.0.0.1:2333").split(",")
 lavalink_uploader = os.environ.get("LAVALINK_UPLOADER", None)
 gpu_host = os.environ.get("GPU_HOST", host)
@@ -195,6 +196,21 @@ async def init_voice_list():
                 json.extend(json2)
         except:
             print("SHAREVOX接続なし")
+        try:
+            async with session.get(
+                f'http://{aivoice_host}/speakers',
+                headers=headers,
+                timeout=10
+            ) as response3:
+                json2: list = await response3.json()
+                for voice_info in json2:
+                    voice_info["name"] = "A.I.VOICE:" + voice_info["name"]
+                    for style_info in voice_info["styles"]:
+                        style_info["id"] += 3000
+
+                json.extend(json2)
+        except:
+            print("AIVOICE接続なし")
 
     global voice_id_list
     voice_id_list = json
@@ -1062,7 +1078,10 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0", guil
         counter = 0
     filename = "temp" + str(counter) + ".wav"
 
-    if voiceid >= 2000:
+    if voiceid >= 3000:
+        target_host = f"{aivoice_host}"
+        voiceid -= 3000
+    elif voiceid >= 2000:
         target_host = f"{sharevox_host}"
         voiceid -= 2000
     elif voiceid >= 1000:
