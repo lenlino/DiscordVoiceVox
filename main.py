@@ -1170,16 +1170,13 @@ async def synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, fi
 async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, volume=1.0,
                     use_gpu_server=False):
     try:
-        global is_use_gpu_server
-        if use_gpu_server and is_use_gpu_server:
-            target_host = gpu_host
+
         async with aiohttp.ClientSession(connector_owner=False, connector=conn) as private_session:
             async with private_session.post(f'http://{target_host}/audio_query',
                                             params=params,
                                             timeout=30) as response1:
                 if response1.status != 200:
-                    if use_gpu_server:
-                        is_use_gpu_server = False
+
                     logger.warning(await response1.json())
                     return "failed"
 
@@ -1228,12 +1225,17 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                                                 timeout=30) as response3:
                     query_json["accent_phrases"] = await response3.json()
 
+            global is_use_gpu_server
+            if use_gpu_server and is_use_gpu_server:
+                target_host = gpu_host
             async with private_session.post(f'http://{target_host}/synthesis',
                                             headers=headers,
                                             params=params,
                                             data=json.dumps(query_json),
                                             timeout=30) as response2:
                 if response2.status != 200:
+                    if use_gpu_server:
+                        is_use_gpu_server = False
                     logger.warning(await response2.json())
                     return "failed"
                 dir = os.path.dirname(os.path.abspath(__file__)) + "/" + filepath
@@ -1441,7 +1443,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             else:
                 print("合成失敗")
                 retry_count += 1
-                if retry_count >= 3:
+                if retry_count >= 2:
                     del output_list[0]
                     return
         del output_list[0]
