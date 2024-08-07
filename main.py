@@ -56,7 +56,7 @@ intents.guilds = True
 intents.voice_states = True
 intents.guild_messages = True
 is_use_gpu_server_time = False
-bot = discord.AutoShardedBot(intents=intents)
+
 vclist = {}
 voice_select_dict = {}
 premium_user_list = []
@@ -102,8 +102,8 @@ handler = logging.FileHandler(filename=os.path.dirname(os.path.abspath(__file__)
                               encoding='utf-8', mode='w')
 handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
 logger.addHandler(handler)
-default_conn = aiohttp.TCPConnector(limit=20)
-premium_conn = aiohttp.TCPConnector(limit=0)
+default_conn = None
+premium_conn = None
 
 is_use_gpu_server_enabled: bool = bool(os.getenv("IS_GPU", "False") == "True")
 is_use_gpu_server = False
@@ -111,7 +111,7 @@ gpu_start_time = datetime.datetime.strptime(os.getenv("START_TIME", "21:00"), "%
 gpu_end_time = datetime.datetime.strptime(os.getenv("END_TIME", "02:00"), "%H:%M").time()
 
 user_dict_loc = os.getenv("DICT_LOC", os.path.dirname(os.path.abspath(__file__)) + "/user_dict")
-
+bot = discord.AutoShardedBot(intents=intents)
 
 async def initdatabase():
     async with pool.acquire() as conn:
@@ -1203,6 +1203,16 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                 if response1.headers.get("x-address"):
                     target_host = response1.headers.get("x-address")
 
+                #AIVOICEは１回で終了
+                if target_host == aivoice_host:
+                    dir = os.path.dirname(os.path.abspath(__file__)) + "/" + filepath
+                    try:
+                        async with aiofiles.open(dir,
+                                                 mode='wb') as f:
+                            await f.write(await response1.read())
+                    except ReadTimeout:
+                        return "failed"
+
                 headers = {'Content-Type': 'application/json', }
                 query_json = await response1.json()
                 query_json["speedScale"] = int(speed) / 100
@@ -1666,29 +1676,8 @@ async def add_premium_lopp(d):
         premium_user_list.extend(premium_guild_list)
 
 
-@tasks.loop(minutes=10)
-async def premium_user_check_loop():
-    if stripe.api_key is None:
-        return
-    global premium_user_list
-    global premium_server_list_300
-    global premium_server_list_500
-    global premium_server_list_1000
-    premium_user_list.clear()
-    premium_server_list_300.clear()
-    premium_server_list_500.clear()
-    premium_server_list_1000.clear()
-
-    global is_use_gpu_server
-    is_use_gpu_server = is_use_gpu_server_enabled
-
-    for d in stripe.Subscription.search(limit=100,
-                                        query="status:'active' AND -metadata['discord_user_id']:null").auto_paging_iter():
-        await add_premium_lopp(d)
-    for d in stripe.Subscription.search(limit=100,
-                                        query="status:'trialing' AND -metadata['discord_user_id']:null").auto_paging_iter():
-        await add_premium_lopp(d)
-
+@tasks.loop(hours=24)
+async def dict_and_cache_loop():
     print(voice_cache_dict)
     with open(os.path.dirname(os.path.abspath(__file__)) + "/cache/" + f"voice_cache.json", 'wt',
               encoding='utf-8') as f:
@@ -1724,9 +1713,38 @@ async def premium_user_check_loop():
                     embed.description = "適切な削除ではないため削除が拒否されました。"
                 await mes.edit(embed=embed)
 
+@tasks.loop(minutes=10)
+async def premium_user_check_loop():
+    if stripe.api_key is None:
+        return
+    global premium_user_list
+    global premium_server_list_300
+    global premium_server_list_500
+    global premium_server_list_1000
+    premium_user_list.clear()
+    premium_server_list_300.clear()
+    premium_server_list_500.clear()
+    premium_server_list_1000.clear()
+
+    global is_use_gpu_server
+    is_use_gpu_server = is_use_gpu_server_enabled
+
+    for d in stripe.Subscription.search(limit=100,
+                                        query="status:'active' AND -metadata['discord_user_id']:null").auto_paging_iter():
+        await add_premium_lopp(d)
+    for d in stripe.Subscription.search(limit=100,
+                                        query="status:'trialing' AND -metadata['discord_user_id']:null").auto_paging_iter():
+        await add_premium_lopp(d)
+
+
+
 
 @tasks.loop(minutes=1)
 async def init_loop():
+    global default_conn
+    global premium_conn
+    default_conn = aiohttp.TCPConnector(limit=20)
+    premium_conn = aiohttp.TCPConnector(limit=0)
     global pool
     pool = await get_connection()
 
@@ -1740,6 +1758,7 @@ async def init_loop():
     await init_voice_list()
     status_update_loop.start()
     premium_user_check_loop.start()
+    dict_and_cache_loop.start()
     bot.add_view(ActivateButtonView())
     bot.loop.create_task(connect_nodes())
     bot.loop.create_task(connect_websocket())
