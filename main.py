@@ -1210,6 +1210,7 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                         async with aiofiles.open(dir,
                                                  mode='wb') as f:
                             await f.write(await response1.read())
+                        return dir
                     except ReadTimeout:
                         return "failed"
 
