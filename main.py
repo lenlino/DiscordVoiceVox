@@ -12,6 +12,7 @@ import re
 import sys
 import time
 import importlib
+import uuid
 
 import aiofiles as aiofiles
 import aiohttp
@@ -43,6 +44,7 @@ stripe.api_key = os.environ.get("STRIPE_TOKEN", None)
 is_lavalink = True
 coeiroink_host = os.environ.get("COEIROINK_HOST", "127.0.0.1:50032")
 sharevox_host = os.environ.get("SHAREVOX_HOST", "127.0.0.1:50025")
+aivoice_host = os.environ.get("AIVOICE_HOST", "127.0.0.1:8001")
 lavalink_host_list = os.environ.get("LAVALINK_HOST", "http://127.0.0.1:2333").split(",")
 lavalink_uploader = os.environ.get("LAVALINK_UPLOADER", None)
 gpu_host = os.environ.get("GPU_HOST", host)
@@ -54,7 +56,7 @@ intents.guilds = True
 intents.voice_states = True
 intents.guild_messages = True
 is_use_gpu_server_time = False
-bot = discord.AutoShardedBot(intents=intents)
+
 vclist = {}
 voice_select_dict = {}
 premium_user_list = []
@@ -100,8 +102,8 @@ handler = logging.FileHandler(filename=os.path.dirname(os.path.abspath(__file__)
                               encoding='utf-8', mode='w')
 handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
 logger.addHandler(handler)
-default_conn = aiohttp.TCPConnector(limit=20)
-premium_conn = aiohttp.TCPConnector(limit=0)
+default_conn = None
+premium_conn = None
 
 is_use_gpu_server_enabled: bool = bool(os.getenv("IS_GPU", "False") == "True")
 is_use_gpu_server = False
@@ -109,7 +111,7 @@ gpu_start_time = datetime.datetime.strptime(os.getenv("START_TIME", "21:00"), "%
 gpu_end_time = datetime.datetime.strptime(os.getenv("END_TIME", "02:00"), "%H:%M").time()
 
 user_dict_loc = os.getenv("DICT_LOC", os.path.dirname(os.path.abspath(__file__)) + "/user_dict")
-
+bot = discord.AutoShardedBot(intents=intents)
 
 async def initdatabase():
     async with pool.acquire() as conn:
@@ -194,6 +196,21 @@ async def init_voice_list():
                 json.extend(json2)
         except:
             print("SHAREVOX接続なし")
+        try:
+            async with session.get(
+                f'http://{aivoice_host}/speakers',
+                headers=headers,
+                timeout=10
+            ) as response3:
+                json2: list = await response3.json()
+                for voice_info in json2:
+                    voice_info["name"] = "A.I.VOICE:" + voice_info["name"]
+                    for style_info in voice_info["styles"]:
+                        style_info["id"] += 3000
+
+                json.extend(json2)
+        except:
+            print("AIVOICE接続なし")
 
     global voice_id_list
     voice_id_list = json
@@ -263,8 +280,39 @@ class ActivateButtonView(discord.ui.View):  # Create a class called MyView that 
         super().__init__(timeout=None)  # timeout of the view must be set to None
 
     @discord.ui.button(label="Activate", style=discord.ButtonStyle.primary, custom_id="activate_button")
-    async def button_callback(self, button, interaction):
+    async def activate_button_callback(self, button, interaction):
         await interaction.response.send_modal(ActivateModal(title="Activate"))
+
+    @discord.ui.button(label="API TOKEN生成(1000円プラン用)", style=discord.ButtonStyle.primary, custom_id="api_token_button")
+    async def token_button_callback(self, button, interaction):
+        await interaction.response.defer()
+        embed = discord.Embed(title="Failed", description="有効なプレミアムプランが存在しないかアクティベートされていません。")
+        if str(interaction.user.id) not in premium_user_list:
+            await interaction.followup.send(embeds=[embed], ephemeral=True)
+            return
+        target_subscription = []
+        for subscription in stripe.Subscription.search(
+            query=f"status:'active' AND metadata['discord_user_id']:'{interaction.user.id}'").auto_paging_iter():
+            target_subscription.append(subscription)
+            break
+        for subscription in stripe.Subscription.search(
+            query=f"status:'trialing' AND metadata['discord_user_id']:'{interaction.user.id}'").auto_paging_iter():
+            target_subscription.append(subscription)
+            break
+
+        amount = target_subscription[0]["plan"]["amount"]
+
+        if amount < 1000:
+            embed.description = "1000円未満のプランのため発行が行えませんでした。"
+            await interaction.followup.send(embeds=[embed], ephemeral=True)
+            return
+        subscription_id = target_subscription[0]["id"]
+        api_token = uuid.uuid4()
+        stripe.Subscription.modify(subscription_id, metadata={"voicevox_token": str(api_token)})
+        embed.title = "Success"
+        embed.description = "APIトークンを発行しました。利用方法などはホームページをご確認ください。"
+        embed.add_field(name="Token", value=str(api_token))
+        await interaction.followup.send(embeds=[embed], ephemeral=True)
 
 
 class ActivateModal(discord.ui.Modal):
@@ -908,9 +956,9 @@ async def auto_join():
             except:
                 pass
             vclist[guild.id] = server_json["text_ch_id"]
-            if server_json["is_premium"] is True:
+            if server_json["is_premium"] is True and "premium_value" in server_json:
                 premium_server_list.append(guild.id)
-                premium_guild_dict[server_json["guild"]] = premium_guild_dict["premium_value"]
+                premium_guild_dict[server_json["guild"]] = server_json["premium_value"]
 
 
 @bot.slash_command(description="辞書に単語を追加するのだ(全サーバー)", guild_ids=ManagerGuilds)
@@ -1030,7 +1078,10 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0", guil
         counter = 0
     filename = "temp" + str(counter) + ".wav"
 
-    if voiceid >= 2000:
+    if voiceid >= 3000:
+        target_host = f"{aivoice_host}"
+        voiceid -= 3000
+    elif voiceid >= 2000:
         target_host = f"{sharevox_host}"
         voiceid -= 2000
     elif voiceid >= 1000:
@@ -1138,22 +1189,30 @@ async def synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, fi
 async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, volume=1.0,
                     use_gpu_server=False):
     try:
-        global is_use_gpu_server
-        if use_gpu_server and is_use_gpu_server:
-            target_host = gpu_host
+
         async with aiohttp.ClientSession(connector_owner=False, connector=conn) as private_session:
             async with private_session.post(f'http://{target_host}/audio_query',
                                             params=params,
                                             timeout=30) as response1:
                 if response1.status != 200:
-                    if use_gpu_server:
-                        is_use_gpu_server = False
+
                     logger.warning(await response1.json())
                     return "failed"
 
                 # 同一IPで出力
                 if response1.headers.get("x-address"):
                     target_host = response1.headers.get("x-address")
+
+                #AIVOICEは１回で終了
+                if target_host == aivoice_host:
+                    dir = os.path.dirname(os.path.abspath(__file__)) + "/" + filepath
+                    try:
+                        async with aiofiles.open(dir,
+                                                 mode='wb') as f:
+                            await f.write(await response1.read())
+                        return dir
+                    except ReadTimeout:
+                        return "failed"
 
                 headers = {'Content-Type': 'application/json', }
                 query_json = await response1.json()
@@ -1196,12 +1255,17 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                                                 timeout=30) as response3:
                     query_json["accent_phrases"] = await response3.json()
 
+            global is_use_gpu_server
+            if use_gpu_server and is_use_gpu_server:
+                target_host = gpu_host
             async with private_session.post(f'http://{target_host}/synthesis',
                                             headers=headers,
                                             params=params,
                                             data=json.dumps(query_json),
                                             timeout=30) as response2:
                 if response2.status != 200:
+                    if use_gpu_server:
+                        is_use_gpu_server = False
                     logger.warning(await response2.json())
                     return "failed"
                 dir = os.path.dirname(os.path.abspath(__file__)) + "/" + filepath
@@ -1409,7 +1473,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             else:
                 print("合成失敗")
                 retry_count += 1
-                if retry_count >= 3:
+                if retry_count >= 2:
                     del output_list[0]
                     return
         del output_list[0]
@@ -1613,29 +1677,8 @@ async def add_premium_lopp(d):
         premium_user_list.extend(premium_guild_list)
 
 
-@tasks.loop(minutes=10)
-async def premium_user_check_loop():
-    if stripe.api_key is None:
-        return
-    global premium_user_list
-    global premium_server_list_300
-    global premium_server_list_500
-    global premium_server_list_1000
-    premium_user_list.clear()
-    premium_server_list_300.clear()
-    premium_server_list_500.clear()
-    premium_server_list_1000.clear()
-
-    global is_use_gpu_server
-    is_use_gpu_server = is_use_gpu_server_enabled
-
-    for d in stripe.Subscription.search(limit=100,
-                                        query="status:'active' AND -metadata['discord_user_id']:null").auto_paging_iter():
-        await add_premium_lopp(d)
-    for d in stripe.Subscription.search(limit=100,
-                                        query="status:'trialing' AND -metadata['discord_user_id']:null").auto_paging_iter():
-        await add_premium_lopp(d)
-
+@tasks.loop(hours=24)
+async def dict_and_cache_loop():
     print(voice_cache_dict)
     with open(os.path.dirname(os.path.abspath(__file__)) + "/cache/" + f"voice_cache.json", 'wt',
               encoding='utf-8') as f:
@@ -1671,9 +1714,38 @@ async def premium_user_check_loop():
                     embed.description = "適切な削除ではないため削除が拒否されました。"
                 await mes.edit(embed=embed)
 
+@tasks.loop(minutes=10)
+async def premium_user_check_loop():
+    if stripe.api_key is None:
+        return
+    global premium_user_list
+    global premium_server_list_300
+    global premium_server_list_500
+    global premium_server_list_1000
+    premium_user_list.clear()
+    premium_server_list_300.clear()
+    premium_server_list_500.clear()
+    premium_server_list_1000.clear()
+
+    global is_use_gpu_server
+    is_use_gpu_server = is_use_gpu_server_enabled
+
+    for d in stripe.Subscription.search(limit=100,
+                                        query="status:'active' AND -metadata['discord_user_id']:null").auto_paging_iter():
+        await add_premium_lopp(d)
+    for d in stripe.Subscription.search(limit=100,
+                                        query="status:'trialing' AND -metadata['discord_user_id']:null").auto_paging_iter():
+        await add_premium_lopp(d)
+
+
+
 
 @tasks.loop(minutes=1)
 async def init_loop():
+    global default_conn
+    global premium_conn
+    default_conn = aiohttp.TCPConnector(limit=20)
+    premium_conn = aiohttp.TCPConnector(limit=0)
     global pool
     pool = await get_connection()
 
@@ -1687,6 +1759,7 @@ async def init_loop():
     await init_voice_list()
     status_update_loop.start()
     premium_user_check_loop.start()
+    dict_and_cache_loop.start()
     bot.add_view(ActivateButtonView())
     bot.loop.create_task(connect_nodes())
     bot.loop.create_task(connect_websocket())
@@ -2033,8 +2106,8 @@ async def connect_websocket():
                 for guild_id in premium_server_list:
                     guild = bot.get_guild(guild_id)
                     if await getdatabase(guild.id, "is_eew", True, "guild"):
-                        channel = guild.get_channel(vclist[guild.id])
                         try:
+                            channel = guild.get_channel(vclist[guild.id])
                             await channel.send(embed=embed)
                         except:
                             pass
