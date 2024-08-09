@@ -1264,8 +1264,8 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                                             data=json.dumps(query_json),
                                             timeout=30) as response2:
                 if response2.status != 200:
-                    if use_gpu_server:
-                        is_use_gpu_server = False
+                    '''if use_gpu_server:
+                        is_use_gpu_server = False'''
                     logger.warning(await response2.json())
                     return "failed"
                 dir = os.path.dirname(os.path.abspath(__file__)) + "/" + filepath
@@ -1634,6 +1634,8 @@ async def status_update_loop():
     else:
         avarage = 0
         avarage_p = 0
+    global is_use_gpu_server
+    is_use_gpu_server = is_use_gpu_server_enabled
     text = f"{str(len(vclist))}/{str(len(bot.guilds))}読み上げ中\n 生成時間平均 N:{round(avarage, 1)}s P:{round(avarage_p, 1)}s"
     logger.error(text)
     voice_generate_time_list_p.clear()
@@ -1727,8 +1729,7 @@ async def premium_user_check_loop():
     premium_server_list_500.clear()
     premium_server_list_1000.clear()
 
-    global is_use_gpu_server
-    is_use_gpu_server = is_use_gpu_server_enabled
+
 
     for d in stripe.Subscription.search(limit=100,
                                         query="status:'active' AND -metadata['discord_user_id']:null").auto_paging_iter():
