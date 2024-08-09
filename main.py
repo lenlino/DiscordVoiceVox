@@ -2106,8 +2106,8 @@ async def connect_websocket():
                 for guild_id in premium_server_list:
                     guild = bot.get_guild(guild_id)
                     if await getdatabase(guild.id, "is_eew", True, "guild"):
-                        channel = guild.get_channel(vclist[guild.id])
                         try:
+                            channel = guild.get_channel(vclist[guild.id])
                             await channel.send(embed=embed)
                         except:
                             pass
