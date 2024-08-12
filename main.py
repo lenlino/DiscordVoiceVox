@@ -511,6 +511,7 @@ async def set(ctx, key: discord.Option(str, choices=[
             await paginator.respond(ctx.interaction)
             return
         else:
+            value = toLowerCase(value)
             if value.isdecimal() is False:
                 embed = discord.Embed(
                     title="**Error**",
@@ -858,6 +859,7 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=int,
         print(f"**errorid**")
         await ctx.send_followup(embed=embed)
         return
+
     elif int(voiceid) >= 1000 and str(ctx.author.id) not in premium_user_list:
         embed = discord.Embed(
             title="**Error**",
