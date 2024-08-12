@@ -38,6 +38,7 @@ load_dotenv()
 
 token = os.environ.get("BOT_TOKEN", "BOT_TOKEN_HERE")
 host = os.environ.get("VOICEVOX_HOST", "127.0.0.1:50021")
+query_host = os.environ.get("VOICEVOX_QUERY_HOST", "192.168.10.8:50121")
 premium_host_list = os.environ.get("VOICEVOX_HOSTS", "127.0.0.1:50021").split(",")
 host_count = 0
 stripe.api_key = os.environ.get("STRIPE_TOKEN", None)
@@ -1136,9 +1137,12 @@ async def generate_wav(text, speaker=1, filepath='audio.wav', target_host='local
     if coeiroink_host == target_host or sharevox_host == target_host:
         # return await synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, filepath)
         return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, volume=0.8)
-    else:
+    elif aivoice_host == target_host:
         return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath,
                                use_gpu_server=use_gpu_server)
+    else:
+        return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath,
+                               use_gpu_server=use_gpu_server, query_host=query_host)
 
 
 async def synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, filepath):
@@ -1187,11 +1191,12 @@ async def synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, fi
 
 
 async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, volume=1.0,
-                    use_gpu_server=False):
+                    use_gpu_server=False, query_host=None):
     try:
-
+        if query_host is None:
+            query_host = target_host
         async with aiohttp.ClientSession(connector_owner=False, connector=conn) as private_session:
-            async with private_session.post(f'http://{target_host}/audio_query',
+            async with private_session.post(f'http://{query_host}/audio_query',
                                             params=params,
                                             timeout=30) as response1:
                 if response1.status != 200:
