@@ -1574,9 +1574,12 @@ async def on_voice_state_update(member, before, after):
             )
             if after.channel.guild.id in premium_server_list:
                 premium_server_list.remove(after.channel.guild.id)
-            if str(member.id) in premium_user_list or str(
-                int(guild_premium_user_id)) in premium_user_list:
+            if str(member.id) in premium_user_list:
                 embed.set_author(name=f"Premium {await add_premium_guild_dict(member.id, after.channel.guild.id)}")
+                premium_server_list.append(after.channel.guild.id)
+            elif str(
+                int(guild_premium_user_id)) in premium_user_list:
+                embed.set_author(name=f"Premium {await add_premium_guild_dict(guild_premium_user_id, after.channel.guild.id)}")
                 premium_server_list.append(after.channel.guild.id)
             if await getdatabase(after.channel.guild.id, "is_joinnotice", True, "guild"):
                 await after.channel.guild.get_channel(autojoin["text_channel_id"]).send(embed=embed)
