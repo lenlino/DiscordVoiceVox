@@ -1703,7 +1703,7 @@ async def add_premium_lopp(d):
     elif amount == 1000:
         premium_server_list_1000.append(user_id)
         premium_server_list_1000.extend(premium_guild_list)
-    else:
+    elif amount == 100:
         premium_user_list.extend(premium_guild_list)
 
 
