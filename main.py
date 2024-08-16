@@ -84,10 +84,23 @@ DB_PORT = os.getenv("DB_PORT", 5432)
 DB_NAME = os.getenv("DB_NAME", "postgres")
 DB_USER = os.getenv("DB_USER", "postgres")
 DB_PASS = os.getenv("DB_PASS", "maikura123")
-tips_list = ["/setvc　で自分の声を変更できます。",
-             "[プレミアムプラン](https://lenlino.com/?page_id=2510)(月100円～)あります。",
+tips_list = ["/setvc　で自分の声を変更できます",
+             "[プレミアムプラン](https://lenlino.com/?page_id=2510)(月100円～)あります",
              "[要望・不具合募集中](https://forms.gle/1TvbqzHRz6Q1vSfq9)",
-             "使い方やコマンド一覧は[こちら](https://lenlino.com/?page_id=2171)"]
+             "使い方やコマンド一覧は[こちら](https://lenlino.com/?page_id=2171)",
+             "音声が途切れる場合は音声チャンネル設定の地域を変更することで修正される場合があります",
+             "ずんだもん(ノーマル、あまあま)、春日部つむぎ(ノーマル)、ちび式じい(ノーマル)のボイスはすべてのサーバーで高速なGPUによる生成を使用しています",
+             "A.I.VOICEのボイスについては配信・録画は禁止されています",
+             "プレミアムプランでは開発版のずんだもんαが利用できます。追加は[サポートサーバー](https://discord.gg/MWnnkbXSDJ)内から可能です",
+             "/set　で自分の声、速度、ピッチを変更できます",
+             "/server-set　で入退室、名前の読み上げ・自動接続などを設定できます",
+             "/adddict　で辞書の登録が可能です",
+             "コマンドが表示されない場合はDiscordアプリを最新版にすると治る場合があります",
+             "VOICEVOXの音声はVOICEVOX:ずんだもんの表記を行えば配信等でも利用可能です。\n"
+             "詳しくは[VOICEVOXホームページ](https://voicevox.hiroshiba.jp/term/)をご確認ください",
+             "1000円プランではVOICEVOX APIの利用が可能です。詳しくは[こちら](https://lnetwork.jp/page-74/)",
+             "[500円以上のプラン](https://lenlino.com/?page_id=2510)ではすべてのVOICEVOX音声が高速なGPUによる生成を利用しています",
+             "A.I.VOICE 琴葉茜・葵に対応しました! /setvcコマンドより変更できます"]
 USAGE_LIMIT_PRICE: int = int(os.getenv("USAGE_LIMIT_PRICE", 0))
 GLOBAL_DICT_CHECK: bool = bool(os.getenv("GLOBAL_DICT_CHECK", "True") == "True")
 BOT_NICKNAME = os.getenv("BOT_NICKNAME", "ずんだもんβ")
@@ -142,15 +155,32 @@ async def initdatabase():
 
 async def init_voice_list():
     headers = {'Content-Type': 'application/json', }
+    json = []
     async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(
+                f'http://{aivoice_host}/speakers',
+                headers=headers,
+                timeout=10
+            ) as response3:
+                json2: list = await response3.json()
+                for voice_info in json2:
+                    voice_info["name"] = "A.I.VOICE:" + voice_info["name"]
+                    for style_info in voice_info["styles"]:
+                        style_info["id"] += 3000
+
+                json.extend(json2)
+        except:
+            print("AIVOICE接続なし")
         async with session.get(
             f'http://{host}/speakers',
             headers=headers,
             timeout=10
         ) as response2:
-            json: list = await response2.json()
-            for voice_info in json:
+            json2: list = await response2.json()
+            for voice_info in json2:
                 voice_info["name"] = "VOICEVOX:" + voice_info["name"]
+            json.extend(json2)
         '''try:
             async with session.get(
                 f'http://{coeiroink_host}/v1/speakers',
@@ -197,21 +227,6 @@ async def init_voice_list():
                 json.extend(json2)
         except:
             print("SHAREVOX接続なし")
-        try:
-            async with session.get(
-                f'http://{aivoice_host}/speakers',
-                headers=headers,
-                timeout=10
-            ) as response3:
-                json2: list = await response3.json()
-                for voice_info in json2:
-                    voice_info["name"] = "A.I.VOICE:" + voice_info["name"]
-                    for style_info in voice_info["styles"]:
-                        style_info["id"] += 3000
-
-                json.extend(json2)
-        except:
-            print("AIVOICE接続なし")
 
     global voice_id_list
     voice_id_list = json
@@ -270,6 +285,8 @@ class VoiceSelectView2(discord.ui.Select):
             )
         else:
             await setdatabase(interaction.user.id, "voiceid", str(id))
+        if 4000 > int(id) >= 3000:
+            embed.description = f"**{self.name}({self.values[0]})** id:{id}に変更したのだ\n**A.I.VOICEは録音・配信での利用はできません**"
         #print(f"**{self.name}({self.values[0]})**")
         await interaction.response.send_message(embed=embed)
         await interaction.message.delete()
@@ -521,7 +538,7 @@ async def set(ctx, key: discord.Option(str, choices=[
                 print(f"**errorid**")
                 await ctx.send_followup(embed=embed)
                 return
-            elif int(value) >= 1000 and str(ctx.author.id) not in premium_user_list:
+            elif 2000 > int(value) >= 1000 and str(ctx.author.id) not in premium_user_list:
                 embed = discord.Embed(
                     title="**Error**",
                     description=f"この音声はプレミアムプラン限定なのだ",
@@ -544,6 +561,8 @@ async def set(ctx, key: discord.Option(str, choices=[
                 description=f"**{name}** id:{value}に変更したのだ",
                 color=discord.Colour.brand_green(),
             )
+            if 4000 > int(value) >= 3000:
+                embed.description = f"**{name}** id:{value}に変更したのだ\n**A.I.VOICEは録音・配信での利用はできません**"
             await ctx.send_followup(embed=embed)
     elif key == "speed":
         if value is None:
@@ -860,7 +879,7 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=int,
         await ctx.send_followup(embed=embed)
         return
 
-    elif int(voiceid) >= 1000 and str(ctx.author.id) not in premium_user_list:
+    elif 2000 > int(voiceid) >= 1000 and str(ctx.author.id) not in premium_user_list:
         embed = discord.Embed(
             title="**Error**",
             description=f"この音声はプレミアムプラン限定です。",
@@ -869,6 +888,7 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=int,
         print(f"**errorvoice**")
         await ctx.send_followup(embed=embed)
         return
+
     await setdatabase(ctx.author.id, "voiceid", voiceid)
     name = ""
     for speaker in voice_id_list:
@@ -883,6 +903,8 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=int,
         description=f"**{name}** id:{voiceid}に変更したのだ",
         color=discord.Colour.brand_green(),
     )
+    if 4000 > int(voiceid) >= 3000:
+        embed.description = f"**{name}** id:{voiceid}に変更したのだ\n**A.I.VOICEは録音・配信での利用はできません**"
     #print(f"**{name}**")
     await ctx.send_followup(embed=embed)
 
@@ -1130,7 +1152,7 @@ async def generate_wav(text, speaker=1, filepath='audio.wav', target_host='local
 
     global is_use_gpu_server
     use_gpu_server = False
-    if is_use_gpu_server and speaker == 3:
+    if is_use_gpu_server and (speaker == 3 or speaker == 1 or speaker == 42 or speaker == 8):
         use_gpu_server = True
     elif is_use_gpu_server and is_premium and await is_premium_check(guild_id, 500):
         use_gpu_server = True
@@ -1140,8 +1162,7 @@ async def generate_wav(text, speaker=1, filepath='audio.wav', target_host='local
         # return await synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, filepath)
         return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, volume=0.8)
     elif aivoice_host == target_host:
-        return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath,
-                               use_gpu_server=use_gpu_server)
+        return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath)
     else:
         return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath,
                                use_gpu_server=use_gpu_server, query_host=query_host)
@@ -1257,7 +1278,7 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                     ('speaker', speaker),
                     ('is_kana', "true")
                 )
-                async with private_session.post(f'http://{target_host}/accent_phrases',
+                async with private_session.post(f'http://{query_host}/accent_phrases',
                                                 params=params_len,
                                                 timeout=30) as response3:
                     query_json["accent_phrases"] = await response3.json()
