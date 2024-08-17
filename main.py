@@ -1292,8 +1292,8 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                                             data=json.dumps(query_json),
                                             timeout=30) as response2:
                 if response2.status != 200:
-                    '''if use_gpu_server:
-                        is_use_gpu_server = False'''
+                    if use_gpu_server:
+                        is_use_gpu_server = False
                     logger.warning(await response2.json())
                     return "failed"
                 dir = os.path.dirname(os.path.abspath(__file__)) + "/" + filepath
@@ -1317,8 +1317,8 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                 except ReadTimeout:
                     return "failed"
     except:
-        if use_gpu_server:
-            is_use_gpu_server = False
+        '''if use_gpu_server:
+            is_use_gpu_server = False'''
         #print("aa")
         import traceback
         traceback.print_exc()
