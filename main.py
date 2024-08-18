@@ -1221,7 +1221,7 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
         async with aiohttp.ClientSession(connector_owner=False, connector=conn) as private_session:
             async with private_session.post(f'http://{query_host}/audio_query',
                                             params=params,
-                                            timeout=30) as response1:
+                                            timeout=10) as response1:
                 if response1.status != 200:
 
                     logger.warning(await response1.json())
@@ -1280,7 +1280,7 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                 )
                 async with private_session.post(f'http://{query_host}/accent_phrases',
                                                 params=params_len,
-                                                timeout=30) as response3:
+                                                timeout=10) as response3:
                     query_json["accent_phrases"] = await response3.json()
 
             global is_use_gpu_server
@@ -1290,10 +1290,10 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                                             headers=headers,
                                             params=params,
                                             data=json.dumps(query_json),
-                                            timeout=30) as response2:
+                                            timeout=10) as response2:
                 if response2.status != 200:
-                    if use_gpu_server:
-                        is_use_gpu_server = False
+                    '''if use_gpu_server:
+                        is_use_gpu_server = False'''
                     logger.warning(await response2.json())
                     return "failed"
                 dir = os.path.dirname(os.path.abspath(__file__)) + "/" + filepath
