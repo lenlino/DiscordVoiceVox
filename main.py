@@ -342,11 +342,6 @@ class ActivateModal(discord.ui.Modal):
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer()
-        if str(interaction.user.id) in premium_user_list:
-            embed = discord.Embed(title="success", color=discord.Colour.brand_green())
-            embed.description = "すでにアクティベート済みです"
-            await interaction.followup.send(embeds=[embed], ephemeral=True)
-            return
         mail = self.children[0].value
         customer: list = stripe.Customer.search(query=f"email: '{mail}'")["data"]
         if len(customer) == 0:
@@ -362,6 +357,11 @@ class ActivateModal(discord.ui.Modal):
                 target_subscription.append(subscription)
                 break
         if len(target_subscription) == 0:
+            if str(interaction.user.id) in premium_user_list:
+                embed = discord.Embed(title="success", color=discord.Colour.brand_green())
+                embed.description = "すでにアクティベート済みです"
+                await interaction.followup.send(embeds=[embed], ephemeral=True)
+                return
             embed = discord.Embed(title="fail", color=discord.Colour.brand_red())
             embed.description = "有効なサブスクリプションが存在しません"
             await interaction.followup.send(embeds=[embed], ephemeral=True)
