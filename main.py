@@ -1515,8 +1515,8 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         pitch = await getdatabase(member.id, "pitch", 0)
         while retry_count < 10 and done:
             filename = await text2wav(output, int(voice_id), is_premium,
-                                      speed=speed,
-                                      pitch=pitch, guild_id=guild.id)
+                                      speed="100",
+                                      pitch="0", guild_id=guild.id)
             if filename != "failed":
                 done = False
             else:
@@ -1557,8 +1557,8 @@ async def yomiage(member, guild, text: str, no_read_name=False):
     if is_lavalink:
         player = guild.voice_client
         filters: wavelink.Filters = player.filters
-        filters.timescale.set(speed=1)
-        await player.play(source)
+        filters.timescale.set(speed=float(float(speed)/100), pitch=float(float(pitch)/100)+1)
+        await player.play(source, filters=filters)
     else:
         guild.voice_client.play(source)
 
