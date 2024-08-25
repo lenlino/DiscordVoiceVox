@@ -547,7 +547,7 @@ async def set(ctx, key: discord.Option(str, choices=[
                 print(f"**errorvoice**")
                 await ctx.send_followup(embed=embed)
                 return
-            await setdatabase(ctx.author.id, "voiceid", value)
+
             name = ""
             for speaker in voice_id_list:
                 if name != "":
@@ -556,6 +556,17 @@ async def set(ctx, key: discord.Option(str, choices=[
                     if str(style["id"]) == value:
                         name = f"{speaker['name']}({style['name']})"
                         break
+            if name == "":
+                embed = discord.Embed(
+                    title="**Error**",
+                    description=f"存在しないボイスidです。[こちら](https://lenlino.com/?page_id=2171)のボイス一覧を参照"
+                                f"または/setvcのみで実行することで選択方式で設定できます。",
+                    color=discord.Colour.brand_red(),
+                )
+                print(f"**errorempyvoice**")
+                await ctx.send_followup(embed=embed)
+                return
+            await setdatabase(ctx.author.id, "voiceid", value)
             embed = discord.Embed(
                 title="**Changed Voice**",
                 description=f"**{name}** id:{value}に変更したのだ",
@@ -889,7 +900,6 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=int,
         await ctx.send_followup(embed=embed)
         return
 
-    await setdatabase(ctx.author.id, "voiceid", voiceid)
     name = ""
     for speaker in voice_id_list:
         if name != "":
@@ -898,6 +908,17 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=int,
             if str(style["id"]) == voiceid:
                 name = f"{speaker['name']}({style['name']})"
                 break
+    if name == "":
+        embed = discord.Embed(
+            title="**Error**",
+            description=f"存在しないボイスidです。[こちら](https://lenlino.com/?page_id=2171)のボイス一覧を参照"
+                        f"または/setvcのみで実行することで選択方式で設定できます。",
+            color=discord.Colour.brand_red(),
+        )
+        print(f"**errorempyvoice**")
+        await ctx.send_followup(embed=embed)
+        return
+    await setdatabase(ctx.author.id, "voiceid", voiceid)
     embed = discord.Embed(
         title="**Changed voice**",
         description=f"**{name}** id:{voiceid}に変更したのだ",
