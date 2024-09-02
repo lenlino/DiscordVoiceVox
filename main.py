@@ -127,6 +127,7 @@ gpu_end_time = datetime.datetime.strptime(os.getenv("END_TIME", "02:00"), "%H:%M
 user_dict_loc = os.getenv("DICT_LOC", os.path.dirname(os.path.abspath(__file__)) + "/user_dict")
 bot = discord.AutoShardedBot(intents=intents)
 
+
 async def initdatabase():
     async with pool.acquire() as conn:
         await conn.set_type_codec("jsonb", schema="pg_catalog", encoder=json.dumps, decoder=json.loads)
@@ -148,6 +149,7 @@ async def initdatabase():
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readsan boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_joinnotice boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_eew boolean;')
+        await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_translate boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS premium_user char(20);')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS lang char(2);')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS mute_list bigint[];')
@@ -301,10 +303,12 @@ class ActivateButtonView(discord.ui.View):  # Create a class called MyView that 
     async def activate_button_callback(self, button, interaction):
         await interaction.response.send_modal(ActivateModal(title="Activate"))
 
-    @discord.ui.button(label="API TOKEN生成(1000円プラン用)", style=discord.ButtonStyle.primary, custom_id="api_token_button")
+    @discord.ui.button(label="API TOKEN生成(1000円プラン用)", style=discord.ButtonStyle.primary,
+                       custom_id="api_token_button")
     async def token_button_callback(self, button, interaction):
         await interaction.response.defer()
-        embed = discord.Embed(title="Failed", description="有効なプレミアムプランが存在しないかアクティベートされていません。")
+        embed = discord.Embed(title="Failed",
+                              description="有効なプレミアムプランが存在しないかアクティベートされていません。")
         if str(interaction.user.id) not in premium_user_list:
             await interaction.followup.send(embeds=[embed], ephemeral=True)
             return
@@ -510,7 +514,8 @@ async def set(ctx, key: discord.Option(str, choices=[
     discord.OptionChoice(name="ピッチ(pitch)", value="pitch"),
     discord.OptionChoice(name="プレミアム利用サーバー1(premium_guild1)", value="premium_guild1"),
     discord.OptionChoice(name="プレミアム利用サーバー2(premium_guild2)", value="premium_guild2"),
-    discord.OptionChoice(name="プレミアム利用サーバー3(premium_guild3)", value="premium_guild3")], description="設定項目"),
+    discord.OptionChoice(name="プレミアム利用サーバー3(premium_guild3)", value="premium_guild3")],
+                                       description="設定項目"),
               value: discord.Option(str, description="設定値", required=False)):
     await ctx.defer()
     if key == "voice":
@@ -646,7 +651,7 @@ async def set(ctx, key: discord.Option(str, choices=[
 
 async def get_server_set_value(ctx: discord.AutocompleteContext):
     setting_type = ctx.options["key"]
-    bool_settings = ["reademoji", "readname", "readurl", "readjoinleave", "readsan", "joinnotice"]
+    bool_settings = ["reademoji", "readname", "readurl", "readjoinleave", "readsan", "joinnotice", "eew", "translate"]
     if setting_type in bool_settings:
         return ["off", "on"]
     elif setting_type == "lang":
@@ -667,7 +672,8 @@ async def server_set(ctx, key: discord.Option(str, choices=[
     discord.OptionChoice(name="言語(lang)", value="lang"),
     discord.OptionChoice(name="さん付け(readsan)", value="readsan"),
     discord.OptionChoice(name="参加退出表示(joinnotice)", value="joinnotice"),
-    discord.OptionChoice(name="緊急地震速報通知(eew)", value="eew")], description="設定項目"),
+    discord.OptionChoice(name="緊急地震速報通知(eew)", value="eew"),
+    discord.OptionChoice(name="翻訳(translate)", value="translate")], description="設定項目"),
                      value: discord.Option(str, description="設定値", required=False,
                                            autocomplete=get_server_set_value), ):
     await ctx.defer()
@@ -841,9 +847,29 @@ async def server_set(ctx, key: discord.Option(str, choices=[
             embed.description = "on/offをvalueに指定してください。"
             embed.color = discord.Colour.brand_red()
         await ctx.send_followup(embed=embed)
+    elif key == "translate":
+        embed = discord.Embed(
+            title="Changed translate",
+            description="名前",
+            color=discord.Colour.brand_green()
+        )
+        if value is None:
+            embed.description = "自動翻訳をオフにしました（デフォルト）"
+            await setdatabase(ctx.guild.id, "is_translate", False, "guild")
+        elif value == "off":
+            embed.description = "自動翻訳をオフにしました"
+            await setdatabase(ctx.guild.id, "is_translate", False, "guild")
+        elif value == "on":
+            embed.description = "自動翻訳をオンにしました"
+            await setdatabase(ctx.guild.id, "is_translate", True, "guild")
+        else:
+            embed.title = "Error"
+            embed.description = "on/offをvalueに指定してください。"
+            embed.color = discord.Colour.brand_red()
+        await ctx.send_followup(embed=embed)
     elif key == "eew":
         embed = discord.Embed(
-            title="Changed readsan",
+            title="Changed eew",
             description="名前",
             color=discord.Colour.brand_green()
         )
@@ -1244,7 +1270,6 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                                             params=params,
                                             timeout=10) as response1:
                 if response1.status != 200:
-
                     logger.warning(await response1.json())
                     return "failed"
 
@@ -1459,7 +1484,8 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         output = toKana(output)
         output = output.replace(" ", "")
     elif lang == "ja":
-        if await is_premium_check(guild.id, 300) and re.match("[ぁ-んァ-ヶー一-龯]", output) is None:
+        if (await is_premium_check(guild.id, 300) and re.match("[ぁ-んァ-ヶー一-龯]", output) is None
+            and await getdatabase(guild.id, "is_translate", False, "guild")):
             #print(output)
             output = ts.translate_text(output, to_language="ja")
             #print("翻訳")
@@ -1557,7 +1583,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
     if is_lavalink:
         player = guild.voice_client
         filters: wavelink.Filters = player.filters
-        filters.timescale.set(speed=float(float(speed)/100), pitch=float(float(pitch)/100)+1)
+        filters.timescale.set(speed=float(float(speed) / 100), pitch=float(float(pitch) / 100) + 1)
         await player.play(source, filters=filters)
     else:
         guild.voice_client.play(source)
@@ -1600,7 +1626,8 @@ async def on_voice_state_update(member, before, after):
                 premium_server_list.append(after.channel.guild.id)
             elif str(
                 int(guild_premium_user_id)) in premium_user_list:
-                embed.set_author(name=f"Premium {await add_premium_guild_dict(guild_premium_user_id, after.channel.guild.id)}")
+                embed.set_author(
+                    name=f"Premium {await add_premium_guild_dict(guild_premium_user_id, after.channel.guild.id)}")
                 premium_server_list.append(after.channel.guild.id)
             if await getdatabase(after.channel.guild.id, "is_joinnotice", True, "guild"):
                 await after.channel.guild.get_channel(autojoin["text_channel_id"]).send(embed=embed)
@@ -1768,6 +1795,7 @@ async def dict_and_cache_loop():
                     embed.description = "適切な削除ではないため削除が拒否されました。"
                 await mes.edit(embed=embed)
 
+
 @tasks.loop(minutes=10)
 async def premium_user_check_loop():
     if stripe.api_key is None:
@@ -1781,16 +1809,12 @@ async def premium_user_check_loop():
     premium_server_list_500.clear()
     premium_server_list_1000.clear()
 
-
-
     for d in stripe.Subscription.search(limit=100,
                                         query="status:'active' AND -metadata['discord_user_id']:null").auto_paging_iter():
         await add_premium_lopp(d)
     for d in stripe.Subscription.search(limit=100,
                                         query="status:'trialing' AND -metadata['discord_user_id']:null").auto_paging_iter():
         await add_premium_lopp(d)
-
-
 
 
 @tasks.loop(minutes=1)
