@@ -591,10 +591,10 @@ async def set(ctx, key: discord.Option(str, choices=[
             )
             await ctx.send_followup(embed=embed)
             return
-        if int(value) < 80:
+        if int(value) < 50:
             embed = discord.Embed(
                 title="**Error**",
-                description=f"80以上の数字で設定できます。",
+                description=f"50以上の数字で設定できます。",
                 color=discord.Colour.brand_red(),
             )
             await ctx.send_followup(embed=embed)
@@ -964,10 +964,10 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=int,
             )
             await ctx.send_followup(embed=embed)
             return
-        if int(speed) < 80:
+        if int(speed) < 50:
             embed = discord.Embed(
                 title="**Error**",
-                description=f"speedは80以上の数字で設定できます。",
+                description=f"speedは50以上の数字で設定できます。",
                 color=discord.Colour.brand_red(),
             )
             await ctx.send_followup(embed=embed)
