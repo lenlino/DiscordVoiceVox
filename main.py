@@ -891,7 +891,9 @@ async def server_set(ctx, key: discord.Option(str, choices=[
 
 @bot.slash_command(description="自分の声を変更できるのだ")
 async def setvc(ctx, voiceid: discord.Option(required=False, input_type=int,
-                                             description="指定しない場合は一覧が表示されます")):
+                                             description="指定しない場合は一覧が表示されます"),
+                speed: discord.Option(required=False, input_type=int, description="速度"),
+                pitch: discord.Option(required=False, input_type=int, description="ピッチ")):
     await ctx.defer()
     if (voiceid is None):
         test_pages = []
@@ -953,6 +955,39 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=int,
     if 4000 > int(voiceid) >= 3000:
         embed.description = f"**{name}** id:{voiceid}に変更したのだ\n**A.I.VOICEは録音・配信での利用はできません**"
     #print(f"**{name}**")
+    if speed is not None:
+        if speed.isdecimal() is False:
+            embed = discord.Embed(
+                title="**Error**",
+                description=f"speedは数字なのだ",
+                color=discord.Colour.brand_red(),
+            )
+            await ctx.send_followup(embed=embed)
+            return
+        if int(speed) < 80:
+            embed = discord.Embed(
+                title="**Error**",
+                description=f"speedは80以上の数字で設定できます。",
+                color=discord.Colour.brand_red(),
+            )
+            await ctx.send_followup(embed=embed)
+            return
+        await setdatabase(ctx.author.id, "speed", speed)
+        embed.description += f"\n読み上げ速度を {speed} に変更したのだ"
+    if pitch is not None:
+        try:
+            int(pitch)
+        except ValueError:
+            embed = discord.Embed(
+                title="**Error**",
+                description=f"valueは数字なのだ",
+                color=discord.Colour.brand_red(),
+            )
+            await ctx.send_followup(embed=embed)
+            return
+
+        await setdatabase(ctx.author.id, "pitch", pitch)
+        embed.description += f"\n読み上げピッチを {pitch} に変更したのだ"
     await ctx.send_followup(embed=embed)
 
 
