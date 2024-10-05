@@ -1714,9 +1714,9 @@ async def on_voice_state_update(member, before, after):
         if await getdatabase(member.guild.id, "is_readsan", False, "guild"):
             name += "さん"
         if after.channel is not None and after.channel.id == voicestate.channel.id:
-            await yomiage(member.guild.me, member.guild, f"{name}が入室したのだ、", no_read_name=True)
+            await yomiage(member, member.guild, f"{name}が入室したのだ、", no_read_name=True)
         elif before.channel is not None and before.channel.id == voicestate.channel.id:
-            await yomiage(member.guild.me, member.guild, f"{name}が退出したのだ、", no_read_name=True)
+            await yomiage(member, member.guild, f"{name}が退出したのだ、", no_read_name=True)
 
 
 # ボットのみか確認
