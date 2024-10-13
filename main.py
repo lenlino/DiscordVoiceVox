@@ -1144,6 +1144,11 @@ async def deletedict(ctx, uuid: discord.Option(input_type=str, description="辞�
     await message.add_reaction("⭕")
     await message.add_reaction("❌")
 
+'''@bot.slash_command(description="目覚ましや時報などを設定できます")
+async def alart(ctx, time: discord.Option(input_type=str, description="時刻 例 19:00", required=True),
+                loop: discord.Option(input_type=discord.Option.input_type.boolean, description="ループ設定", required=False, default=True)):
+    pass'''
+
 
 async def get_connection():
     return await asyncpg.create_pool('postgresql://{user}:{password}@{host}:{port}/{dbname}'
@@ -1844,11 +1849,11 @@ async def premium_user_check_loop():
     premium_server_list_500.clear()
     premium_server_list_1000.clear()
 
-    for d in stripe.Subscription.search(limit=100,
-                                        query="status:'active' AND -metadata['discord_user_id']:null").auto_paging_iter():
+    async for d in (await stripe.Subscription.search_auto_paging_iter_async(limit=100,
+                                        query="status:'active' AND -metadata['discord_user_id']:null")):
         await add_premium_lopp(d)
-    for d in stripe.Subscription.search(limit=100,
-                                        query="status:'trialing' AND -metadata['discord_user_id']:null").auto_paging_iter():
+    async for d in (await stripe.Subscription.search_auto_paging_iter_async(limit=100,
+                                        query="status:'trialing' AND -metadata['discord_user_id']:null")):
         await add_premium_lopp(d)
 
 
