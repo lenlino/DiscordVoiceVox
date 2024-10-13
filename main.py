@@ -1849,11 +1849,11 @@ async def premium_user_check_loop():
     premium_server_list_500.clear()
     premium_server_list_1000.clear()
 
-    async for d in (await stripe.Subscription.search_auto_paging_iter_async(limit=100,
-                                        query="status:'active' AND -metadata['discord_user_id']:null")):
+    async for d in (await stripe.Subscription.search_async(limit=100,
+                                        query="status:'active' AND -metadata['discord_user_id']:null")).auto_paging_iter():
         await add_premium_lopp(d)
-    async for d in (await stripe.Subscription.search_auto_paging_iter_async(limit=100,
-                                        query="status:'trialing' AND -metadata['discord_user_id']:null")):
+    async for d in (await stripe.Subscription.search_async(limit=100,
+                                        query="status:'trialing' AND -metadata['discord_user_id']:null")).auto_paging_iter():
         await add_premium_lopp(d)
 
 
