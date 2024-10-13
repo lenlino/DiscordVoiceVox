@@ -591,10 +591,10 @@ async def set(ctx, key: discord.Option(str, choices=[
             )
             await ctx.send_followup(embed=embed)
             return
-        if int(value) < 80:
+        if int(value) < 50:
             embed = discord.Embed(
                 title="**Error**",
-                description=f"80以上の数字で設定できます。",
+                description=f"50以上の数字で設定できます。",
                 color=discord.Colour.brand_red(),
             )
             await ctx.send_followup(embed=embed)
@@ -891,7 +891,9 @@ async def server_set(ctx, key: discord.Option(str, choices=[
 
 @bot.slash_command(description="自分の声を変更できるのだ")
 async def setvc(ctx, voiceid: discord.Option(required=False, input_type=int,
-                                             description="指定しない場合は一覧が表示されます")):
+                                             description="指定しない場合は一覧が表示されます"),
+                speed: discord.Option(required=False, input_type=int, description="速度"),
+                pitch: discord.Option(required=False, input_type=int, description="ピッチ")):
     await ctx.defer()
     if (voiceid is None):
         test_pages = []
@@ -953,6 +955,39 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=int,
     if 4000 > int(voiceid) >= 3000:
         embed.description = f"**{name}** id:{voiceid}に変更したのだ\n**A.I.VOICEは録音・配信での利用はできません**"
     #print(f"**{name}**")
+    if speed is not None:
+        if speed.isdecimal() is False:
+            embed = discord.Embed(
+                title="**Error**",
+                description=f"speedは数字なのだ",
+                color=discord.Colour.brand_red(),
+            )
+            await ctx.send_followup(embed=embed)
+            return
+        if int(speed) < 50:
+            embed = discord.Embed(
+                title="**Error**",
+                description=f"speedは50以上の数字で設定できます。",
+                color=discord.Colour.brand_red(),
+            )
+            await ctx.send_followup(embed=embed)
+            return
+        await setdatabase(ctx.author.id, "speed", speed)
+        embed.description += f"\n読み上げ速度を {speed} に変更したのだ"
+    if pitch is not None:
+        try:
+            int(pitch)
+        except ValueError:
+            embed = discord.Embed(
+                title="**Error**",
+                description=f"valueは数字なのだ",
+                color=discord.Colour.brand_red(),
+            )
+            await ctx.send_followup(embed=embed)
+            return
+
+        await setdatabase(ctx.author.id, "pitch", pitch)
+        embed.description += f"\n読み上げピッチを {pitch} に変更したのだ"
     await ctx.send_followup(embed=embed)
 
 
@@ -1108,6 +1143,11 @@ async def deletedict(ctx, uuid: discord.Option(input_type=str, description="辞�
     message = await res.original_response()
     await message.add_reaction("⭕")
     await message.add_reaction("❌")
+
+'''@bot.slash_command(description="目覚ましや時報などを設定できます")
+async def alart(ctx, time: discord.Option(input_type=str, description="時刻 例 19:00", required=True),
+                loop: discord.Option(input_type=discord.Option.input_type.boolean, description="ループ設定", required=False, default=True)):
+    pass'''
 
 
 async def get_connection():
@@ -1679,9 +1719,9 @@ async def on_voice_state_update(member, before, after):
         if await getdatabase(member.guild.id, "is_readsan", False, "guild"):
             name += "さん"
         if after.channel is not None and after.channel.id == voicestate.channel.id:
-            await yomiage(member.guild.me, member.guild, f"{name}が入室したのだ、", no_read_name=True)
+            await yomiage(member, member.guild, f"{name}が入室したのだ、", no_read_name=True)
         elif before.channel is not None and before.channel.id == voicestate.channel.id:
-            await yomiage(member.guild.me, member.guild, f"{name}が退出したのだ、", no_read_name=True)
+            await yomiage(member, member.guild, f"{name}が退出したのだ、", no_read_name=True)
 
 
 # ボットのみか確認
@@ -1809,11 +1849,11 @@ async def premium_user_check_loop():
     premium_server_list_500.clear()
     premium_server_list_1000.clear()
 
-    for d in stripe.Subscription.search(limit=100,
-                                        query="status:'active' AND -metadata['discord_user_id']:null").auto_paging_iter():
+    async for d in (await stripe.Subscription.search_auto_paging_iter_async(limit=100,
+                                        query="status:'active' AND -metadata['discord_user_id']:null")):
         await add_premium_lopp(d)
-    for d in stripe.Subscription.search(limit=100,
-                                        query="status:'trialing' AND -metadata['discord_user_id']:null").auto_paging_iter():
+    async for d in (await stripe.Subscription.search_auto_paging_iter_async(limit=100,
+                                        query="status:'trialing' AND -metadata['discord_user_id']:null")):
         await add_premium_lopp(d)
 
 
