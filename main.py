@@ -1615,18 +1615,22 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         else:
             source = await discord.FFmpegOpusAudio.from_probe(source=filename)
 
-
+    except Exception as e:
+        logger.error(e)
+    else:
+        if is_lavalink:
+            player = guild.voice_client
+            filters: wavelink.Filters = player.filters
+            filters.timescale.set(speed=float(float(speed) / 100), pitch=float(float(pitch) / 100) + 1)
+            await player.play(source, filters=filters)
+        else:
+            guild.voice_client.play(source)
     finally:
         generating_guilds.get(guild.id, []).remove(text)
-        generating_guild_set.remove(guild.id)
+        generating_guild_set.discard(guild.id)
 
-    if is_lavalink:
-        player = guild.voice_client
-        filters: wavelink.Filters = player.filters
-        filters.timescale.set(speed=float(float(speed) / 100), pitch=float(float(pitch) / 100) + 1)
-        await player.play(source, filters=filters)
-    else:
-        guild.voice_client.play(source)
+
+
 
 
 @bot.event
