@@ -1763,7 +1763,7 @@ async def status_update_loop():
                 continue
             if alarm_youbi_list[now_youbi] == "0":
                 continue
-            alarm_message = alarm.get('&message', 'アラームなのだ')
+            alarm_message = alarm.get('message', 'アラームなのだ')
             await yomiage(guild.me, guild, f"{alarm_message}")
             try:
                 await guild.get_channel(vclist[key]).send(embed=discord.Embed(
@@ -2264,6 +2264,7 @@ async def connect_websocket():
 
 if __name__ == '__main__':
     bot.loop.create_task(init_loop())
+    bot.load_extension('commands.SetAlarmCommand')
     bot.run(token)
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
