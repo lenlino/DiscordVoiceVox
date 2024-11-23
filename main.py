@@ -46,6 +46,7 @@ is_lavalink = True
 coeiroink_host = os.environ.get("COEIROINK_HOST", "127.0.0.1:50032")
 sharevox_host = os.environ.get("SHAREVOX_HOST", "127.0.0.1:50025")
 aivoice_host = os.environ.get("AIVOICE_HOST", "127.0.0.1:8001")
+aivis_host = os.environ.get("AIVIS_HOST", "127.0.0.1:8001")
 lavalink_host_list = os.environ.get("LAVALINK_HOST", "http://127.0.0.1:2333").split(",")
 lavalink_uploader = os.environ.get("LAVALINK_UPLOADER", None)
 gpu_host = os.environ.get("GPU_HOST", host)
@@ -159,6 +160,16 @@ async def init_voice_list():
     headers = {'Content-Type': 'application/json', }
     json = []
     async with aiohttp.ClientSession() as session:
+
+        async with session.get(
+            f'http://{host}/speakers',
+            headers=headers,
+            timeout=10
+        ) as response2:
+            json2: list = await response2.json()
+            for voice_info in json2:
+                voice_info["name"] = "VOICEVOX:" + voice_info["name"]
+            json.extend(json2)
         try:
             async with session.get(
                 f'http://{aivoice_host}/speakers',
@@ -174,31 +185,19 @@ async def init_voice_list():
                 json.extend(json2)
         except:
             print("AIVOICE接続なし")
-        async with session.get(
-            f'http://{host}/speakers',
-            headers=headers,
-            timeout=10
-        ) as response2:
-            json2: list = await response2.json()
-            for voice_info in json2:
-                voice_info["name"] = "VOICEVOX:" + voice_info["name"]
-            json.extend(json2)
-        '''try:
+        try:
             async with session.get(
-                f'http://{coeiroink_host}/v1/speakers',
+                f'http://{aivis_host}/speakers',
                 headers=headers,
                 timeout=10
             ) as response3:
                 json2: list = await response3.json()
                 for voice_info in json2:
-                    voice_info["name"] = "COEIROINK:" + voice_info["speakerName"]
-                    for style_info in voice_info["styles"]:
-                        style_info["id"] = style_info["styleId"] + 1000
-                        style_info["name"] = style_info["styleName"]
+                    voice_info["name"] = "Aivis:" + voice_info["name"]
 
                 json.extend(json2)
         except:
-            print("COEIROINK接続なし")'''
+            print("Aivis接続なし")
         try:
             async with session.get(
                 f'http://{coeiroink_host}/speakers',
@@ -1751,6 +1750,30 @@ async def status_update_loop():
         if guild.voice_client is None or guild.voice_client.channel is None:
             del vclist[key]
             remove_premium_guild_dict(str(guild.id))
+            continue
+
+        setting_json = await get_guild_setting(guild.id)
+        alarm_setting_json = setting_json.get("alarm", [])
+        now_datetime = datetime.datetime.now()
+        now_youbi = now_datetime.weekday()
+        for alarm in alarm_setting_json:
+            alarm_datetime = datetime.datetime.strptime(alarm.get("time", "2023/4/1 11:11"), "%Y/%m/%d %H:%M")
+            alarm_youbi_list = alarm.get("loop", "1111111")
+            if now_datetime.hour != alarm_datetime.hour or now_datetime.minute != alarm_datetime.minute:
+                continue
+            if alarm_youbi_list[now_youbi] == "0":
+                continue
+            alarm_message = alarm.get('&message', 'アラームなのだ')
+            await yomiage(guild.me, guild, f"{alarm_message}")
+            try:
+                await guild.get_channel(vclist[key]).send(embed=discord.Embed(
+                    title=f"Alarm",
+                    description=f"{alarm_message}",
+                    color=discord.Color.gold()
+                ))
+            except:
+                pass
+
     if len(voice_generate_time_list) != 0 and len(voice_generate_time_list_p) != 0:
         avarage = sum(voice_generate_time_list) / len(voice_generate_time_list)
         avarage_p = sum(voice_generate_time_list_p) / len(voice_generate_time_list_p)
