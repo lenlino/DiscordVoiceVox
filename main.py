@@ -1189,7 +1189,9 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0", guil
         counter = 0
     filename = "temp" + str(counter) + ".wav"
 
-    if voiceid >= 3000:
+    if voiceid >= 4000:
+        target_host = f"{aivis_host}"
+    elif voiceid >= 3000:
         target_host = f"{aivoice_host}"
         voiceid -= 3000
     elif voiceid >= 2000:
@@ -1249,6 +1251,8 @@ async def generate_wav(text, speaker=1, filepath='audio.wav', target_host='local
         return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, volume=0.8)
     elif aivoice_host == target_host:
         return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath)
+    elif aivis_host == target_host:
+        return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, query_host=target_host)
     else:
         return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath,
                                use_gpu_server=use_gpu_server, query_host=query_host)
