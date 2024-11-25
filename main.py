@@ -21,7 +21,7 @@ import discord
 import stripe
 import wavelink
 import websockets
-from aiohttp import FormData
+from aiohttp import FormData, ClientTimeout
 from discord.ext import tasks, pages
 from requests import ReadTimeout
 from ko2kana import toKana
@@ -1308,7 +1308,7 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
     try:
         if query_host is None:
             query_host = target_host
-        async with aiohttp.ClientSession(connector_owner=False, connector=conn) as private_session:
+        async with aiohttp.ClientSession(connector_owner=False, connector=conn, timeout=ClientTimeout(connect=5)) as private_session:
             async with private_session.post(f'http://{query_host}/audio_query',
                                             params=params,
                                             timeout=10) as response1:
@@ -1408,7 +1408,7 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
     except:
         '''if use_gpu_server:
             is_use_gpu_server = False'''
-        #print("aa")
+        print(f"failed ({target_host}: {params} {speaker} use_gpu: {is_use_gpu_server})")
         import traceback
         traceback.print_exc()
         return "failed"
