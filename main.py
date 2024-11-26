@@ -21,7 +21,7 @@ import discord
 import stripe
 import wavelink
 import websockets
-from aiohttp import FormData
+from aiohttp import FormData, ClientTimeout
 from discord.ext import tasks, pages
 from requests import ReadTimeout
 from ko2kana import toKana
@@ -46,6 +46,7 @@ is_lavalink = True
 coeiroink_host = os.environ.get("COEIROINK_HOST", "127.0.0.1:50032")
 sharevox_host = os.environ.get("SHAREVOX_HOST", "127.0.0.1:50025")
 aivoice_host = os.environ.get("AIVOICE_HOST", "127.0.0.1:8001")
+aivis_host = os.environ.get("AIVIS_HOST", "127.0.0.1:8001")
 lavalink_host_list = os.environ.get("LAVALINK_HOST", "http://127.0.0.1:2333").split(",")
 lavalink_uploader = os.environ.get("LAVALINK_UPLOADER", None)
 gpu_host = os.environ.get("GPU_HOST", host)
@@ -117,6 +118,7 @@ handler = logging.FileHandler(filename=os.path.dirname(os.path.abspath(__file__)
 handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
 logger.addHandler(handler)
 default_conn = None
+default_gpu_conn = None
 premium_conn = None
 
 is_use_gpu_server_enabled: bool = bool(os.getenv("IS_GPU", "False") == "True")
@@ -159,6 +161,16 @@ async def init_voice_list():
     headers = {'Content-Type': 'application/json', }
     json = []
     async with aiohttp.ClientSession() as session:
+
+        async with session.get(
+            f'http://{host}/speakers',
+            headers=headers,
+            timeout=10
+        ) as response2:
+            json2: list = await response2.json()
+            for voice_info in json2:
+                voice_info["name"] = "VOICEVOX:" + voice_info["name"]
+            json.extend(json2)
         try:
             async with session.get(
                 f'http://{aivoice_host}/speakers',
@@ -174,31 +186,19 @@ async def init_voice_list():
                 json.extend(json2)
         except:
             print("AIVOICE接続なし")
-        async with session.get(
-            f'http://{host}/speakers',
-            headers=headers,
-            timeout=10
-        ) as response2:
-            json2: list = await response2.json()
-            for voice_info in json2:
-                voice_info["name"] = "VOICEVOX:" + voice_info["name"]
-            json.extend(json2)
-        '''try:
+        try:
             async with session.get(
-                f'http://{coeiroink_host}/v1/speakers',
+                f'http://{aivis_host}/speakers',
                 headers=headers,
                 timeout=10
             ) as response3:
                 json2: list = await response3.json()
                 for voice_info in json2:
-                    voice_info["name"] = "COEIROINK:" + voice_info["speakerName"]
-                    for style_info in voice_info["styles"]:
-                        style_info["id"] = style_info["styleId"] + 1000
-                        style_info["name"] = style_info["styleName"]
+                    voice_info["name"] = "Aivis:" + voice_info["name"]
 
                 json.extend(json2)
         except:
-            print("COEIROINK接続なし")'''
+            print("Aivis接続なし")
         try:
             async with session.get(
                 f'http://{coeiroink_host}/speakers',
@@ -1190,7 +1190,9 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0", guil
         counter = 0
     filename = "temp" + str(counter) + ".wav"
 
-    if voiceid >= 3000:
+    if voiceid >= 4000:
+        target_host = f"{aivis_host}"
+    elif voiceid >= 3000:
         target_host = f"{aivoice_host}"
         voiceid -= 3000
     elif voiceid >= 2000:
@@ -1228,12 +1230,8 @@ async def generate_wav(text, speaker=1, filepath='audio.wav', target_host='local
         ('text', text),
         ('speaker', speaker),
     )
-    len_limit = 80
-    if is_premium:
-        conn = premium_conn
-        len_limit = 160
-    else:
-        conn = default_conn
+
+
     if int(speed) < 80:
         speed = 100
 
@@ -1244,12 +1242,23 @@ async def generate_wav(text, speaker=1, filepath='audio.wav', target_host='local
     elif is_use_gpu_server and is_premium and await is_premium_check(guild_id, 500):
         use_gpu_server = True
 
+    len_limit = 80
+    if is_premium:
+        conn = premium_conn
+        len_limit = 160
+    elif is_use_gpu_server:
+        conn = default_gpu_conn
+    else:
+        conn = default_conn
+
     # COEIROINKAPI用に対応
     if coeiroink_host == target_host or sharevox_host == target_host:
         # return await synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, filepath)
         return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, volume=0.8)
     elif aivoice_host == target_host:
         return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath)
+    elif aivis_host == target_host:
+        return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, query_host=target_host)
     else:
         return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath,
                                use_gpu_server=use_gpu_server, query_host=query_host)
@@ -1305,7 +1314,7 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
     try:
         if query_host is None:
             query_host = target_host
-        async with aiohttp.ClientSession(connector_owner=False, connector=conn) as private_session:
+        async with aiohttp.ClientSession(connector_owner=False, connector=conn, timeout=ClientTimeout(connect=5)) as private_session:
             async with private_session.post(f'http://{query_host}/audio_query',
                                             params=params,
                                             timeout=10) as response1:
@@ -1405,7 +1414,7 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
     except:
         '''if use_gpu_server:
             is_use_gpu_server = False'''
-        #print("aa")
+        print(f"failed ({target_host}: {params} {speaker} use_gpu: {is_use_gpu_server})")
         import traceback
         traceback.print_exc()
         return "failed"
@@ -1751,6 +1760,30 @@ async def status_update_loop():
         if guild.voice_client is None or guild.voice_client.channel is None:
             del vclist[key]
             remove_premium_guild_dict(str(guild.id))
+            continue
+
+        setting_json = await get_guild_setting(guild.id)
+        alarm_setting_json = setting_json.get("alarm", [])
+        now_datetime = datetime.datetime.now()
+        now_youbi = now_datetime.weekday()
+        for alarm in alarm_setting_json:
+            alarm_datetime = datetime.datetime.strptime(alarm.get("time", "2023/4/1 11:11"), "%Y/%m/%d %H:%M")
+            alarm_youbi_list = alarm.get("loop", "1111111")
+            if now_datetime.hour != alarm_datetime.hour or now_datetime.minute != alarm_datetime.minute:
+                continue
+            if alarm_youbi_list[now_youbi] == "0":
+                continue
+            alarm_message = alarm.get('message', 'アラームなのだ')
+            await yomiage(guild.me, guild, f"{alarm_message}")
+            try:
+                await guild.get_channel(vclist[key]).send(embed=discord.Embed(
+                    title=f"Alarm",
+                    description=f"{alarm_message}",
+                    color=discord.Color.gold()
+                ))
+            except:
+                pass
+
     if len(voice_generate_time_list) != 0 and len(voice_generate_time_list_p) != 0:
         avarage = sum(voice_generate_time_list) / len(voice_generate_time_list)
         avarage_p = sum(voice_generate_time_list_p) / len(voice_generate_time_list_p)
@@ -1864,8 +1897,10 @@ async def premium_user_check_loop():
 @tasks.loop(minutes=1)
 async def init_loop():
     global default_conn
+    global default_gpu_conn
     global premium_conn
     default_conn = aiohttp.TCPConnector(limit=20)
+    default_gpu_conn = aiohttp.TCPConnector(limit=20)
     premium_conn = aiohttp.TCPConnector(limit=0)
     global pool
     pool = await get_connection()
@@ -2241,6 +2276,7 @@ async def connect_websocket():
 
 if __name__ == '__main__':
     bot.loop.create_task(init_loop())
+    bot.load_extension('commands.SetAlarmCommand')
     bot.run(token)
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
