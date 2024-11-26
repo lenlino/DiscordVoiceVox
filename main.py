@@ -118,6 +118,7 @@ handler = logging.FileHandler(filename=os.path.dirname(os.path.abspath(__file__)
 handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
 logger.addHandler(handler)
 default_conn = None
+default_gpu_conn = None
 premium_conn = None
 
 is_use_gpu_server_enabled: bool = bool(os.getenv("IS_GPU", "False") == "True")
@@ -1229,12 +1230,8 @@ async def generate_wav(text, speaker=1, filepath='audio.wav', target_host='local
         ('text', text),
         ('speaker', speaker),
     )
-    len_limit = 80
-    if is_premium:
-        conn = premium_conn
-        len_limit = 160
-    else:
-        conn = default_conn
+
+
     if int(speed) < 80:
         speed = 100
 
@@ -1244,6 +1241,15 @@ async def generate_wav(text, speaker=1, filepath='audio.wav', target_host='local
         use_gpu_server = True
     elif is_use_gpu_server and is_premium and await is_premium_check(guild_id, 500):
         use_gpu_server = True
+
+    len_limit = 80
+    if is_premium:
+        conn = premium_conn
+        len_limit = 160
+    elif is_use_gpu_server:
+        conn = default_gpu_conn
+    else:
+        conn = default_conn
 
     # COEIROINKAPI用に対応
     if coeiroink_host == target_host or sharevox_host == target_host:
@@ -1891,8 +1897,10 @@ async def premium_user_check_loop():
 @tasks.loop(minutes=1)
 async def init_loop():
     global default_conn
+    global default_gpu_conn
     global premium_conn
     default_conn = aiohttp.TCPConnector(limit=20)
+    default_gpu_conn = aiohttp.TCPConnector(limit=20)
     premium_conn = aiohttp.TCPConnector(limit=0)
     global pool
     pool = await get_connection()
