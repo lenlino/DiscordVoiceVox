@@ -1215,6 +1215,7 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0", guil
         voice_cache_counter_dict[voiceid] = {}
         voice_cache_dict[voiceid] = {}
     voice_cache_counter_dict[voiceid][text] = voice_cache_counter_dict.get(voiceid, {}).get(text, 0) + 1
+    filename = None
     if voice_cache_counter_dict[voiceid][text] > 50:
         filename = f"cache/{text}-{voiceid}.wav"
         voice_cache_dict[voiceid][text] = filename
@@ -1222,7 +1223,7 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0", guil
                               is_premium=is_premium, speed=speed, pitch=pitch, guild_id=guild_id)
 
 
-async def generate_wav(text, speaker=1, filepath='audio.wav', target_host='localhost', target_port=50021,
+async def generate_wav(text, speaker=1, filepath=None, target_host='localhost', target_port=50021,
                        is_premium=False, speed="100", pitch="0", guild_id="0"):
     params = (
         ('text', text),
@@ -1315,12 +1316,12 @@ def get_temp_name():
     return "temp" + str(counter) + ".wav"
 
 
-async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, volume=1.0,
+async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath=None, volume=1.0,
                     use_gpu_server=False, query_host=None):
     try:
         if query_host is None:
             query_host = target_host
-
+        dir = os.path.dirname(os.path.abspath(__file__)) + "/" + filepath
         async with aiohttp.ClientSession(connector_owner=False, connector=conn, timeout=ClientTimeout(connect=5)) as private_session:
             async with private_session.post(f'http://{query_host}/audio_query',
                                             params=params,
@@ -1337,7 +1338,8 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                 if target_host == aivoice_host:
 
                     try:
-                        dir = os.path.dirname(os.path.abspath(__file__)) + "/output/" + get_temp_name()
+                        if filepath is None:
+                            dir = os.path.dirname(os.path.abspath(__file__)) + "/output/" + get_temp_name()
                         async with aiofiles.open(dir,
                                                  mode='wb') as f:
                             await f.write(await response1.read())
@@ -1402,7 +1404,8 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
 
                 try:
                     if lavalink_uploader is None:
-                        dir = os.path.dirname(os.path.abspath(__file__)) + "/output/" + get_temp_name()
+                        if filepath is None:
+                            dir = os.path.dirname(os.path.abspath(__file__)) + "/output/" + get_temp_name()
                         async with aiofiles.open(dir,
                                                  mode='wb') as f:
                             await f.write(await response2.read())
