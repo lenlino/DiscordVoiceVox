@@ -466,6 +466,8 @@ async def vc(ctx):
                 return
         else:
             await ctx.author.voice.channel.connect()
+        if (ctx.author.voice.channel.permissions_for(ctx.guild.me)).deafen_members:
+            await ctx.me.edit(deafen=True)
         embed = discord.Embed(
             title="Connect",
             color=discord.Colour.brand_green(),
@@ -1686,6 +1688,8 @@ async def on_voice_state_update(member, before, after):
                 await after.channel.guild.get_channel(autojoin["text_channel_id"]).send(embed=embed)
             try:
                 await after.channel.connect(cls=wavelink.Player)
+                if (after.channel.permissions_for(after.channel.guild.me)).deafen_members:
+                    await after.channel.guild.me.edit(deafen=True)
             except Exception as e:
                 logger.error(e)
                 logger.error("自動接続")
