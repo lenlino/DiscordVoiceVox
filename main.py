@@ -466,6 +466,8 @@ async def vc(ctx):
                 return
         else:
             await ctx.author.voice.channel.connect()
+        if (ctx.author.voice.channel.permissions_for(ctx.guild.me)).deafen_members:
+            await ctx.me.edit(deafen=True)
         embed = discord.Embed(
             title="Connect",
             color=discord.Colour.brand_green(),
@@ -1184,11 +1186,7 @@ async def setdatabase(userid, id, value, table="voice"):
 
 
 async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0", guild_id="0"):
-    global counter
-    counter += 1
-    if counter > 200:
-        counter = 0
-    filename = "temp" + str(counter) + ".wav"
+
 
     if voiceid >= 4000:
         target_host = f"{aivis_host}"
@@ -1217,6 +1215,7 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0", guil
         voice_cache_counter_dict[voiceid] = {}
         voice_cache_dict[voiceid] = {}
     voice_cache_counter_dict[voiceid][text] = voice_cache_counter_dict.get(voiceid, {}).get(text, 0) + 1
+    filename = None
     if voice_cache_counter_dict[voiceid][text] > 50:
         filename = f"cache/{text}-{voiceid}.wav"
         voice_cache_dict[voiceid][text] = filename
@@ -1224,7 +1223,7 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0", guil
                               is_premium=is_premium, speed=speed, pitch=pitch, guild_id=guild_id)
 
 
-async def generate_wav(text, speaker=1, filepath='audio.wav', target_host='localhost', target_port=50021,
+async def generate_wav(text, speaker=1, filepath=None, target_host='localhost', target_port=50021,
                        is_premium=False, speed="100", pitch="0", guild_id="0"):
     params = (
         ('text', text),
@@ -1309,11 +1308,21 @@ async def synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, fi
         return False
 
 
-async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, volume=1.0,
+def get_temp_name():
+    global counter
+    counter += 1
+    if counter > 500:
+        counter = 0
+    return "temp" + str(counter) + ".wav"
+
+
+async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath=None, volume=1.0,
                     use_gpu_server=False, query_host=None):
     try:
         if query_host is None:
             query_host = target_host
+        if filepath is not None:
+            dir = os.path.dirname(os.path.abspath(__file__)) + "/" + filepath
         async with aiohttp.ClientSession(connector_owner=False, connector=conn, timeout=ClientTimeout(connect=5)) as private_session:
             async with private_session.post(f'http://{query_host}/audio_query',
                                             params=params,
@@ -1328,8 +1337,10 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
 
                 #AIVOICEは１回で終了
                 if target_host == aivoice_host:
-                    dir = os.path.dirname(os.path.abspath(__file__)) + "/" + filepath
+
                     try:
+                        if filepath is None:
+                            dir = os.path.dirname(os.path.abspath(__file__)) + "/output/" + get_temp_name()
                         async with aiofiles.open(dir,
                                                  mode='wb') as f:
                             await f.write(await response1.read())
@@ -1391,9 +1402,11 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                         is_use_gpu_server = False'''
                     logger.warning(await response2.json())
                     return "failed"
-                dir = os.path.dirname(os.path.abspath(__file__)) + "/" + filepath
+
                 try:
                     if lavalink_uploader is None:
+                        if filepath is None:
+                            dir = os.path.dirname(os.path.abspath(__file__)) + "/output/" + get_temp_name()
                         async with aiofiles.open(dir,
                                                  mode='wb') as f:
                             await f.write(await response2.read())
@@ -1414,7 +1427,7 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
     except:
         '''if use_gpu_server:
             is_use_gpu_server = False'''
-        print(f"failed ({target_host}: {params} {speaker} use_gpu: {is_use_gpu_server})")
+        print(f"failed ({target_host}: {params} {speaker} use_gpu: {use_gpu_server})")
         import traceback
         traceback.print_exc()
         return "failed"
@@ -1686,6 +1699,8 @@ async def on_voice_state_update(member, before, after):
                 await after.channel.guild.get_channel(autojoin["text_channel_id"]).send(embed=embed)
             try:
                 await after.channel.connect(cls=wavelink.Player)
+                if (after.channel.permissions_for(after.channel.guild.me)).deafen_members:
+                    await after.channel.guild.me.edit(deafen=True)
             except Exception as e:
                 logger.error(e)
                 logger.error("自動接続")
