@@ -1321,7 +1321,8 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
     try:
         if query_host is None:
             query_host = target_host
-        dir = os.path.dirname(os.path.abspath(__file__)) + "/" + filepath
+        if filepath is not None:
+            dir = os.path.dirname(os.path.abspath(__file__)) + "/" + filepath
         async with aiohttp.ClientSession(connector_owner=False, connector=conn, timeout=ClientTimeout(connect=5)) as private_session:
             async with private_session.post(f'http://{query_host}/audio_query',
                                             params=params,
