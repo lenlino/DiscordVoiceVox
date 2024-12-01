@@ -1443,7 +1443,8 @@ async def on_message(message):
     voice = message.guild.voice_client
 
     if voice is not None and message.guild.id in vclist.keys() and message.channel.id == vclist[message.guild.id]:
-        await yomiage(message.author, message.guild, message.content)
+        asyncio.create_task(yomiage(message.author, message.guild, message.content))
+        return
     else:
         return
 
