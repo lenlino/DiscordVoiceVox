@@ -1443,8 +1443,7 @@ async def on_message(message):
     voice = message.guild.voice_client
 
     if voice is not None and message.guild.id in vclist.keys() and message.channel.id == vclist[message.guild.id]:
-        asyncio.create_task(yomiage(message.author, message.guild, message.content))
-        return
+        await yomiage(message.author, message.guild, message.content)
     else:
         return
 
@@ -1915,9 +1914,9 @@ async def init_loop():
     global default_conn
     global default_gpu_conn
     global premium_conn
-    default_conn = aiohttp.TCPConnector(limit=20)
-    default_gpu_conn = aiohttp.TCPConnector(limit=20)
-    premium_conn = aiohttp.TCPConnector(limit=0)
+    default_conn = aiohttp.TCPConnector(limit=20, limit_per_host=3)
+    default_gpu_conn = aiohttp.TCPConnector(limit=20, limit_per_host=3)
+    premium_conn = aiohttp.TCPConnector(limit=20, limit_per_host=3)
     global pool
     pool = await get_connection()
 
