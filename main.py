@@ -353,11 +353,13 @@ class ActivateModal(discord.ui.Modal):
             embed.description = "ユーザーが存在しません。"
             await interaction.followup.send(embeds=[embed], ephemeral=True)
             return
-        customer_id = customer[0]["id"]
+        customer_ids = []
+        for customer_set in customer:
+            customer_ids.append(customer_set["id"])
         target_subscription = []
         for subscription in stripe.Subscription.search(
             query=f"status:'active' AND metadata['discord_user_id']:null").auto_paging_iter():
-            if subscription["customer"] == customer_id:
+            if subscription["customer"] in customer_ids:
                 target_subscription.append(subscription)
                 break
         if len(target_subscription) == 0:
