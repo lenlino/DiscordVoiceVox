@@ -1916,9 +1916,9 @@ async def init_loop():
     global default_conn
     global default_gpu_conn
     global premium_conn
-    default_conn = aiohttp.TCPConnector(limit=20, limit_per_host=3)
-    default_gpu_conn = aiohttp.TCPConnector(limit=20, limit_per_host=3)
-    premium_conn = aiohttp.TCPConnector(limit=20, limit_per_host=3)
+    default_conn = aiohttp.TCPConnector(limit=20, limit_per_host=5)
+    default_gpu_conn = aiohttp.TCPConnector(limit=20, limit_per_host=5)
+    premium_conn = aiohttp.TCPConnector(limit=20, limit_per_host=5)
     global pool
     pool = await get_connection()
 

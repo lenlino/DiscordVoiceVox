@@ -20,7 +20,7 @@ class SetAlarmCommand(commands.Cog):
                                                value=str(i)))
         return result
 
-    @discord.slash_command(name="setalarm", description="アラーム設定(alarm setting)", guild_ids=["864441028866080768"])
+    @discord.slash_command(name="setalarm", description="アラーム設定(alarm setting)")
     @discord.commands.default_permissions(manage_messages=True)
     async def set_alarm_command(self, ctx, action: discord.Option(required=True, input_type=str, description="リスト", choices=["add", "del", "list"]),
                            time: discord.Option(required=False, input_type=str, description="時刻(例[5:10]: 0510)", min_length=4, max_length=4),
@@ -34,6 +34,10 @@ class SetAlarmCommand(commands.Cog):
             description=f"50文字以下の単語のみ登録できます。",
             color=discord.Colour.brand_red(),
         )
+        if await main.is_premium_check(ctx.author.id, 100) is False:
+            embed.description = "プレミアムプラン限定機能です"
+            await ctx.send_followup(embed=embed)
+            return
         setting_json = await main.get_guild_setting(ctx.guild.id)
         alarm_setting_json = setting_json.get("alarm", [])
         if action == "add":
