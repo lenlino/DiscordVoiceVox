@@ -1655,7 +1655,6 @@ async def connect_waves(wave_list):
             async with private_session.post(f'http://{host}/connect_waves',
                                             data=json.dumps(bytes_list), headers=headers,
                                             timeout=10) as response1:
-                print(response1.status)
                 if response1.status != 200:
                     print((await response1.json())["detail"])
                     return None
