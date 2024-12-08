@@ -3,6 +3,7 @@
 # Press Shift+F10 to execute it or replace it with your code.
 # Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
 import asyncio
+import base64
 import datetime
 import json
 import logging
@@ -51,7 +52,7 @@ lavalink_host_list = os.environ.get("LAVALINK_HOST", "http://127.0.0.1:2333").sp
 lavalink_uploader = os.environ.get("LAVALINK_UPLOADER", None)
 gpu_host = os.environ.get("GPU_HOST", host)
 DictChannel = 1057517276674400336
-ManagerGuilds = [888020016660893726]
+ManagerGuilds = [888020016660893726,864441028866080768]
 intents = discord.Intents.none()
 intents.message_content = True
 intents.guilds = True
@@ -1073,7 +1074,7 @@ async def auto_join():
 
 
 @bot.slash_command(description="辞書に単語を追加するのだ(全サーバー)", guild_ids=ManagerGuilds)
-async def adddict(ctx, surface: discord.Option(input_type=str, description="辞書に登録する単語"),
+async def addglobaldict(ctx, surface: discord.Option(input_type=str, description="辞書に登録する単語"),
                   pronunciation: discord.Option(input_type=str, description="カタカナでの読み方")):
     print(surface)
     """if (surface.startswith("<") and surface.endswith(">")) or emoji.is_emoji(surface):
@@ -1126,7 +1127,7 @@ async def adddict(ctx, surface: discord.Option(input_type=str, description="辞�
 
 
 @bot.slash_command(description="辞書から単語を削除するのだ(全サーバー)", guild_ids=ManagerGuilds)
-async def deletedict(ctx, uuid: discord.Option(input_type=str, description="辞書から削除する単語", required=True)):
+async def deleteglobaldict(ctx, uuid: discord.Option(input_type=str, description="辞書から削除する単語", required=True)):
     headers = {'Content-Type': 'application/json', }
     embed = discord.Embed(
         title="**Delete Dict**",
@@ -1404,28 +1405,30 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                         is_use_gpu_server = False'''
                     logger.warning(await response2.json())
                     return "failed"
+                response2_data = await response2.read()
 
-                try:
-                    if lavalink_uploader is None:
-                        if filepath is None:
-                            dir = os.path.dirname(os.path.abspath(__file__)) + "/output/" + get_temp_name()
-                        async with aiofiles.open(dir,
-                                                 mode='wb') as f:
-                            await f.write(await response2.read())
-                    else:
-                        formdata = FormData()
-                        formdata.add_field('file', await response2.read())
-                        async with private_session.post(f'http://{lavalink_uploader}/send_wav',
-                                                        data=formdata,
-                                                        timeout=30) as response3:
-                            res_text = await response3.text()
-                            if res_text != "error":
-                                return res_text
-                            else:
-                                return "failed"
-                    return dir
-                except ReadTimeout:
-                    return "failed"
+            try:
+                if lavalink_uploader is None:
+                    if filepath is None:
+                        dir = os.path.dirname(os.path.abspath(__file__)) + "/output/" + get_temp_name()
+                    async with aiofiles.open(dir,
+                                             mode='wb') as f:
+                        await f.write(response2_data)
+                else:
+                    #ugokanaiyo
+                    formdata = FormData()
+                    formdata.add_field('file', await response2.read())
+                    async with private_session.post(f'http://{lavalink_uploader}/send_wav',
+                                                    data=formdata,
+                                                    timeout=30) as response3:
+                        res_text = await response3.text()
+                        if res_text != "error":
+                            return res_text
+                        else:
+                            return "failed"
+                return dir
+            except ReadTimeout:
+                return "failed"
     except:
         '''if use_gpu_server:
             is_use_gpu_server = False'''
@@ -1529,57 +1532,22 @@ async def yomiage(member, guild, text: str, no_read_name=False):
     output = re.sub(pattern_voice, "", output)
     output = re.sub(pattern_spoiler, "", output)
 
-    if lang == "ko":
-
-        if len(output) <= 0:
-            return
-        output = re.sub("w{4,100}", "ㅋ", output)
-        if re.search("[^w]", output) is None:
-            output = "ㅋ"
-
-        if voice_id is None:
-            voice_id = await getdatabase(member.id, "voiceid", 0)
-        if len(output) > 50:
-            if is_premium:
-                if len(output) > 100:
-                    output = output[:100] + "이하 약어"
-            else:
-                output = output[:50] + "이하 약어"
-        output = toKana(output)
-        output = output.replace(" ", "")
-    elif lang == "ja":
-        if (await is_premium_check(guild.id, 300) and re.match("[ぁ-んァ-ヶー一-龯]", output) is None
-            and await getdatabase(guild.id, "is_translate", False, "guild")):
-            #print(output)
-            output = ts.translate_text(output, to_language="ja")
-            #print("翻訳")
-
-        output = (await romajitable.to_kana(output)).katakana
-        if len(output) <= 0:
-            return
-        output = re.sub("w{4,100}", "ワラ", output)
-        if re.search("[^w]", output) is None:
-            output = "ワラ"
-
-        if voice_id is None:
-            voice_id = await getdatabase(member.id, "voiceid", 0)
-
-        if is_premium:
-            '''if len(output) > text_limit_300 and guild.id in premium_server_list_300:
-                output = output[:(text_limit_300)] + "以下略"
-            elif len(output) > text_limit_500 and guild.id in premium_server_list_500:
-                output = output[:(text_limit_500)] + "以下略"
-            elif len(output) > text_limit_1000 and guild.id in premium_server_list_1000:
-                output = output[:(text_limit_1000)] + "以下略"
-            elif len(output) > text_limit_1000 and guild.id in premium_server_list:'''
-            if len(output) > text_limit_100:
-                output = output[:(text_limit_100)] + "以下略"
-        else:
-            if len(output) > 50:
-                output = output[:50] + "以下略"
-
     if len(output) <= 0:
         return
+
+    split_output = output.split("#%&$")
+
+    if is_premium:
+        for i in range(len(split_output)):
+            split_text = split_output[i].replace("/", "")
+            voice_path = (f"{user_dict_loc}/audio_data"
+                          f"/{guild.id}/{split_text}")
+            if split_text.endswith(".wav") and os.path.isfile(voice_path):
+                split_output[i] = split_text
+            else:
+                split_output[i] = await honyaku_and_ikaryaku(lang, split_output[i], voice_id, member.id, guild.id, is_premium)
+    else:
+        split_output = [await honyaku_and_ikaryaku(lang, output, voice_id, member.id, guild.id, is_premium)]
 
     try:
         if guild.voice_client is None:
@@ -1596,26 +1564,46 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         done = True
         retry_count = 0
         output_list = []
-        if len(output) > 10000:
-            for i in range(0, len(output), 100):
-                output_list.append(output[i:i + 100])
+        if len(split_output) > 1:
+            output_list = split_output
+        elif len(split_output[0]) > 10000:
+            for i in range(0, len(split_output[0]), 100):
+                output_list.append(split_output[0][i:i + 100])
         else:
-            output_list.append(output)
+            output_list.append(split_output[0])
+
         speed = await getdatabase(member.id, "speed", 100)
         pitch = await getdatabase(member.id, "pitch", 0)
-        while retry_count < 10 and done:
-            filename = await text2wav(output, int(voice_id), is_premium,
+
+        if voice_id is None:
+            voice_id = await getdatabase(member.id, "voiceid", 0)
+
+        wav_list = []
+        for gen_text in output_list:
+            print(gen_text)
+            if gen_text == "":
+                continue
+            if gen_text.endswith(".wav"):
+                filename = (f"{user_dict_loc}/audio_data"
+                              f"/{guild.id}/{gen_text}")
+                wav_list.append(filename)
+                continue
+
+            filename = await text2wav(gen_text, int(voice_id), is_premium,
                                       speed="100",
                                       pitch="0", guild_id=guild.id)
             if filename != "failed":
-                done = False
+                wav_list.append(filename)
+                continue
             else:
                 print("合成失敗")
-                retry_count += 1
-                if retry_count >= 2:
-                    del output_list[0]
-                    return
-        del output_list[0]
+                return
+
+        if len(wav_list) > 1:
+            filename = await connect_waves(wave_list=wav_list)
+            if filename is None:
+                print("結合失敗")
+                return
 
         time_end = time.time()
         tim = time_end - time_sta
@@ -1654,6 +1642,88 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         generating_guild_set.discard(guild.id)
 
 
+async def connect_waves(wave_list):
+    bytes_list = []
+    for wave_dir in wave_list:
+        async with aiofiles.open(wave_dir,
+                                 mode='rb') as f:
+            bytes_list.append(base64.b64encode(await f.read()).decode('utf-8'))
+
+    try:
+        headers = {'Content-Type': 'application/json', }
+        async with aiohttp.ClientSession(connector_owner=False, connector=premium_conn) as private_session:
+            async with private_session.post(f'http://{host}/connect_waves',
+                                            data=json.dumps(bytes_list), headers=headers,
+                                            timeout=10) as response1:
+                print(response1.status)
+                if response1.status != 200:
+                    print((await response1.json())["detail"])
+                    return None
+                res_data = await response1.read()
+
+        filename = get_temp_name()
+        try:
+            dir = os.path.dirname(os.path.abspath(__file__)) + "/output/" + filename
+            async with aiofiles.open(dir,
+                                     mode='wb') as f:
+                await f.write(res_data)
+            return dir
+        except ReadTimeout:
+            return None
+
+    except Exception as ex:
+        #print(ex)
+        return None
+
+
+async def honyaku_and_ikaryaku(lang, output, voice_id, member_id, guild_id, is_premium):
+    if lang == "ko":
+
+        if len(output) <= 0:
+            return ""
+        output = re.sub("w{4,100}", "ㅋ", output)
+        if re.search("[^w]", output) is None:
+            output = "ㅋ"
+
+        if voice_id is None:
+            voice_id = await getdatabase(member_id, "voiceid", 0)
+        if len(output) > 50:
+            if is_premium:
+                if len(output) > 100:
+                    output = output[:100] + "이하 약어"
+            else:
+                output = output[:50] + "이하 약어"
+        output = toKana(output)
+        output = output.replace(" ", "")
+    elif lang == "ja":
+        if (await is_premium_check(guild_id, 300) and re.match("[ぁ-んァ-ヶー一-龯]", output) is None
+            and await getdatabase(guild_id, "is_translate", False, "guild")):
+            #print(output)
+            output = ts.translate_text(output, to_language="ja")
+            #print("翻訳")
+
+        output = (await romajitable.to_kana(output)).katakana
+        if len(output) <= 0:
+            return ""
+        output = re.sub("w{4,100}", "ワラ", output)
+        if re.search("[^w]", output) is None:
+            output = "ワラ"
+
+
+        if is_premium:
+            '''if len(output) > text_limit_300 and guild.id in premium_server_list_300:
+                output = output[:(text_limit_300)] + "以下略"
+            elif len(output) > text_limit_500 and guild.id in premium_server_list_500:
+                output = output[:(text_limit_500)] + "以下略"
+            elif len(output) > text_limit_1000 and guild.id in premium_server_list_1000:
+                output = output[:(text_limit_1000)] + "以下略"
+            elif len(output) > text_limit_1000 and guild.id in premium_server_list:'''
+            if len(output) > text_limit_100:
+                output = output[:(text_limit_100)] + "以下略"
+        else:
+            if len(output) > 50:
+                output = output[:50] + "以下略"
+    return output
 
 
 
@@ -1994,9 +2064,10 @@ async def updatedict():
                 print(response1)
 
 
-@bot.slash_command(description="辞書に単語を追加するのだ(サーバー個別)", name="adddict")
+@bot.slash_command(description="辞書に単語を追加するのだ(サーバー個別)", name="adddict", guild_ids=ManagerGuilds)
 async def adddict_local(ctx, surface: discord.Option(input_type=str, description="辞書に登録する単語"),
-                        pronunciation: discord.Option(input_type=str, description="カタカナでの読み方")):
+                        pronunciation: discord.Option(input_type=str, description="カタカナでの読み方", required=False),
+                        audio_file: discord.Option(discord.Attachment, description="ボイス辞書用音声ファイル(wav, mp3)", required=False)):
     print(surface)
     if surface == "":
         embed = discord.Embed(
@@ -2006,6 +2077,84 @@ async def adddict_local(ctx, surface: discord.Option(input_type=str, description
         )
         await ctx.respond(embed=embed)
         return
+    if pronunciation is None and audio_file is None:
+        embed = discord.Embed(
+            title="**Error**",
+            description=f"pronunciationまたはaudio_fileを指定してください",
+            color=discord.Colour.brand_red(),
+        )
+        await ctx.respond(embed=embed)
+        return
+
+    # 音声ファイル辞書登録
+    if audio_file is not None:
+        if await is_premium_check(ctx.author.id, 100) is False:
+            embed = discord.Embed(
+                title="**Error**",
+                description=f"ボイス辞書はプレミアム限定機能です。",
+                color=discord.Colour.brand_red(),
+            )
+            await ctx.respond(embed=embed)
+            return
+        if audio_file.size > 10*1024*1024:
+            embed = discord.Embed(
+                title="**Error**",
+                description=f"ファイルサイズは最大10MBまでです。",
+                color=discord.Colour.brand_red(),
+            )
+            await ctx.respond(embed=embed)
+            return
+        print(audio_file.content_type)
+        if str(audio_file.content_type) not in ["audio/x-wav"]:
+            embed = discord.Embed(
+                title="**Error**",
+                description=f"wavファイルのみ利用できます。mp3などの場合はファイル変換サイトなどでwavに変換が必要です。",
+                color=discord.Colour.brand_red(),
+            )
+            await ctx.respond(embed=embed)
+            return
+
+        file_name = f"{uuid.uuid4()}.wav"
+        voice_path =  (f"{user_dict_loc}/audio_data"
+                       f"/{ctx.guild.id}")
+        pronunciation = f"#%&${file_name}#%&$"
+        os.makedirs(voice_path, exist_ok=True)
+        if len(surface) > 50:
+            embed = discord.Embed(
+                title="**Error**",
+                description=f"50文字以下の単語のみ登録できます。",
+                color=discord.Colour.brand_red(),
+            )
+            await ctx.respond(embed=embed)
+            return
+        if await update_private_dict(ctx.guild.id, surface, pronunciation) is not True:
+            embed = discord.Embed(
+                title="**Error**",
+                description=f"登録数の上限に達しました。(サポートサーバーへお問い合わせください。)",
+                color=discord.Colour.brand_red(),
+            )
+            await ctx.respond(embed=embed)
+            return
+
+        try:
+            async with aiofiles.open(voice_path + "/" + file_name,
+                                     mode='wb') as f:
+                await f.write(await audio_file.read())
+        except ReadTimeout:
+            return
+
+
+        embed = discord.Embed(
+            title="**Add Dict**",
+            description=f"辞書に音声を登録しました。",
+            color=discord.Colour.brand_green(),
+        )
+        embed.add_field(name="surface", value=surface)
+        embed.add_field(name="pronunciation", value=audio_file.url)
+        await ctx.respond(embed=embed)
+        return
+
+
     if len(surface) > 50 or len(pronunciation) > 50:
         embed = discord.Embed(
             title="**Error**",
@@ -2175,7 +2324,18 @@ async def delete_private_dict(server_id, source):
             json_data = json.load(f)
     except:
         json_data = {}
-    json_data.pop(toLowerCase(source))
+    pop_yomi  = json_data.pop(toLowerCase(source))
+
+    # ファイル削除
+    split_output = pop_yomi.split("#%&$")
+    print(split_output)
+    for i in range(len(split_output)):
+        split_text = split_output[i].replace("/", "")
+        voice_path = (f"{user_dict_loc}/audio_data"
+                      f"/{server_id}/{split_text}")
+        if split_text.endswith(".wav") and os.path.isfile(voice_path):
+            os.remove(voice_path)
+
     sorted_json_data = json_data
     with open(user_dict_loc + "/" + f"{server_id}.json", 'wt',
               encoding='utf-8') as f:
