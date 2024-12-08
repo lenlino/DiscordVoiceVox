@@ -2064,7 +2064,7 @@ async def updatedict():
                 print(response1)
 
 
-@bot.slash_command(description="辞書に単語を追加するのだ(サーバー個別)", name="adddict", guild_ids=ManagerGuilds)
+@bot.slash_command(description="辞書に単語を追加するのだ(サーバー個別)", name="adddict")
 async def adddict_local(ctx, surface: discord.Option(input_type=str, description="辞書に登録する単語"),
                         pronunciation: discord.Option(input_type=str, description="カタカナでの読み方", required=False),
                         audio_file: discord.Option(discord.Attachment, description="ボイス辞書用音声ファイル(wav, mp3)", required=False)):
