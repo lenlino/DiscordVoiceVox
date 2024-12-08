@@ -1580,7 +1580,6 @@ async def yomiage(member, guild, text: str, no_read_name=False):
 
         wav_list = []
         for gen_text in output_list:
-            print(gen_text)
             if gen_text == "":
                 continue
             if gen_text.endswith(".wav"):
