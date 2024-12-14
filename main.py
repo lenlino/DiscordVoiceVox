@@ -128,7 +128,7 @@ gpu_start_time = datetime.datetime.strptime(os.getenv("START_TIME", "21:00"), "%
 gpu_end_time = datetime.datetime.strptime(os.getenv("END_TIME", "02:00"), "%H:%M").time()
 
 user_dict_loc = os.getenv("DICT_LOC", os.path.dirname(os.path.abspath(__file__)) + "/user_dict")
-bot = discord.AutoShardedBot(intents=intents)
+bot = discord.AutoShardedBot(intents=intents, chunk_guilds_at_startup=False, member_cache_flags=discord.MemberCacheFlags.none())
 
 
 async def initdatabase():
@@ -1075,33 +1075,9 @@ async def auto_join():
 
 @bot.slash_command(description="辞書に単語を追加するのだ(全サーバー)", guild_ids=ManagerGuilds)
 async def addglobaldict(ctx, surface: discord.Option(input_type=str, description="辞書に登録する単語"),
-                  pronunciation: discord.Option(input_type=str, description="カタカナでの読み方")):
+                  pronunciation: discord.Option(input_type=str, description="カタカナでの読み方", required=False),
+                audio_file: discord.Option(discord.Attachment, description="ボイス辞書用音声ファイル(wav, mp3)", required=False)):
     print(surface)
-    """if (surface.startswith("<") and surface.endswith(">")) or emoji.is_emoji(surface):
-        await save_customemoji(surface, pronunciation)
-        embed2 = discord.Embed(
-            title="**Add Emoji**",
-            description=f"辞書に絵文字を登録しました。",
-            color=discord.Colour.brand_green(),
-        )
-        embed2.add_field(name="surface", value=surface)
-        embed2.add_field(name="pronunciation", value=pronunciation)
-        await ctx.respond(embed=embed2)
-        return
-
-    params = (
-        ('surface', surface),
-        ('pronunciation', pronunciation),
-        ('accent_type', accent_type),
-        ('priority', priority)
-    )
-    headers = {'Content-Type': 'application/json', }
-    response2 = requests.post(
-        f'http://{host}:{port}/user_dict_word',
-        headers=headers,
-        params=params,
-        timeout=(3.0, 10)
-    )"""
     if surface == "":
         embed = discord.Embed(
             title="**Error**",
@@ -1110,6 +1086,81 @@ async def addglobaldict(ctx, surface: discord.Option(input_type=str, description
         )
         await ctx.respond(embed=embed)
         return
+    if pronunciation is None and audio_file is None:
+        embed = discord.Embed(
+            title="**Error**",
+            description=f"pronunciationまたはaudio_fileを指定してください",
+            color=discord.Colour.brand_red(),
+        )
+        await ctx.respond(embed=embed)
+        return
+    # 音声ファイル辞書登録
+    if audio_file is not None and False:
+        if await is_premium_check(ctx.author.id, 100) is False:
+            embed = discord.Embed(
+                title="**Error**",
+                description=f"ボイス辞書はプレミアム限定機能です。",
+                color=discord.Colour.brand_red(),
+            )
+            await ctx.respond(embed=embed)
+            return
+        if audio_file.size > 10 * 1024 * 1024:
+            embed = discord.Embed(
+                title="**Error**",
+                description=f"ファイルサイズは最大10MBまでです。",
+                color=discord.Colour.brand_red(),
+            )
+            await ctx.respond(embed=embed)
+            return
+        print(audio_file.content_type)
+        if str(audio_file.content_type) not in ["audio/x-wav"]:
+            embed = discord.Embed(
+                title="**Error**",
+                description=f"wavファイルのみ利用できます。mp3などの場合はファイル変換サイトなどでwavに変換が必要です。",
+                color=discord.Colour.brand_red(),
+            )
+            await ctx.respond(embed=embed)
+            return
+
+        file_name = f"{uuid.uuid4()}.wav"
+        voice_path = (f"{user_dict_loc}/audio_data"
+                      f"/{ctx.guild.id}")
+        pronunciation = f"#%&${file_name}#%&$"
+        os.makedirs(voice_path, exist_ok=True)
+        if len(surface) > 50:
+            embed = discord.Embed(
+                title="**Error**",
+                description=f"50文字以下の単語のみ登録できます。",
+                color=discord.Colour.brand_red(),
+            )
+            await ctx.respond(embed=embed)
+            return
+        if await update_private_dict(ctx.guild.id, surface, pronunciation) is not True:
+            embed = discord.Embed(
+                title="**Error**",
+                description=f"登録数の上限に達しました。(サポートサーバーへお問い合わせください。)",
+                color=discord.Colour.brand_red(),
+            )
+            await ctx.respond(embed=embed)
+            return
+
+        try:
+            async with aiofiles.open(voice_path + "/" + file_name,
+                                     mode='wb') as f:
+                await f.write(await audio_file.read())
+        except ReadTimeout:
+            return
+
+        embed = discord.Embed(
+            title="**Add Dict**",
+            description=f"辞書に音声を登録しました。",
+            color=discord.Colour.brand_green(),
+        )
+        embed.add_field(name="surface", value=surface)
+        embed.add_field(name="pronunciation", value=audio_file.url)
+        await ctx.respond(embed=embed)
+        return
+
     # await update_private_dict(9686, surface, pronunciation)
     embed = discord.Embed(
         title="**Add Dict**",
@@ -1238,12 +1289,17 @@ async def generate_wav(text, speaker=1, filepath=None, target_host='localhost', 
         speed = 100
 
     global is_use_gpu_server
+    global vclist_len
     use_gpu_server = False
     if is_use_gpu_server and (speaker == 3 or speaker == 1 or speaker == 42 or speaker == 8):
         use_gpu_server = True
-    elif is_use_gpu_server and is_premium and await is_premium_check(guild_id, 500):
-        use_gpu_server = True
-
+    elif is_use_gpu_server and is_premium:
+        if vclist_len >= 1500 and await is_premium_check(guild_id, 100):
+            use_gpu_server = True
+        elif vclist_len >= 800 and await is_premium_check(guild_id, 300):
+            use_gpu_server = True
+        elif await is_premium_check(guild_id, 500):
+            use_gpu_server = True
     len_limit = 80
     if is_premium:
         conn = premium_conn
@@ -1834,6 +1890,7 @@ def is_bot_only(channel):
 async def on_guild_join(guild):
     await guild.get_member(bot.user.id).edit(nick=BOT_NICKNAME)
 
+vclist_len = 0
 
 @tasks.loop(minutes=1)
 async def status_update_loop():
@@ -1877,7 +1934,9 @@ async def status_update_loop():
         avarage_p = 0
     global is_use_gpu_server
     is_use_gpu_server = is_use_gpu_server_enabled
-    text = f"{str(len(vclist))}/{str(len(bot.guilds))}読み上げ中\n 生成時間平均 N:{round(avarage, 1)}s P:{round(avarage_p, 1)}s"
+    global vclist_len
+    vclist_len = len(vclist)
+    text = f"{str(vclist_len)}/{str(len(bot.guilds))}読み上げ中\n 生成時間平均 N:{round(avarage, 1)}s P:{round(avarage_p, 1)}s"
     logger.error(text)
     voice_generate_time_list_p.clear()
     voice_generate_time_list.clear()
