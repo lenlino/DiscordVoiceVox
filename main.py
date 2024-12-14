@@ -1694,8 +1694,8 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         else:
             guild.voice_client.play(source)
     finally:
-        generating_guilds.get(guild.id, []).discard(text)
         generating_guild_set.discard(guild.id)
+        generating_guilds.get(guild.id, []).remove(text)
 
 
 async def connect_waves(wave_list):
