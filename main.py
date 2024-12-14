@@ -128,7 +128,7 @@ gpu_start_time = datetime.datetime.strptime(os.getenv("START_TIME", "21:00"), "%
 gpu_end_time = datetime.datetime.strptime(os.getenv("END_TIME", "02:00"), "%H:%M").time()
 
 user_dict_loc = os.getenv("DICT_LOC", os.path.dirname(os.path.abspath(__file__)) + "/user_dict")
-bot = discord.AutoShardedBot(intents=intents)
+bot = discord.AutoShardedBot(intents=intents, chunk_guilds_at_startup=False, member_cache_flags=discord.MemberCacheFlags.none())
 
 
 async def initdatabase():
