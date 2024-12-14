@@ -128,7 +128,8 @@ gpu_start_time = datetime.datetime.strptime(os.getenv("START_TIME", "21:00"), "%
 gpu_end_time = datetime.datetime.strptime(os.getenv("END_TIME", "02:00"), "%H:%M").time()
 
 user_dict_loc = os.getenv("DICT_LOC", os.path.dirname(os.path.abspath(__file__)) + "/user_dict")
-bot = discord.AutoShardedBot(intents=intents, chunk_guilds_at_startup=False, member_cache_flags=discord.MemberCacheFlags.none())
+member_cache_flags = discord.MemberCacheFlags.from_intents(intents=intents)
+bot = discord.AutoShardedBot(intents=intents, chunk_guilds_at_startup=False, member_cache_flags=member_cache_flags)
 
 
 async def initdatabase():
@@ -1693,7 +1694,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         else:
             guild.voice_client.play(source)
     finally:
-        generating_guilds.get(guild.id, []).remove(text)
+        generating_guilds.get(guild.id, []).discard(text)
         generating_guild_set.discard(guild.id)
 
 
