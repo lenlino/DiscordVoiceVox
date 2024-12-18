@@ -14,6 +14,7 @@ import sys
 import time
 import importlib
 import uuid
+from dataclasses import dataclass
 
 import aiofiles as aiofiles
 import aiohttp
@@ -1505,116 +1506,128 @@ async def on_message(message):
     voice = message.guild.voice_client
 
     if voice is not None and message.guild.id in vclist.keys() and message.channel.id == vclist[message.guild.id]:
-        await yomiage(message.author, message.guild, message.content)
+        await add_yomiage_queue(message.author, message.guild, message.content)
     else:
         return
+
+@dataclass
+class YomiageQueue:
+    member: discord.member
+    guild: discord.guild
+    text: str
+    no_read_name: bool = False
+
+
+yomiage_queue = {}
+
+async def add_yomiage_queue(member, guild, text: str, no_read_name=False):
+    yomiage_queue.setdefault(guild.id, []).append(YomiageQueue(member, guild, text, no_read_name))
+    if len(yomiage_queue.get(guild.id, [])) == 1:
+        queue = yomiage_queue.get(guild.id, [])[0]
+        await yomiage(queue.member, queue.guild, queue.text, queue.no_read_name)
 
 
 async def yomiage(member, guild, text: str, no_read_name=False):
-    if text == "zundamon!!stop":
-        generating_guilds[guild.id].clear()
-        print(f"クリアしました。guild: {guild.id}")
-        return
-    elif text.startswith("!") or text.startswith("！"):
-        return
-    elif member.id in await getdatabase(guild.id, "mute_list", [], "guild"):
-        return
-    pattern = "https?://[\w/:%#\$&\?\(\)~\.=\+\-@]+"
-    pattern_emoji = "\<.+?\>"
-
-    pattern_spoiler = "\|\|.*?\|\|"
-    voice_id = None
-    is_premium = guild.id in premium_server_list
-    if stripe.api_key is None:
-        is_premium = True
-    output = text
-    output = re.sub("\n", "", output)
-
-    if output == "":
-        return
-
-    if await getdatabase(guild.id, "is_readname", False, "guild") and not no_read_name:
-        if await getdatabase(member.guild.id, "is_readsan", False, "guild"):
-            output = member.display_name + "さん " + output
-        else:
-            output = member.display_name + " " + output
-
-    if is_premium:
-        '''if len(output) > text_limit_300 and guild.id in premium_server_list_300:
-            output = output[:(text_limit_300 + 50)]
-        elif len(output) > text_limit_500 and guild.id in premium_server_list_500:
-            output = output[:(text_limit_500 + 50)]
-        elif len(output) > text_limit_1000 and guild.id in premium_server_list_1000:
-            output = output[:(text_limit_1000 + 50)]
-        else:
-            output = output[:(text_limit_100 + 50)]'''
-        output = output[:(text_limit_100 + 50)]
-    else:
-        output = output[:100]
-
-    lang = await getdatabase(guild.id, "lang", "ja", "guild")
-
-    pattern_voice = "\.v[0-9]*"
-    if guild.id in premium_server_list:
-
-        if re.search(pattern_voice, text) is not None:
-            cmd = re.search(pattern_voice, text).group()
-            if re.search("[0-9]", cmd) is not None:
-                voice_id = re.sub(r"\D", "", cmd)
-        '''if re.search(pattern, text) is not None and await getdatabase(guild.id, "is_readurl", True,
-                                                                      "guild"):
-            url = re.search(pattern, text).group()
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url=url, timeout=5) as response:
-                    html = await response.text()
-                    title = re.findall('<title>(.*)</title>', html)[0]
-                    if title is not None:
-                        if len(re.findall('<img(.*)>', html)) != 1:
-                            output = re.sub(pattern, "ユーアールエル " + title, output)
-                        else:
-                            output = re.sub(pattern, "ユーアールエル画像省略", output)'''
-
-    if lang == "ko":
-        output = re.sub(pattern, "유알엘생략", output)
-    elif lang == "ja":
-        output = re.sub(pattern, "ユーアールエル省略", output)
-
-    output = await henkan_private_dict(guild.id, output)
-    output = await henkan_private_dict(9686, output)
-
-    if await getdatabase(guild.id, "is_reademoji", True, "guild"):
-        output = emoji.demojize(output, language="ja")
-
-    output = re.sub(pattern_emoji, "", output)
-    output = re.sub(pattern_voice, "", output)
-    output = re.sub(pattern_spoiler, "", output)
-
-    if len(output) <= 0:
-        return
-
-    split_output = output.split("#%&$")
-
-    if is_premium:
-        for i in range(len(split_output)):
-            split_text = split_output[i].replace("/", "")
-            voice_path = (f"{user_dict_loc}/audio_data"
-                          f"/{guild.id}/{split_text}")
-            if split_text.endswith(".wav") and os.path.isfile(voice_path):
-                split_output[i] = split_text
-            else:
-                split_output[i] = await honyaku_and_ikaryaku(lang, split_output[i], voice_id, member.id, guild.id, is_premium)
-    else:
-        split_output = [await honyaku_and_ikaryaku(lang, output, voice_id, member.id, guild.id, is_premium)]
-
     try:
+        if text == "zundamon!!stop":
+            del yomiage_queue[guild.id]
+            print(f"クリアしました。guild: {guild.id}")
+            return
+        elif text.startswith("!") or text.startswith("！"):
+            return
+        elif member.id in await getdatabase(guild.id, "mute_list", [], "guild"):
+            return
+        pattern = "https?://[\w/:%#\$&\?\(\)~\.=\+\-@]+"
+        pattern_emoji = "\<.+?\>"
+
+        pattern_spoiler = "\|\|.*?\|\|"
+        voice_id = None
+        is_premium = guild.id in premium_server_list
+        if stripe.api_key is None:
+            is_premium = True
+        output = text
+        output = re.sub("\n", "", output)
+
+        if output == "":
+            return
+
+        if await getdatabase(guild.id, "is_readname", False, "guild") and not no_read_name:
+            if await getdatabase(member.guild.id, "is_readsan", False, "guild"):
+                output = member.display_name + "さん " + output
+            else:
+                output = member.display_name + " " + output
+
+        if is_premium:
+            '''if len(output) > text_limit_300 and guild.id in premium_server_list_300:
+                output = output[:(text_limit_300 + 50)]
+            elif len(output) > text_limit_500 and guild.id in premium_server_list_500:
+                output = output[:(text_limit_500 + 50)]
+            elif len(output) > text_limit_1000 and guild.id in premium_server_list_1000:
+                output = output[:(text_limit_1000 + 50)]
+            else:
+                output = output[:(text_limit_100 + 50)]'''
+            output = output[:(text_limit_100 + 50)]
+        else:
+            output = output[:100]
+
+        lang = await getdatabase(guild.id, "lang", "ja", "guild")
+
+        pattern_voice = "\.v[0-9]*"
+        if guild.id in premium_server_list:
+
+            if re.search(pattern_voice, text) is not None:
+                cmd = re.search(pattern_voice, text).group()
+                if re.search("[0-9]", cmd) is not None:
+                    voice_id = re.sub(r"\D", "", cmd)
+            '''if re.search(pattern, text) is not None and await getdatabase(guild.id, "is_readurl", True,
+                                                                          "guild"):
+                url = re.search(pattern, text).group()
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(url=url, timeout=5) as response:
+                        html = await response.text()
+                        title = re.findall('<title>(.*)</title>', html)[0]
+                        if title is not None:
+                            if len(re.findall('<img(.*)>', html)) != 1:
+                                output = re.sub(pattern, "ユーアールエル " + title, output)
+                            else:
+                                output = re.sub(pattern, "ユーアールエル画像省略", output)'''
+
+        if lang == "ko":
+            output = re.sub(pattern, "유알엘생략", output)
+        elif lang == "ja":
+            output = re.sub(pattern, "ユーアールエル省略", output)
+
+        output = await henkan_private_dict(guild.id, output)
+        output = await henkan_private_dict(9686, output)
+
+        if await getdatabase(guild.id, "is_reademoji", True, "guild"):
+            output = emoji.demojize(output, language="ja")
+
+        output = re.sub(pattern_emoji, "", output)
+        output = re.sub(pattern_voice, "", output)
+        output = re.sub(pattern_spoiler, "", output)
+
+        if len(output) <= 0:
+            return
+
+        split_output = output.split("#%&$")
+
+        if is_premium:
+            for i in range(len(split_output)):
+                split_text = split_output[i].replace("/", "")
+                voice_path = (f"{user_dict_loc}/audio_data"
+                              f"/{guild.id}/{split_text}")
+                if split_text.endswith(".wav") and os.path.isfile(voice_path):
+                    split_output[i] = split_text
+                else:
+                    split_output[i] = await honyaku_and_ikaryaku(lang, split_output[i], voice_id, member.id, guild.id,
+                                                                 is_premium)
+        else:
+            split_output = [await honyaku_and_ikaryaku(lang, output, voice_id, member.id, guild.id, is_premium)]
+
+
         if guild.voice_client is None:
             return
-        generating_guilds.setdefault(guild.id, []).append(text)
-
-        while guild.voice_client.playing or (
-            generating_guilds[guild.id].index(text, 0) > 0) or guild.id in generating_guild_set:
-            await asyncio.sleep(0.1)
-        generating_guild_set.add(guild.id)
         #print(output)
         filename = ""
         time_sta = time.time()
@@ -1683,6 +1696,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         else:
             source = await discord.FFmpegOpusAudio.from_probe(source=filename)
 
+
     except Exception as e:
         logger.error(e)
     else:
@@ -1693,9 +1707,16 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             await player.play(source, filters=filters)
         else:
             guild.voice_client.play(source)
+
+        while guild.voice_client.playing:
+            await asyncio.sleep(1)
     finally:
-        generating_guild_set.discard(guild.id)
-        generating_guilds.get(guild.id, []).remove(text)
+        yomiage_queue.get(guild.id, []).pop(0)
+        if len(yomiage_queue.get(guild.id, [])) > 0:
+            queue = yomiage_queue.get(guild.id, [])[0]
+            await yomiage(queue.member, queue.guild, queue.text, queue.no_read_name)
+        else:
+            del yomiage_queue[guild.id]
 
 
 async def connect_waves(wave_list):
@@ -1874,9 +1895,9 @@ async def on_voice_state_update(member, before, after):
         if await getdatabase(member.guild.id, "is_readsan", False, "guild"):
             name += "さん"
         if after.channel is not None and after.channel.id == voicestate.channel.id:
-            await yomiage(member, member.guild, f"{name}が入室したのだ、", no_read_name=True)
+            await add_yomiage_queue(member, member.guild, f"{name}が入室したのだ、", no_read_name=True)
         elif before.channel is not None and before.channel.id == voicestate.channel.id:
-            await yomiage(member, member.guild, f"{name}が退出したのだ、", no_read_name=True)
+            await add_yomiage_queue(member, member.guild, f"{name}が退出したのだ、", no_read_name=True)
 
 
 # ボットのみか確認
@@ -1917,7 +1938,7 @@ async def status_update_loop():
             if alarm_youbi_list[now_youbi] == "0":
                 continue
             alarm_message = alarm.get('message', 'アラームなのだ')
-            await yomiage(guild.me, guild, f"{alarm_message}")
+            await add_yomiage_queue(guild.me, guild, f"{alarm_message}")
             try:
                 await guild.get_channel(vclist[key]).send(embed=discord.Embed(
                     title=f"Alarm",
@@ -2502,7 +2523,7 @@ async def connect_websocket():
                             await channel.send(embed=embed)
                         except:
                             pass
-                        await yomiage(guild.me, guild, f"緊急地震速報　{prefs_str}")
+                        await add_yomiage_queue(guild.me, guild, f"緊急地震速報　{prefs_str}")
 
         except websockets.ConnectionClosed as e:
             logger.error(e)
