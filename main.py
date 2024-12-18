@@ -13,6 +13,7 @@ import re
 import sys
 import time
 import importlib
+import urllib
 import uuid
 
 import aiofiles as aiofiles
@@ -112,12 +113,17 @@ non_premium_user = []
 
 generating_guilds = {}
 pool = None
+
 logger = logging.getLogger('discord')
+stream_handler = logging.StreamHandler()
+stream_handler.setLevel(logging.INFO)
+stream_handler.setFormatter(logging.Formatter("%(message)s"))
 handler = logging.FileHandler(filename=os.path.dirname(os.path.abspath(__file__)) + "/logs/"
                                        + f'discord-{"{:%Y-%m-%d-%H-%M}".format(datetime.datetime.now())}.log',
                               encoding='utf-8', mode='w')
 handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
-logger.addHandler(handler)
+logging.basicConfig(handlers=[stream_handler, handler])
+
 default_conn = None
 default_gpu_conn = None
 premium_conn = None
@@ -1452,6 +1458,8 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
             global is_use_gpu_server
             if use_gpu_server and is_use_gpu_server:
                 target_host = gpu_host
+                if is_lavalink:
+                    return query_json
             async with private_session.post(f'http://{target_host}/synthesis',
                                             headers=headers,
                                             params=params,
@@ -1613,7 +1621,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
 
         while guild.voice_client.playing or (
             generating_guilds[guild.id].index(text, 0) > 0) or guild.id in generating_guild_set:
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.5)
         generating_guild_set.add(guild.id)
         #print(output)
         filename = ""
@@ -1663,6 +1671,10 @@ async def yomiage(member, guild, text: str, no_read_name=False):
 
         time_end = time.time()
         tim = time_end - time_sta
+
+        generating_guild_set.discard(guild.id)
+        generating_guilds.get(guild.id, []).remove(text)
+
         if is_premium:
             premium_text = "P"
             voice_generate_time_list_p.append(tim)
@@ -1672,10 +1684,20 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         if tim > 3:
             print(f"{premium_text} v:{voice_id} s:{speed} p:{pitch} t:{str(tim)} text:{output}")
 
+        while guild.voice_client.playing:
+            await asyncio.sleep(0.5)
+
         if is_lavalink:
-            source_serch = \
-                (await wavelink.Playable.search(filename.replace("\"", ""),
-                                                source=None))
+            if type(filename) == str and filename.endswith(".wav"):
+                source_serch = \
+                    (await wavelink.Playable.search(filename.replace("\"", ""),
+                                                    source=None))
+            elif type(filename) == dict:
+                source_serch = await wavelink.Playable.search(f"vv://{urllib.parse.quote(output)}?json={urllib.parse.quote(json.dumps(filename))}"
+                                                              f"&speaker={int(voice_id)}&address={urllib.parse.quote(gpu_host)}",
+                                                            source="voicevox")
+            else:
+                source_serch = await wavelink.Playable.search(base64.b64encode(filename).decode('utf-8'), source="raw")
             if len(source_serch) == 0:
                 print(filename)
                 return
