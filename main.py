@@ -2472,6 +2472,10 @@ async def is_premium_check(id, value):
             if is_check is True:
                 add_premium_user(id, value)
 
+    if is_check is False and id in premium_guild_dict:
+        if premium_guild_dict.get(id) >= value:
+            is_check = True
+
     '''elif id not in non_premium_user and value > 0:
         non_premium_user.append(id)
         for d in stripe.Subscription.search(limit=100,
