@@ -2051,16 +2051,20 @@ async def premium_user_check_loop():
     premium_server_list_300.clear()
     premium_server_list_500.clear()
     premium_server_list_1000.clear()
+    count = 0
 
-    async for d in (await stripe.Subscription.search_async(limit=100,
-                                        query="status:'active' AND -metadata['discord_user_id']:null")).auto_paging_iter():
+    async for d in (await stripe.Subscription.search_auto_paging_iter_async(limit=100,
+                                        query="status:'active' AND -metadata['discord_user_id']:null")):
+        count += 1
         await add_premium_lopp(d)
-    async for d in (await stripe.Subscription.search_async(limit=100,
-                                        query="status:'trialing' AND -metadata['discord_user_id']:null")).auto_paging_iter():
+    async for d in (await stripe.Subscription.search_auto_paging_iter_async(limit=100,
+                                        query="status:'trialing' AND -metadata['discord_user_id']:null")):
+        count += 1
         await add_premium_lopp(d)
+    print(f"プレミアム数: {count}")
 
 
-@tasks.loop(minutes=1)
+@tasks.loop(minutes=1, count=1)
 async def init_loop():
     global default_conn
     global default_gpu_conn
