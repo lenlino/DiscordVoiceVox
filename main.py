@@ -1702,11 +1702,8 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             filters: wavelink.Filters = player.filters
             speed = float(float(speed) / 100)
             pitch = float(float(pitch) / 100) + 1
-            if speed == 1.0 and pitch == 1.0:
-                await player.play(source)
-            else:
-                filters.timescale.set(speed=speed, pitch=pitch)
-                await player.play(source, filters=filters)
+            filters.timescale.set(speed=speed, pitch=pitch)
+            await player.play(source, filters=filters)
 
         else:
             guild.voice_client.play(source)
