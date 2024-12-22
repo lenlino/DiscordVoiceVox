@@ -1387,7 +1387,7 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
         async with aiohttp.ClientSession(connector_owner=False, connector=conn, timeout=ClientTimeout(connect=5)) as private_session:
             async with private_session.post(f'http://{query_host}/audio_query',
                                             params=params,
-                                            timeout=10) as response1:
+                                            timeout=ClientTimeout(total=5)) as response1:
                 if response1.status != 200:
                     logger.warning(await response1.json())
                     return "failed"
@@ -1446,8 +1446,7 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                     ('is_kana', "true")
                 )
                 async with private_session.post(f'http://{query_host}/accent_phrases',
-                                                params=params_len,
-                                                timeout=10) as response3:
+                                                params=params_len) as response3:
                     query_json["accent_phrases"] = await response3.json()
 
             global is_use_gpu_server
@@ -1456,8 +1455,7 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
             async with private_session.post(f'http://{target_host}/synthesis',
                                             headers=headers,
                                             params=params,
-                                            data=json.dumps(query_json),
-                                            timeout=10) as response2:
+                                            data=json.dumps(query_json)) as response2:
                 if response2.status != 200:
                     '''if use_gpu_server:
                         is_use_gpu_server = False'''
@@ -1477,8 +1475,7 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                     formdata = FormData()
                     formdata.add_field('file', await response2.read())
                     async with private_session.post(f'http://{lavalink_uploader}/send_wav',
-                                                    data=formdata,
-                                                    timeout=30) as response3:
+                                                    data=formdata) as response3:
                         res_text = await response3.text()
                         if res_text != "error":
                             return res_text
@@ -1703,8 +1700,11 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         if is_lavalink:
             player = guild.voice_client
             filters: wavelink.Filters = player.filters
-            filters.timescale.set(speed=float(float(speed) / 100), pitch=float(float(pitch) / 100) + 1)
+            speed = float(float(speed) / 100)
+            pitch = float(float(pitch) / 100) + 1
+            filters.timescale.set(speed=speed, pitch=pitch)
             await player.play(source, filters=filters)
+
         else:
             guild.voice_client.play(source)
 
