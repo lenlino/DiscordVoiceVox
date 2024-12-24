@@ -1458,8 +1458,6 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
             global is_use_gpu_server
             if use_gpu_server and is_use_gpu_server:
                 target_host = gpu_host
-                if is_lavalink:
-                    return query_json
             async with private_session.post(f'http://{target_host}/synthesis',
                                             headers=headers,
                                             params=params,
@@ -1696,7 +1694,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                     (await wavelink.Playable.search(filename.replace("\"", ""),
                                                     source=None))
             elif type(filename) == dict:
-                source_serch = await wavelink.Playable.search(f"vv://{urllib.parse.quote(output)}?json={urllib.parse.quote(json.dumps(filename))}"
+                source_serch = await wavelink.Playable.search(f"vv://{urllib.parse.quote(output)}?json={urllib.parse.quote(json.dumps(filename, ensure_ascii=False))}"
                                                               f"&speaker={int(voice_id)}&address={urllib.parse.quote(gpu_host)}",
                                                             source="voicevox")
             else:
