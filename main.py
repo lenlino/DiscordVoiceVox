@@ -1386,10 +1386,14 @@ def get_temp_name():
 async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath=None, volume=1.0,
                     use_gpu_server=False, query_host=None):
     try:
+        global is_use_gpu_server
         if query_host is None:
             query_host = target_host
         if filepath is not None:
             dir = os.path.dirname(os.path.abspath(__file__)) + "/" + filepath
+        if filepath is None and use_gpu_server and is_use_gpu_server and is_lavalink:
+            return f"usegpu_{gpu_host}_{query_host}"
+
         async with aiohttp.ClientSession(connector_owner=False, connector=conn, timeout=ClientTimeout(connect=5)) as private_session:
             async with private_session.post(f'http://{query_host}/audio_query',
                                             params=params,
@@ -1455,11 +1459,8 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                                                 params=params_len) as response3:
                     query_json["accent_phrases"] = await response3.json()
 
-            global is_use_gpu_server
             if use_gpu_server and is_use_gpu_server:
                 target_host = gpu_host
-                if is_lavalink:
-                    return query_json
             async with private_session.post(f'http://{target_host}/synthesis',
                                             headers=headers,
                                             params=params,
@@ -1695,9 +1696,11 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                 source_serch = \
                     (await wavelink.Playable.search(filename.replace("\"", ""),
                                                     source=None))
-            elif type(filename) == dict:
-                source_serch = await wavelink.Playable.search(f"vv://{urllib.parse.quote(output)}?json={urllib.parse.quote(json.dumps(filename))}"
-                                                              f"&speaker={int(voice_id)}&address={urllib.parse.quote(gpu_host)}",
+            elif type(filename) == str and filename.startswith("usegpu"):
+                filename = filename.split("_")
+                source_serch = await wavelink.Playable.search(f"vv://{urllib.parse.quote(output)}?"
+                                                              f"&speaker={int(voice_id)}&address={urllib.parse.quote(filename[1])}"
+                                                              f"&query-address={urllib.parse.quote(filename[2])}&text={urllib.parse.quote(output)}",
                                                             source="voicevox")
             else:
                 source_serch = await wavelink.Playable.search(base64.b64encode(filename).decode('utf-8'), source="raw")
