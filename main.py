@@ -1698,9 +1698,9 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                                                     source=None))
             elif type(filename) == str and filename.startswith("usegpu"):
                 filename = filename.split("_")
-                source_serch = await wavelink.Playable.search(f"vv://{urllib.parse.quote(output)}?"
+                source_serch = await wavelink.Playable.search(f"vv://voicevox?"
                                                               f"&speaker={int(voice_id)}&address={urllib.parse.quote(filename[1])}"
-                                                              f"&query-address={urllib.parse.quote(filename[2])}&text={urllib.parse.quote(output)}",
+                                                              f"&query-address={urllib.parse.quote(filename[2])}&text={urllib.parse.quote(output_list[0])}",
                                                             source="voicevox")
             else:
                 source_serch = await wavelink.Playable.search(base64.b64encode(filename).decode('utf-8'), source="raw")
