@@ -52,6 +52,7 @@ aivoice_host = os.environ.get("AIVOICE_HOST", "127.0.0.1:8001")
 aivis_host = os.environ.get("AIVIS_HOST", "127.0.0.1:8001")
 lavalink_host_list = os.environ.get("LAVALINK_HOST", "http://127.0.0.1:2333").split(",")
 lavalink_uploader = os.environ.get("LAVALINK_UPLOADER", None)
+use_lavalink_upload: bool = bool(os.getenv("USE_LAVALINK_UPLOAD", "True") == "True")
 gpu_host = os.environ.get("GPU_HOST", host)
 DictChannel = 1057517276674400336
 ManagerGuilds = [888020016660893726,864441028866080768]
@@ -1247,7 +1248,7 @@ async def setdatabase(userid, id, value, table="voice"):
         return rows[0]
 
 
-async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0", guild_id="0"):
+async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0", guild_id="0", is_self_upload=False):
 
 
     if voiceid >= 4000:
@@ -1272,7 +1273,13 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0", guil
             voiceapi_counter += 1
 
     if voice_cache_dict.get(voiceid, {}).get(text):
-        return os.path.dirname(os.path.abspath(__file__)) + "/" + voice_cache_dict.get(voiceid).get(text)
+        path = os.path.dirname(os.path.abspath(__file__)) + "/" + voice_cache_dict.get(voiceid).get(text)
+        if use_lavalink_upload:
+            async with aiofiles.open(path,
+                                     mode='rb') as f:
+                return await f.read()
+        else:
+            return path
     if voice_cache_counter_dict.get(voiceid, None) is None:
         voice_cache_counter_dict[voiceid] = {}
         voice_cache_dict[voiceid] = {}
@@ -1282,11 +1289,11 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0", guil
         filename = f"cache/{text}-{voiceid}.wav"
         voice_cache_dict[voiceid][text] = filename
     return await generate_wav(text, voiceid, filename, target_host=target_host,
-                              is_premium=is_premium, speed=speed, pitch=pitch, guild_id=guild_id)
+                              is_premium=is_premium, speed=speed, pitch=pitch, guild_id=guild_id, is_self_upload=is_self_upload)
 
 
 async def generate_wav(text, speaker=1, filepath=None, target_host='localhost', target_port=50021,
-                       is_premium=False, speed="100", pitch="0", guild_id="0"):
+                       is_premium=False, speed="100", pitch="0", guild_id="0", is_self_upload=False):
     params = (
         ('text', text),
         ('speaker', speaker),
@@ -1327,7 +1334,7 @@ async def generate_wav(text, speaker=1, filepath=None, target_host='localhost', 
         return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, query_host=target_host)
     else:
         return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath,
-                               use_gpu_server=use_gpu_server, query_host=query_host)
+                               use_gpu_server=use_gpu_server, query_host=query_host, is_self_upload=is_self_upload)
 
 
 async def synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, filepath):
@@ -1384,14 +1391,14 @@ def get_temp_name():
 
 
 async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath=None, volume=1.0,
-                    use_gpu_server=False, query_host=None):
+                    use_gpu_server=False, query_host=None, is_self_upload=False):
     try:
         global is_use_gpu_server
         if query_host is None:
             query_host = target_host
         if filepath is not None:
             dir = os.path.dirname(os.path.abspath(__file__)) + "/" + filepath
-        if filepath is None and use_gpu_server and is_use_gpu_server and is_lavalink:
+        if filepath is None and use_gpu_server and is_use_gpu_server and is_lavalink and not is_self_upload:
             return f"usegpu_{gpu_host}_{query_host}"
 
         async with aiohttp.ClientSession(connector_owner=False, connector=conn, timeout=ClientTimeout(connect=5)) as private_session:
@@ -1410,6 +1417,8 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                 if target_host == aivoice_host:
 
                     try:
+                        if use_lavalink_upload:
+                            return await response1.read()
                         if filepath is None:
                             dir = os.path.dirname(os.path.abspath(__file__)) + "/output/" + get_temp_name()
                         async with aiofiles.open(dir,
@@ -1474,6 +1483,8 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
 
             try:
                 if lavalink_uploader is None:
+                    if use_lavalink_upload:
+                        return response2_data
                     if filepath is None:
                         dir = os.path.dirname(os.path.abspath(__file__)) + "/output/" + get_temp_name()
                     async with aiofiles.open(dir,
@@ -1655,18 +1666,25 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             voice_id = await getdatabase(member.id, "voiceid", 0)
 
         wav_list = []
+        is_self_gen = len(output_list) > 1
         for gen_text in output_list:
             if gen_text == "":
                 continue
             if gen_text.endswith(".wav"):
                 filename = (f"{user_dict_loc}/audio_data"
                               f"/{guild.id}/{gen_text}")
-                wav_list.append(filename)
+                if use_lavalink_upload:
+                    async with aiofiles.open(filename,
+                                             mode='rb') as f:
+                        filename = await f.read()
+                        wav_list.append(filename)
+                else:
+                    wav_list.append(filename)
                 continue
 
             filename = await text2wav(gen_text, int(voice_id), is_premium,
                                       speed="100",
-                                      pitch="0", guild_id=guild.id)
+                                      pitch="0", guild_id=guild.id, is_self_upload=is_self_gen)
             if filename != "failed":
                 wav_list.append(filename)
                 continue
@@ -1703,7 +1721,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                                                               f"&query-address={urllib.parse.quote(filename[2])}&text={urllib.parse.quote(output_list[0])}",
                                                             source="voicevox")
             else:
-                source_serch = await wavelink.Playable.search(base64.b64encode(filename).decode('utf-8'), source="raw")
+                source_serch = await wavelink.Playable.search(filename.hex(), source="wav")
             if len(source_serch) == 0:
                 print(filename)
                 return
@@ -1739,10 +1757,15 @@ async def yomiage(member, guild, text: str, no_read_name=False):
 
 async def connect_waves(wave_list):
     bytes_list = []
-    for wave_dir in wave_list:
-        async with aiofiles.open(wave_dir,
+    if use_lavalink_upload:
+        for wave_dir in wave_list:
+            bytes_list.append(base64.b64encode(wave_dir).decode('utf-8'))
+
+    else:
+        for wave_dir in wave_list:
+            async with aiofiles.open(wave_dir,
                                  mode='rb') as f:
-            bytes_list.append(base64.b64encode(await f.read()).decode('utf-8'))
+                bytes_list.append(base64.b64encode(await f.read()).decode('utf-8'))
 
     try:
         headers = {'Content-Type': 'application/json', }
@@ -1755,6 +1778,8 @@ async def connect_waves(wave_list):
                     return None
                 res_data = await response1.read()
 
+        if use_lavalink_upload:
+            return res_data
         filename = get_temp_name()
         try:
             dir = os.path.dirname(os.path.abspath(__file__)) + "/output/" + filename
