@@ -2203,11 +2203,41 @@ async def updatedict():
 
 
 @bot.slash_command(description="辞書に単語を追加するのだ(サーバー個別)", name="adddict")
-async def adddict_local(ctx, surface: discord.Option(input_type=str, description="辞書に登録する単語"),
+async def adddict_local(ctx, surface: discord.Option(input_type=str, description="辞書に登録する単語", required=False),
                         pronunciation: discord.Option(input_type=str, description="カタカナでの読み方", required=False),
-                        audio_file: discord.Option(discord.Attachment, description="ボイス辞書用音声ファイル(wav, mp3)", required=False)):
+                        audio_file: discord.Option(discord.Attachment, description="ボイス辞書用音声ファイル(wav, mp3)", required=False),
+                        dict_file: discord.Option(discord.Attachment, description="インポート用辞書ファイル(json)", required=False)):
     print(surface)
-    if surface == "":
+    if dict_file is not None:
+        if str(dict_file.content_type) not in ["application/json"]:
+            embed = discord.Embed(
+                title="**Error**",
+                description=f"JSONファイルを指定してください。",
+                color=discord.Colour.brand_red(),
+            )
+            await ctx.respond(embed=embed)
+            return
+        import_dict: dict = json.loads((await dict_file.read()).decode('utf-8'))
+        for content in import_dict.keys():
+            if await update_private_dict(ctx.guild.id, content, import_dict.get(content)) is not True:
+                embed = discord.Embed(
+                    title="**Error**",
+                    description=f"登録数の上限に達しました。(サポートサーバーへお問い合わせください。)\n"
+                                f"{content}まで登録しました。",
+                    color=discord.Colour.brand_red(),
+                )
+                await ctx.respond(embed=embed)
+                return
+        embed = discord.Embed(
+            title="**Import Dict**",
+            description=f"{len(import_dict)}件を辞書に登録しました。",
+            color=discord.Colour.brand_green(),
+        )
+        await ctx.respond(embed=embed)
+        return
+
+
+    if surface is None or surface == "":
         embed = discord.Embed(
             title="**Error**",
             description=f"空文字は登録できません。",
