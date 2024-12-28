@@ -2210,7 +2210,7 @@ async def adddict_local(ctx, surface: discord.Option(input_type=str, description
     print(surface)
     if dict_file is not None:
         print(dict_file.content_type)
-        if str(dict_file.content_type) not in ["application/json"]:
+        if str(dict_file.content_type).split(";")[0] not in ["application/json"]:
             embed = discord.Embed(
                 title="**Error**",
                 description=f"JSONファイルを指定してください。",
