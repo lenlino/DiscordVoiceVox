@@ -52,6 +52,7 @@ aivoice_host = os.environ.get("AIVOICE_HOST", "127.0.0.1:8001")
 aivis_host = os.environ.get("AIVIS_HOST", "127.0.0.1:8001")
 lavalink_host_list = os.environ.get("LAVALINK_HOST", "http://127.0.0.1:2333").split(",")
 lavalink_uploader = os.environ.get("LAVALINK_UPLOADER", None)
+use_lavalink_upload: bool = bool(os.getenv("USE_LAVALINK_UPLOAD", "True") == "True")
 gpu_host = os.environ.get("GPU_HOST", host)
 DictChannel = 1057517276674400336
 ManagerGuilds = [888020016660893726,864441028866080768]
@@ -1132,7 +1133,7 @@ async def addglobaldict(ctx, surface: discord.Option(input_type=str, description
 
         file_name = f"{uuid.uuid4()}.wav"
         voice_path = (f"{user_dict_loc}/audio_data"
-                      f"/{ctx.guild.id}")
+                      f"/9686")
         pronunciation = f"#%&${file_name}#%&$"
         os.makedirs(voice_path, exist_ok=True)
         if len(surface) > 50:
@@ -1143,30 +1144,15 @@ async def addglobaldict(ctx, surface: discord.Option(input_type=str, description
             )
             await ctx.respond(embed=embed)
             return
-        if await update_private_dict(ctx.guild.id, surface, pronunciation) is not True:
-            embed = discord.Embed(
-                title="**Error**",
-                description=f"登録数の上限に達しました。(サポートサーバーへお問い合わせください。)",
-                color=discord.Colour.brand_red(),
-            )
-            await ctx.respond(embed=embed)
-            return
-
-        try:
-            async with aiofiles.open(voice_path + "/" + file_name,
-                                     mode='wb') as f:
-                await f.write(await audio_file.read())
-        except ReadTimeout:
-            return
 
         embed = discord.Embed(
             title="**Add Dict**",
-            description=f"辞書に音声を登録しました。",
+            description=f"グローバル辞書に音声登録を申請しました。",
             color=discord.Colour.brand_green(),
         )
         embed.add_field(name="surface", value=surface)
         embed.add_field(name="pronunciation", value=audio_file.url)
-        await ctx.respond(embed=embed)
+        await ctx.respond(embed=embed, attachments=audio_file)
         return
 
     # await update_private_dict(9686, surface, pronunciation)
@@ -1247,7 +1233,7 @@ async def setdatabase(userid, id, value, table="voice"):
         return rows[0]
 
 
-async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0", guild_id="0"):
+async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0", guild_id="0", is_self_upload=False):
 
 
     if voiceid >= 4000:
@@ -1272,7 +1258,13 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0", guil
             voiceapi_counter += 1
 
     if voice_cache_dict.get(voiceid, {}).get(text):
-        return os.path.dirname(os.path.abspath(__file__)) + "/" + voice_cache_dict.get(voiceid).get(text)
+        path = os.path.dirname(os.path.abspath(__file__)) + "/" + voice_cache_dict.get(voiceid).get(text)
+        if use_lavalink_upload:
+            async with aiofiles.open(path,
+                                     mode='rb') as f:
+                return await f.read()
+        else:
+            return path
     if voice_cache_counter_dict.get(voiceid, None) is None:
         voice_cache_counter_dict[voiceid] = {}
         voice_cache_dict[voiceid] = {}
@@ -1282,11 +1274,11 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0", guil
         filename = f"cache/{text}-{voiceid}.wav"
         voice_cache_dict[voiceid][text] = filename
     return await generate_wav(text, voiceid, filename, target_host=target_host,
-                              is_premium=is_premium, speed=speed, pitch=pitch, guild_id=guild_id)
+                              is_premium=is_premium, speed=speed, pitch=pitch, guild_id=guild_id, is_self_upload=is_self_upload)
 
 
 async def generate_wav(text, speaker=1, filepath=None, target_host='localhost', target_port=50021,
-                       is_premium=False, speed="100", pitch="0", guild_id="0"):
+                       is_premium=False, speed="100", pitch="0", guild_id="0", is_self_upload=False):
     params = (
         ('text', text),
         ('speaker', speaker),
@@ -1327,7 +1319,7 @@ async def generate_wav(text, speaker=1, filepath=None, target_host='localhost', 
         return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, query_host=target_host)
     else:
         return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath,
-                               use_gpu_server=use_gpu_server, query_host=query_host)
+                               use_gpu_server=use_gpu_server, query_host=query_host, is_self_upload=is_self_upload)
 
 
 async def synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, filepath):
@@ -1384,14 +1376,14 @@ def get_temp_name():
 
 
 async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath=None, volume=1.0,
-                    use_gpu_server=False, query_host=None):
+                    use_gpu_server=False, query_host=None, is_self_upload=False):
     try:
         global is_use_gpu_server
         if query_host is None:
             query_host = target_host
         if filepath is not None:
             dir = os.path.dirname(os.path.abspath(__file__)) + "/" + filepath
-        if filepath is None and use_gpu_server and is_use_gpu_server and is_lavalink:
+        if filepath is None and use_gpu_server and is_use_gpu_server and is_lavalink and not is_self_upload:
             return f"usegpu_{gpu_host}_{query_host}"
 
         async with aiohttp.ClientSession(connector_owner=False, connector=conn, timeout=ClientTimeout(connect=5)) as private_session:
@@ -1410,6 +1402,8 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                 if target_host == aivoice_host:
 
                     try:
+                        if use_lavalink_upload:
+                            return await response1.read()
                         if filepath is None:
                             dir = os.path.dirname(os.path.abspath(__file__)) + "/output/" + get_temp_name()
                         async with aiofiles.open(dir,
@@ -1474,6 +1468,8 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
 
             try:
                 if lavalink_uploader is None:
+                    if use_lavalink_upload:
+                        return response2_data
                     if filepath is None:
                         dir = os.path.dirname(os.path.abspath(__file__)) + "/output/" + get_temp_name()
                     async with aiofiles.open(dir,
@@ -1623,8 +1619,12 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                 split_text = split_output[i].replace("/", "")
                 voice_path = (f"{user_dict_loc}/audio_data"
                               f"/{guild.id}/{split_text}")
+                voice_global_path = (f"{user_dict_loc}/audio_data"
+                              f"/9686/{split_text}")
                 if split_text.endswith(".wav") and os.path.isfile(voice_path):
                     split_output[i] = split_text
+                elif split_text.endswith(".wav") and os.path.isfile(voice_global_path):
+                    split_output[i] = f"global_{split_text}"
                 else:
                     split_output[i] = await honyaku_and_ikaryaku(lang, split_output[i], voice_id, member.id, guild.id,
                                                                  is_premium)
@@ -1655,18 +1655,29 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             voice_id = await getdatabase(member.id, "voiceid", 0)
 
         wav_list = []
+        is_self_gen = len(output_list) > 1
         for gen_text in output_list:
             if gen_text == "":
                 continue
             if gen_text.endswith(".wav"):
-                filename = (f"{user_dict_loc}/audio_data"
-                              f"/{guild.id}/{gen_text}")
-                wav_list.append(filename)
+                if gen_text.startswith("global_"):
+                    filename = (f"{user_dict_loc}/audio_data"
+                                f"/9686/{gen_text}")
+                else:
+                    filename = (f"{user_dict_loc}/audio_data"
+                                f"/{guild.id}/{gen_text}")
+                if use_lavalink_upload:
+                    async with aiofiles.open(filename,
+                                             mode='rb') as f:
+                        filename = await f.read()
+                        wav_list.append(filename)
+                else:
+                    wav_list.append(filename)
                 continue
 
             filename = await text2wav(gen_text, int(voice_id), is_premium,
                                       speed="100",
-                                      pitch="0", guild_id=guild.id)
+                                      pitch="0", guild_id=guild.id, is_self_upload=is_self_gen)
             if filename != "failed":
                 wav_list.append(filename)
                 continue
@@ -1703,7 +1714,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                                                               f"&query-address={urllib.parse.quote(filename[2])}&text={urllib.parse.quote(output_list[0])}",
                                                             source="voicevox")
             else:
-                source_serch = await wavelink.Playable.search(base64.b64encode(filename).decode('utf-8'), source="raw")
+                source_serch = await wavelink.Playable.search(filename.hex(), source="wav")
             if len(source_serch) == 0:
                 print(filename)
                 return
@@ -1739,10 +1750,15 @@ async def yomiage(member, guild, text: str, no_read_name=False):
 
 async def connect_waves(wave_list):
     bytes_list = []
-    for wave_dir in wave_list:
-        async with aiofiles.open(wave_dir,
+    if use_lavalink_upload:
+        for wave_dir in wave_list:
+            bytes_list.append(base64.b64encode(wave_dir).decode('utf-8'))
+
+    else:
+        for wave_dir in wave_list:
+            async with aiofiles.open(wave_dir,
                                  mode='rb') as f:
-            bytes_list.append(base64.b64encode(await f.read()).decode('utf-8'))
+                bytes_list.append(base64.b64encode(await f.read()).decode('utf-8'))
 
     try:
         headers = {'Content-Type': 'application/json', }
@@ -1755,6 +1771,8 @@ async def connect_waves(wave_list):
                     return None
                 res_data = await response1.read()
 
+        if use_lavalink_upload:
+            return res_data
         filename = get_temp_name()
         try:
             dir = os.path.dirname(os.path.abspath(__file__)) + "/output/" + filename
@@ -2047,6 +2065,25 @@ async def dict_and_cache_loop():
                 else:
                     embed.description = "適切な登録ではないため登録が拒否されました。"
                 await mes.edit(embed=embed)
+            elif embed.description == "グローバル辞書に音声登録を申請しました。":
+                tango = embed_fields[0].value
+                yomi = embed_fields[1].value
+                if reactions[0].count >= reactions[1].count:
+                    file_name = f"{uuid.uuid4()}.wav"
+                    voice_path = (f"{user_dict_loc}/audio_data"
+                                  f"/9686")
+                    pronunciation = f"#%&${file_name}#%&$"
+                    await update_private_dict(9686, tango, pronunciation)
+                    try:
+                        async with aiofiles.open(voice_path + "/" + file_name,
+                                                 mode='wb') as f:
+                            await f.write(await mes.attachments[0].read())
+                    except ReadTimeout:
+                        return
+                    embed.description = "グローバル辞書に音声が登録されました。"
+                else:
+                    embed.description = "適切な登録ではないため登録が拒否されました。"
+                await mes.edit(embed=embed)
             elif embed.description == "グローバル辞書に単語削除を申請しました。":
                 tango = embed_fields[0].value
                 if reactions[0].count >= reactions[1].count:
@@ -2166,11 +2203,42 @@ async def updatedict():
 
 
 @bot.slash_command(description="辞書に単語を追加するのだ(サーバー個別)", name="adddict")
-async def adddict_local(ctx, surface: discord.Option(input_type=str, description="辞書に登録する単語"),
+async def adddict_local(ctx, surface: discord.Option(input_type=str, description="辞書に登録する単語", required=False),
                         pronunciation: discord.Option(input_type=str, description="カタカナでの読み方", required=False),
-                        audio_file: discord.Option(discord.Attachment, description="ボイス辞書用音声ファイル(wav, mp3)", required=False)):
+                        audio_file: discord.Option(discord.Attachment, description="ボイス辞書用音声ファイル(wav, mp3)", required=False),
+                        dict_file: discord.Option(discord.Attachment, description="インポート用辞書ファイル(json)", required=False)):
     print(surface)
-    if surface == "":
+    if dict_file is not None:
+        print(dict_file.content_type)
+        if str(dict_file.content_type).split(";")[0] not in ["application/json"]:
+            embed = discord.Embed(
+                title="**Error**",
+                description=f"JSONファイルを指定してください。",
+                color=discord.Colour.brand_red(),
+            )
+            await ctx.respond(embed=embed)
+            return
+        import_dict: dict = json.loads((await dict_file.read()).decode('utf-8'))
+        for content in import_dict.keys():
+            if await update_private_dict(ctx.guild.id, content, import_dict.get(content)) is not True:
+                embed = discord.Embed(
+                    title="**Error**",
+                    description=f"登録数の上限に達しました。(サポートサーバーへお問い合わせください。)\n"
+                                f"{content}まで登録しました。",
+                    color=discord.Colour.brand_red(),
+                )
+                await ctx.respond(embed=embed)
+                return
+        embed = discord.Embed(
+            title="**Import Dict**",
+            description=f"{len(import_dict)}件を辞書に登録しました。",
+            color=discord.Colour.brand_green(),
+        )
+        await ctx.respond(embed=embed)
+        return
+
+
+    if surface is None or surface == "":
         embed = discord.Embed(
             title="**Error**",
             description=f"空文字は登録できません。",
