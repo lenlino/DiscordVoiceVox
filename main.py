@@ -1133,7 +1133,7 @@ async def addglobaldict(ctx, surface: discord.Option(input_type=str, description
 
         file_name = f"{uuid.uuid4()}.wav"
         voice_path = (f"{user_dict_loc}/audio_data"
-                      f"/{ctx.guild.id}")
+                      f"/9686")
         pronunciation = f"#%&${file_name}#%&$"
         os.makedirs(voice_path, exist_ok=True)
         if len(surface) > 50:
@@ -1144,30 +1144,15 @@ async def addglobaldict(ctx, surface: discord.Option(input_type=str, description
             )
             await ctx.respond(embed=embed)
             return
-        if await update_private_dict(ctx.guild.id, surface, pronunciation) is not True:
-            embed = discord.Embed(
-                title="**Error**",
-                description=f"登録数の上限に達しました。(サポートサーバーへお問い合わせください。)",
-                color=discord.Colour.brand_red(),
-            )
-            await ctx.respond(embed=embed)
-            return
-
-        try:
-            async with aiofiles.open(voice_path + "/" + file_name,
-                                     mode='wb') as f:
-                await f.write(await audio_file.read())
-        except ReadTimeout:
-            return
 
         embed = discord.Embed(
             title="**Add Dict**",
-            description=f"辞書に音声を登録しました。",
+            description=f"グローバル辞書に音声登録を申請しました。",
             color=discord.Colour.brand_green(),
         )
         embed.add_field(name="surface", value=surface)
         embed.add_field(name="pronunciation", value=audio_file.url)
-        await ctx.respond(embed=embed)
+        await ctx.respond(embed=embed, attachments=audio_file)
         return
 
     # await update_private_dict(9686, surface, pronunciation)
@@ -1634,8 +1619,12 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                 split_text = split_output[i].replace("/", "")
                 voice_path = (f"{user_dict_loc}/audio_data"
                               f"/{guild.id}/{split_text}")
+                voice_global_path = (f"{user_dict_loc}/audio_data"
+                              f"/9686/{split_text}")
                 if split_text.endswith(".wav") and os.path.isfile(voice_path):
                     split_output[i] = split_text
+                elif split_text.endswith(".wav") and os.path.isfile(voice_global_path):
+                    split_output[i] = f"global_{split_text}"
                 else:
                     split_output[i] = await honyaku_and_ikaryaku(lang, split_output[i], voice_id, member.id, guild.id,
                                                                  is_premium)
@@ -1671,8 +1660,12 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             if gen_text == "":
                 continue
             if gen_text.endswith(".wav"):
-                filename = (f"{user_dict_loc}/audio_data"
-                              f"/{guild.id}/{gen_text}")
+                if gen_text.startswith("global_"):
+                    filename = (f"{user_dict_loc}/audio_data"
+                                f"/9686/{gen_text}")
+                else:
+                    filename = (f"{user_dict_loc}/audio_data"
+                                f"/{guild.id}/{gen_text}")
                 if use_lavalink_upload:
                     async with aiofiles.open(filename,
                                              mode='rb') as f:
@@ -2069,6 +2062,25 @@ async def dict_and_cache_loop():
                 if reactions[0].count >= reactions[1].count:
                     await update_private_dict(9686, tango, yomi)
                     embed.description = "グローバル辞書に単語が登録されました。"
+                else:
+                    embed.description = "適切な登録ではないため登録が拒否されました。"
+                await mes.edit(embed=embed)
+            elif embed.description == "グローバル辞書に音声登録を申請しました。":
+                tango = embed_fields[0].value
+                yomi = embed_fields[1].value
+                if reactions[0].count >= reactions[1].count:
+                    file_name = f"{uuid.uuid4()}.wav"
+                    voice_path = (f"{user_dict_loc}/audio_data"
+                                  f"/9686")
+                    pronunciation = f"#%&${file_name}#%&$"
+                    await update_private_dict(9686, tango, pronunciation)
+                    try:
+                        async with aiofiles.open(voice_path + "/" + file_name,
+                                                 mode='wb') as f:
+                            await f.write(await mes.attachments[0].read())
+                    except ReadTimeout:
+                        return
+                    embed.description = "グローバル辞書に音声が登録されました。"
                 else:
                     embed.description = "適切な登録ではないため登録が拒否されました。"
                 await mes.edit(embed=embed)
