@@ -1726,19 +1726,18 @@ async def yomiage(member, guild, text: str, no_read_name=False):
     except Exception as e:
         logger.error(e)
     else:
+
         if is_lavalink:
             player = guild.voice_client
             filters: wavelink.Filters = player.filters
             speed = float(float(speed) / 100)
             pitch = float(float(pitch) / 100) + 1
             filters.timescale.set(speed=speed, pitch=pitch)
+            while guild.voice_client.playing:
+                await asyncio.sleep(1)
             await player.play(source, filters=filters)
-
         else:
             guild.voice_client.play(source)
-
-        while guild.voice_client.playing:
-            await asyncio.sleep(1)
     finally:
         yomiage_queue.get(guild.id, []).pop(0)
         if len(yomiage_queue.get(guild.id, [])) > 0:
