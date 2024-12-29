@@ -1726,19 +1726,18 @@ async def yomiage(member, guild, text: str, no_read_name=False):
     except Exception as e:
         logger.error(e)
     else:
+
         if is_lavalink:
             player = guild.voice_client
             filters: wavelink.Filters = player.filters
             speed = float(float(speed) / 100)
             pitch = float(float(pitch) / 100) + 1
             filters.timescale.set(speed=speed, pitch=pitch)
+            while guild.voice_client.playing:
+                await asyncio.sleep(1)
             await player.play(source, filters=filters)
-
         else:
             guild.voice_client.play(source)
-
-        while guild.voice_client.playing:
-            await asyncio.sleep(1)
     finally:
         yomiage_queue.get(guild.id, []).pop(0)
         if len(yomiage_queue.get(guild.id, [])) > 0:
@@ -2462,11 +2461,38 @@ async def henkan_private_dict(server_id, source):
     dict_data = sorted(json_data.keys(), key=len)
     dict_data.reverse()
     limit = text_limit_100 + 50
-    for k in dict_data:
-        source = source.replace(k, json_data[k])
-        if len(source) > limit:
-            source = source[:(text_limit_100 + 50)]
-    return source
+    output = ""
+
+    split_1 = source.split("#%&$")
+
+    for split_num in range(len(split_1)):
+        split_text = split_1[split_num]
+        if split_num%2 != 0:
+            output += f"#%&${split_text}#%&$"
+            continue
+        for k in dict_data:
+            if json_data[k].startswith("#%&$"):
+                split_text = split_text.replace(k, json_data[k])
+                if len(split_text) > limit:
+                    split_text = split_text[:(text_limit_100 + 50)]
+        output += split_text
+
+    spilit_2 = output.split("#%&$")
+    output = ""
+
+    for split_num in range(len(spilit_2)):
+        split_text = spilit_2[split_num]
+        if split_num % 2 != 0:
+            output += f"#%&${split_text}#%&$"
+            continue
+        for k in dict_data:
+            if json_data[k].startswith("#%&$"):
+                continue
+            split_text = split_text.replace(k, json_data[k])
+            if len(split_text) > limit:
+                split_text = split_text[:(text_limit_100 + 50)]
+        output += split_text
+    return output
 
 
 async def update_private_dict(server_id, source, kana):
