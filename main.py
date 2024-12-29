@@ -52,7 +52,7 @@ aivoice_host = os.environ.get("AIVOICE_HOST", "127.0.0.1:8001")
 aivis_host = os.environ.get("AIVIS_HOST", "127.0.0.1:8001")
 lavalink_host_list = os.environ.get("LAVALINK_HOST", "http://127.0.0.1:2333").split(",")
 lavalink_uploader = os.environ.get("LAVALINK_UPLOADER", None)
-use_lavalink_upload: bool = bool(os.getenv("USE_LAVALINK_UPLOAD", "True") == "True")
+use_lavalink_upload: bool = bool(os.getenv("USE_LAVALINK_UPLOAD", "False") == "True")
 gpu_host = os.environ.get("GPU_HOST", host)
 DictChannel = 1057517276674400336
 ManagerGuilds = [888020016660893726,864441028866080768]
