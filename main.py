@@ -1878,16 +1878,18 @@ async def on_voice_state_update(member, before, after):
                 embed.set_author(
                     name=f"Premium {await add_premium_guild_dict(guild_premium_user_id, after.channel.guild.id)}")
                 premium_server_list.append(after.channel.guild.id)
-            if await getdatabase(after.channel.guild.id, "is_joinnotice", True, "guild"):
-                await after.channel.guild.get_channel(autojoin["text_channel_id"]).send(embed=embed)
+
             try:
                 await after.channel.connect(cls=wavelink.Player)
                 if (after.channel.permissions_for(after.channel.guild.me)).deafen_members:
                     await after.channel.guild.me.edit(deafen=True)
+                if await getdatabase(after.channel.guild.id, "is_joinnotice", True, "guild"):
+                    await after.channel.guild.get_channel(autojoin["text_channel_id"]).send(embed=embed)
             except Exception as e:
                 logger.error(e)
                 logger.error("自動接続")
                 return
+
 
         return
 
