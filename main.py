@@ -1506,11 +1506,8 @@ async def on_ready():
 @bot.event
 async def on_message(message):
     voice = message.guild.voice_client
-
-    if voice is not None and message.guild.id in vclist.keys() and message.channel.id == vclist[message.guild.id]:
+    if voice and (message.channel.id == vclist.get(message.guild.id) or message.channel.id == voice.channel.id):
         await add_yomiage_queue(message.author, message.guild, message.content)
-    else:
-        return
 
 @dataclass
 class YomiageQueue:
