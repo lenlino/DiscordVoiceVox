@@ -52,7 +52,7 @@ aivoice_host = os.environ.get("AIVOICE_HOST", "127.0.0.1:8001")
 aivis_host = os.environ.get("AIVIS_HOST", "127.0.0.1:8001")
 lavalink_host_list = os.environ.get("LAVALINK_HOST", "http://127.0.0.1:2333").split(",")
 lavalink_uploader = os.environ.get("LAVALINK_UPLOADER", None)
-use_lavalink_upload: bool = bool(os.getenv("USE_LAVALINK_UPLOAD", "False") == "True")
+use_lavalink_upload: bool = bool(os.getenv("USE_LAVALINK_UPLOAD", "True") == "True")
 gpu_host = os.environ.get("GPU_HOST", host)
 DictChannel = 1057517276674400336
 ManagerGuilds = [888020016660893726,864441028866080768]
@@ -1385,7 +1385,8 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
             dir = os.path.dirname(os.path.abspath(__file__)) + "/" + filepath
         if filepath is None and use_gpu_server and is_use_gpu_server and is_lavalink and not is_self_upload:
             return f"usegpu_{gpu_host}_{query_host}"
-
+        elif filepath is None and target_host != aivoice_host and is_lavalink and not is_self_upload:
+            return f"usegpu_{target_host}_{query_host}"
         async with aiohttp.ClientSession(connector_owner=False, connector=conn, timeout=ClientTimeout(connect=5)) as private_session:
             async with private_session.post(f'http://{query_host}/audio_query',
                                             params=params,
@@ -1711,7 +1712,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                                                               f"&query-address={urllib.parse.quote(filename[2])}&text={urllib.parse.quote(output_list[0])}",
                                                             source="voicevox")
             else:
-                source_serch = await wavelink.Playable.search(filename.hex(), source="wav")
+                source_serch = await wavelink.Playable.search(base64.urlsafe_b64encode(filename).decode('utf-8'), source="wav")
             if len(source_serch) == 0:
                 print(filename)
                 return
