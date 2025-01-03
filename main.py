@@ -1528,6 +1528,8 @@ async def add_yomiage_queue(member, guild, text: str, no_read_name=False):
 
 
 async def yomiage(member, guild, text: str, no_read_name=False):
+    is_premium = False
+    time_sta = time.time()
     try:
         if text == "zundamon!!stop":
             del yomiage_queue[guild.id]
@@ -1634,7 +1636,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             return
         #print(output)
         filename = ""
-        time_sta = time.time()
+
         done = True
         retry_count = 0
         output_list = []
@@ -1689,32 +1691,40 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                 print("結合失敗")
                 return
 
-        time_end = time.time()
-        tim = time_end - time_sta
-        if is_premium:
-            premium_text = "P"
-            voice_generate_time_list_p.append(tim)
-        else:
-            premium_text = ""
-            voice_generate_time_list.append(tim)
-        if tim > 3:
-            print(f"{premium_text} v:{voice_id} s:{speed} p:{pitch} t:{str(tim)} text:{output}")
-
         if is_lavalink:
             if type(filename) == str and filename.endswith(".wav"):
-                source_serch = \
-                    (await wavelink.Playable.search(filename.replace("\"", ""),
-                                                    source=None))
+                try:
+                    source_serch = await asyncio.wait_for(
+                        wavelink.Playable.search(filename.replace("\"", ""), source=None),
+                        timeout=5.0  # タイムアウトを5秒に設定
+                    )
+                except asyncio.TimeoutError:
+                    logger.error("検索がタイムアウトしました！:localfile")
+                    return
             elif type(filename) == str and filename.startswith("usegpu"):
                 filename = filename.split("_")
-                source_serch = await wavelink.Playable.search(f"vv://voicevox?"
-                                                              f"&speaker={int(voice_id)}&address={urllib.parse.quote(filename[1])}"
-                                                              f"&query-address={urllib.parse.quote(filename[2])}&text={urllib.parse.quote(output_list[0])}",
-                                                            source="voicevox")
+                try:
+                    source_serch = await asyncio.wait_for(
+                        wavelink.Playable.search(f"vv://voicevox?"
+                                                       f"&speaker={int(voice_id)}&address={urllib.parse.quote(filename[1])}"
+                                                       f"&query-address={urllib.parse.quote(filename[2])}&text={urllib.parse.quote(output_list[0])}",
+                                                       source="voicevox"),
+                        timeout=5.0  # タイムアウトを5秒に設定
+                    )
+                except asyncio.TimeoutError:
+                    logger.error("検索がタイムアウトしました！:voicevox")
+                    return
             else:
-                source_serch = await wavelink.Playable.search(base64.urlsafe_b64encode(filename).decode('utf-8'), source="wav")
+                try:
+                    source_serch = await asyncio.wait_for(
+                        wavelink.Playable.search(base64.urlsafe_b64encode(filename).decode('utf-8'), source="wav"),
+                        timeout=5.0  # タイムアウトを5秒に設定
+                    )
+                except asyncio.TimeoutError:
+                    logger.error("検索がタイムアウトしました！:voicevox")
+                    return
             if len(source_serch) == 0:
-                print(filename)
+                logger.error("結果が見つかりませんでした。")
                 return
             source = source_serch[0]
         else:
@@ -1743,6 +1753,18 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             await yomiage(queue.member, queue.guild, queue.text, queue.no_read_name)
         else:
             del yomiage_queue[guild.id]
+
+        #時間測定
+        time_end = time.time()
+        tim = time_end - time_sta
+        if is_premium:
+            premium_text = "P"
+            voice_generate_time_list_p.append(tim)
+        else:
+            premium_text = ""
+            voice_generate_time_list.append(tim)
+        if tim > 3:
+            print(f"{premium_text} v:{voice_id} s:{speed} p:{pitch} t:{str(tim)} text:{output}")
 
 
 async def connect_waves(wave_list):
