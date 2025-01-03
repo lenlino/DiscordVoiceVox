@@ -1384,9 +1384,9 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
         if filepath is not None:
             dir = os.path.dirname(os.path.abspath(__file__)) + "/" + filepath
         if filepath is None and use_gpu_server and is_use_gpu_server and is_lavalink and not is_self_upload:
-            return f"usegpu_{gpu_host}_{query_host}"
+            return f"usegpu_{gpu_host}_{query_host}_{params['speaker']}"
         elif filepath is None and target_host != aivoice_host and is_lavalink and not is_self_upload:
-            return f"usegpu_{target_host}_{query_host}"
+            return f"usegpu_{target_host}_{query_host}_{params['speaker']}"
         async with aiohttp.ClientSession(connector_owner=False, connector=conn, timeout=ClientTimeout(connect=5)) as private_session:
             async with private_session.post(f'http://{query_host}/audio_query',
                                             params=params,
@@ -1706,7 +1706,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                 try:
                     source_serch = await asyncio.wait_for(
                         wavelink.Playable.search(f"vv://voicevox?"
-                                                       f"&speaker={int(voice_id)}&address={urllib.parse.quote(filename[1])}"
+                                                       f"&speaker={int(filename[3])}&address={urllib.parse.quote(filename[1])}"
                                                        f"&query-address={urllib.parse.quote(filename[2])}&text={urllib.parse.quote(output_list[0])}",
                                                        source="voicevox"),
                         timeout=5.0  # タイムアウトを5秒に設定
