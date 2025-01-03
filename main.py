@@ -1273,6 +1273,7 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0", guil
     if voice_cache_counter_dict[voiceid][text] > 50:
         filename = f"cache/{text}-{voiceid}.wav"
         voice_cache_dict[voiceid][text] = filename
+        is_self_upload = True
     return await generate_wav(text, voiceid, filename, target_host=target_host,
                               is_premium=is_premium, speed=speed, pitch=pitch, guild_id=guild_id, is_self_upload=is_self_upload)
 
