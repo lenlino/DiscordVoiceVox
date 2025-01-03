@@ -1734,6 +1734,17 @@ async def yomiage(member, guild, text: str, no_read_name=False):
     except Exception as e:
         logger.error(e)
     else:
+        # 時間測定
+        time_end = time.time()
+        tim = time_end - time_sta
+        if is_premium:
+            premium_text = "P"
+            voice_generate_time_list_p.append(tim)
+        else:
+            premium_text = ""
+            voice_generate_time_list.append(tim)
+        if tim > 3:
+            print(f"{premium_text} v:{voice_id} s:{speed} p:{pitch} t:{str(tim)} text:{output}")
 
         if is_lavalink:
             player = guild.voice_client
@@ -1753,18 +1764,6 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             await yomiage(queue.member, queue.guild, queue.text, queue.no_read_name)
         else:
             del yomiage_queue[guild.id]
-
-        #時間測定
-        time_end = time.time()
-        tim = time_end - time_sta
-        if is_premium:
-            premium_text = "P"
-            voice_generate_time_list_p.append(tim)
-        else:
-            premium_text = ""
-            voice_generate_time_list.append(tim)
-        if tim > 3:
-            print(f"{premium_text} v:{voice_id} s:{speed} p:{pitch} t:{str(tim)} text:{output}")
 
 
 async def connect_waves(wave_list):
