@@ -410,11 +410,7 @@ def add_premium_user(user_id, amount):
         premium_server_list_1000.append(str(user_id))
 
 
-@bot.slash_command(description="読み上げを開始・終了するのだ",
-                   integration_types={
-                       discord.IntegrationType.guild_install,
-                       discord.IntegrationType.user_install,
-                   })
+@bot.slash_command(description="読み上げを開始・終了するのだ")
 async def vc(ctx):
     await ctx.defer()
     if ctx.author.voice is None:
