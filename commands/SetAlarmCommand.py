@@ -34,7 +34,7 @@ class SetAlarmCommand(commands.Cog):
             description=f"50文字以下の単語のみ登録できます。",
             color=discord.Colour.brand_red(),
         )
-        if await main.is_premium_check(ctx.author.id, 100) is False:
+        if await main.is_premium_check(ctx.author.id, 100) is False and await main.is_premium_check(ctx.guild.id, 100):
             embed.description = "プレミアムプラン限定機能です"
             await ctx.send_followup(embed=embed)
             return
