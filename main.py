@@ -266,7 +266,7 @@ class VoiceSelectView(discord.ui.Select):
 
 class HogeList(discord.ui.View):
     def __init__(self, name=None, start=0, end=0):
-        super().__init__()
+        super().__init__(disable_on_timeout=True)
         self.add_item(VoiceSelectView(default=name, id_list=voice_id_list[start:end], start=start, end=end))
         self.add_item(VoiceSelectView2(name=name, start=start))
 
@@ -1257,7 +1257,8 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0", guil
         else:
             voiceapi_counter += 1
 
-    if voice_cache_dict.get(voiceid, {}).get(text):
+    filename = None
+    '''if voice_cache_dict.get(voiceid, {}).get(text):
         path = os.path.dirname(os.path.abspath(__file__)) + "/" + voice_cache_dict.get(voiceid).get(text)
         if use_lavalink_upload:
             async with aiofiles.open(path,
@@ -1269,11 +1270,11 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0", guil
         voice_cache_counter_dict[voiceid] = {}
         voice_cache_dict[voiceid] = {}
     voice_cache_counter_dict[voiceid][text] = voice_cache_counter_dict.get(voiceid, {}).get(text, 0) + 1
-    filename = None
+
     if voice_cache_counter_dict[voiceid][text] > 50:
         filename = f"cache/{text}-{voiceid}.wav"
         voice_cache_dict[voiceid][text] = filename
-        is_self_upload = True
+        is_self_upload = True'''
     return await generate_wav(text, voiceid, filename, target_host=target_host,
                               is_premium=is_premium, speed=speed, pitch=pitch, guild_id=guild_id, is_self_upload=is_self_upload)
 
