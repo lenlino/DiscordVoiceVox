@@ -2016,7 +2016,7 @@ async def status_update_loop():
     is_use_gpu_server = is_use_gpu_server_enabled
     global vclist_len
     vclist_len = len(vclist)
-    text = f"{str(vclist_len)}/{str(len(bot.guilds))}読み上げ中\n 生成時間平均 N:{round(avarage, 1)}s P:{round(avarage_p, 1)}s"
+    text = f"{str(vclist_len)}/{str(len(bot.guilds))}読み上げ中\n N:{round(avarage, 1)}s P:{round(avarage_p, 1)}s"
     logger.error(text)
     voice_generate_time_list_p.clear()
     voice_generate_time_list.clear()
