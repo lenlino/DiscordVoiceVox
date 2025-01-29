@@ -1510,7 +1510,7 @@ async def on_ready():
 async def on_message(message):
     voice = message.guild.voice_client
     if voice and (message.channel.id == vclist.get(message.guild.id) or message.channel.id == voice.channel.id):
-        await add_yomiage_queue(message.author, message.guild, message.content)
+        asyncio.create_task(add_yomiage_queue(message.author, message.guild, message.content))
 
 @dataclass
 class YomiageQueue:
@@ -1996,14 +1996,15 @@ async def status_update_loop():
             if alarm_youbi_list[now_youbi] == "0":
                 continue
             alarm_message = alarm.get('message', 'アラームなのだ')
-            await add_yomiage_queue(guild.me, guild, f"{alarm_message}")
+            asyncio.create_task(add_yomiage_queue(guild.me, guild, f"{alarm_message}"))
             try:
                 await guild.get_channel(vclist[key]).send(embed=discord.Embed(
                     title=f"Alarm",
                     description=f"{alarm_message}",
                     color=discord.Color.gold()
                 ))
-            except:
+            except Exception as e:
+                logger.error(e)
                 pass
 
     if len(voice_generate_time_list) != 0 and len(voice_generate_time_list_p) != 0:
