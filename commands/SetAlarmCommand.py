@@ -8,15 +8,25 @@ import main
 
 
 class SetAlarmCommand(commands.Cog):
+
+
     async def get_alarm_settings(ctx: discord.AutocompleteContext):
         setting_json = await main.get_guild_setting(ctx.interaction.guild.id)
         alarm_setting_json = setting_json.get("alarm", [])
         result = []
+
+        def truncate_text(text: str, limit: int = 30) -> str:
+            """文字数を制限し、超える場合に '...' を付ける"""
+            if len(text) > limit:
+                return text[:limit] + '...'
+            return text
+
         for i in range(len(alarm_setting_json)):
             alarm = alarm_setting_json[i]
             alarm_datetime = datetime.datetime.strptime(alarm.get("time", "2023/4/1 11:11"), "%Y/%m/%d %H:%M")
             alarm_message = alarm.get('message', 'アラームなのだ')
-            result.append(discord.OptionChoice(name=f"{alarm_datetime.hour}:{alarm_datetime.minute} {alarm_message}",
+            option_name_message = truncate_text(alarm_message, 30)
+            result.append(discord.OptionChoice(name=f"{alarm_datetime.hour}:{alarm_datetime.minute} {option_name_message}",
                                                value=str(i)))
         return result
 
