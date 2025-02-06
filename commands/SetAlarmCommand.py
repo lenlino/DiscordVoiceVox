@@ -68,6 +68,7 @@ class SetAlarmCommand(commands.Cog):
             return
         elif action == "del":
             pop_alarm = alarm_setting_json.pop(int(delete_target))
+            await main.update_guild_setting(ctx.guild.id, "alarm", alarm_setting_json)
             embed = discord.Embed(
                 title="**Success**",
                 description=f"アラームを削除しました",
