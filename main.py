@@ -665,7 +665,8 @@ async def set(ctx, key: discord.Option(str, choices=[
 
 async def get_server_set_value(ctx: discord.AutocompleteContext):
     setting_type = ctx.options["key"]
-    bool_settings = ["reademoji", "readname", "readurl", "readjoinleave", "readsan", "joinnotice", "eew", "translate"]
+    bool_settings = ["reademoji", "readname", "readurl", "readjoinleave", "readsan", "joinnotice", "eew", "translate",
+                     "autojoin"]
     if setting_type in bool_settings:
         return ["off", "on"]
     elif setting_type == "lang":
@@ -1208,6 +1209,7 @@ async def get_connection():
 
 
 async def getdatabase(userid, id, default=None, table="voice"):
+    global pool
     async with pool.acquire() as conn:
         rows = await conn.fetchrow(f'SELECT {id} from {table} where "id" = $1;', (str(userid)))
         if rows is None:
@@ -1224,6 +1226,7 @@ async def getdatabase(userid, id, default=None, table="voice"):
 
 
 async def setdatabase(userid, id, value, table="voice"):
+    global pool
     async with pool.acquire() as conn:
         rows = await conn.fetchrow(f'SELECT {id} from {table} where "id" = $1;', (str(userid)))
         if rows is None:
