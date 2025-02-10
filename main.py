@@ -1210,6 +1210,9 @@ async def get_connection():
 
 async def getdatabase(userid, id, default=None, table="voice"):
     global pool
+    if pool is None:
+        logger.error("pool is None/get database")
+        pool = await get_connection()
     async with pool.acquire() as conn:
         rows = await conn.fetchrow(f'SELECT {id} from {table} where "id" = $1;', (str(userid)))
         if rows is None:
@@ -2153,14 +2156,15 @@ async def init_loop():
     default_conn = aiohttp.TCPConnector(limit=20, limit_per_host=5)
     default_gpu_conn = aiohttp.TCPConnector(limit=20, limit_per_host=5)
     premium_conn = aiohttp.TCPConnector(limit=20, limit_per_host=5)
-    global pool
-    pool = await get_connection()
 
     global voice_cache_dict
     with open(os.path.dirname(os.path.abspath(__file__)) + "/cache/voice_cache.json", "r", encoding='utf-8') as f:
         voice_cache_dict = json.load(f)
         print("起動")
         print(voice_cache_dict)
+
+    global pool
+    pool = await get_connection()
 
     await initdatabase()
     await init_voice_list()
