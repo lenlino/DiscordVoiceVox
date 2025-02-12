@@ -1781,6 +1781,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             pitch = float(float(pitch) / 100) + 1
             filters.timescale.set(speed=speed, pitch=pitch)
             loop = 0
+            print(f"play: {output} {filters.timescale} {source.title}")
             while guild.voice_client.playing is True:
                 await asyncio.sleep(1)
                 loop += 1
