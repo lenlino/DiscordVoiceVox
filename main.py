@@ -1775,14 +1775,15 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             print(f"{premium_text} v:{voice_id} s:{speed} p:{pitch} t:{str(tim)} text:{output}")
 
         if is_lavalink:
-            player = guild.voice_client
+            player: wavelink.Player = guild.voice_client
             filters: wavelink.Filters = player.filters
             speed = float(float(speed) / 100)
             pitch = float(float(pitch) / 100) + 1
             filters.timescale.set(speed=speed, pitch=pitch)
             loop = 0
             print(f"play: {output} {filters.timescale} {source.title}")
-            while guild.voice_client.playing is True:
+            print(f"player: {player.ping} ms {player.position} s {player.paused}")
+            while player.playing is True:
                 await asyncio.sleep(1)
                 loop += 1
                 if loop > 10:
