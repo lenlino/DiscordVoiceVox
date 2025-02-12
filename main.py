@@ -1555,6 +1555,7 @@ async def add_yomiage_queue(member, guild, text: str, no_read_name=False):
 async def yomiage(member, guild, text: str, no_read_name=False):
     is_premium = False
     time_sta = time.time()
+    source = None
     try:
         if text == "zundamon!!stop":
             del yomiage_queue[guild.id]
@@ -1758,6 +1759,9 @@ async def yomiage(member, guild, text: str, no_read_name=False):
     except Exception as e:
         logger.error(e)
     else:
+        if source is None:
+            print(f"source is None/ {output}")
+            return
         # 時間測定
         time_end = time.time()
         tim = time_end - time_sta
