@@ -1783,10 +1783,13 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             loop = 0
             print(f"play: {output} {filters.timescale} {source.title}")
             print(f"player: {player.ping} ms {player.position} s {player.paused}")
+            print(f"player: {player.connected}")
             while player.playing is True:
                 await asyncio.sleep(1)
                 loop += 1
                 if loop > 10:
+                    print(f"player: {player.ping} ms {player.position} s {player.paused}")
+                    print(f"player: {player.connected}")
                     logger.error(loop)
             await player.play(source, filters=filters)
         else:
