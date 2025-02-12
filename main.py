@@ -25,6 +25,7 @@ import stripe
 import wavelink
 import websockets
 from aiohttp import FormData, ClientTimeout
+from discord import VoiceChannel
 from discord.ext import tasks, pages
 from requests import ReadTimeout
 from ko2kana import toKana
@@ -1045,21 +1046,29 @@ async def stop(message="ずんだもんの再起動を行います。数分程�
         color=discord.Colour.red(),
     )
     print("停止中...")
+    await save_join_list()
+    for server_id, text_ch_id in vclist.copy().items():
+        guild = bot.get_guild(server_id)
+        if guild.voice_client is None:
+            continue
+        try:
+            await guild.get_channel(text_ch_id).send(embed=embed)
+        except:
+            pass
+    sys.exit()
+
+async def save_join_list():
     savelist = []
     for server_id, text_ch_id in vclist.copy().items():
         guild = bot.get_guild(server_id)
+        print(f"server_id:{server_id}, text_ch_id:{text_ch_id}, guild:{guild}")
         if guild.voice_client is None:
             continue
         savelist.append({"guild": server_id, "text_ch_id": text_ch_id, "voice_ch_id": guild.voice_client.channel.id,
                          "is_premium": server_id in premium_guild_dict,
                          "premium_value": premium_guild_dict.get(server_id, 0)})
-        try:
-            await guild.get_channel(text_ch_id).send(embed=embed)
-        except:
-            pass
     with open(os.path.dirname(os.path.abspath(__file__)) + "/" + 'bot_stop.json', 'wt', encoding='utf-8') as f:
         json.dump(savelist, f, ensure_ascii=False)
-    sys.exit()
 
 
 async def auto_join():
@@ -1070,17 +1079,22 @@ async def auto_join():
     )
     with open(os.path.dirname(os.path.abspath(__file__)) + "/" + "bot_stop.json", encoding='utf-8') as f:
         json_list = json.load(f)
+        print(json_list)
         for server_json in json_list:
             guild = bot.get_guild(server_json["guild"])
-            await guild.get_channel(server_json["voice_ch_id"]).connect(cls=wavelink.Player)
+            voice_channel: VoiceChannel = guild.get_channel(server_json["voice_ch_id"])
+            print(f"server_json:{server_json}, voice_channel:{voice_channel}, {len(voice_channel.voice_states)}")
             try:
+                await voice_channel.connect(cls=wavelink.Player)
                 await guild.get_channel(server_json["text_ch_id"]).send(embed=embed)
-            except:
+            except Exception as e:
+                logging.warning(f"Error: {e}")
                 pass
             vclist[guild.id] = server_json["text_ch_id"]
             if server_json["is_premium"] is True and "premium_value" in server_json:
                 premium_server_list.append(guild.id)
                 premium_guild_dict[server_json["guild"]] = server_json["premium_value"]
+
 
 
 @bot.slash_command(description="辞書に単語を追加するのだ(全サーバー)", guild_ids=ManagerGuilds)
@@ -1690,13 +1704,12 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                 wav_list.append(filename)
                 continue
             else:
-                print("合成失敗")
+                logger.error("合成失敗")
                 return
-
         if len(wav_list) > 1:
             filename = await connect_waves(wave_list=wav_list)
             if filename is None:
-                print("結合失敗")
+                logger.error("結合失敗")
                 return
 
         if is_lavalink:
@@ -1760,8 +1773,12 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             speed = float(float(speed) / 100)
             pitch = float(float(pitch) / 100) + 1
             filters.timescale.set(speed=speed, pitch=pitch)
+            loop = 0
             while guild.voice_client.playing:
                 await asyncio.sleep(1)
+                loop += 1
+                if loop > 10:
+                    logger.error(loop)
             await player.play(source, filters=filters)
         else:
             guild.voice_client.play(source)
@@ -1810,7 +1827,7 @@ async def connect_waves(wave_list):
             return None
 
     except Exception as ex:
-        #print(ex)
+        logger.error(ex)
         return None
 
 
@@ -1926,7 +1943,7 @@ async def on_voice_state_update(member, before, after):
     if bot.user.id == member.id:
         return
 
-    if (bot.user.id == member.id and after.channel is None) or is_bot_only(voicestate.channel):
+    if (bot.user.id == member.id and after.channel is None) or (member.bot is not True and is_bot_only(voicestate.channel)):
         await voicestate.disconnect()
 
         del vclist[voicestate.guild.id]
@@ -2147,6 +2164,10 @@ async def premium_user_check_loop():
         await add_premium_lopp(d)
     print(f"プレミアム数: {count}")
 
+    await bot.wait_until_ready()
+
+    await save_join_list()
+
 
 @tasks.loop(minutes=1, count=1)
 async def init_loop():
@@ -2169,7 +2190,7 @@ async def init_loop():
     await initdatabase()
     await init_voice_list()
     status_update_loop.start()
-    premium_user_check_loop.start()
+
     dict_and_cache_loop.start()
     bot.add_view(ActivateButtonView())
     bot.loop.create_task(connect_nodes())
@@ -2177,6 +2198,7 @@ async def init_loop():
     await updatedict()
     await bot.wait_until_ready()
     await auto_join()
+    premium_user_check_loop.start()
     # ファイル変更検知・自動再起動
     async for changes in awatch(os.path.dirname(os.path.abspath(__file__)) + "/main.py"):
         print(changes)
