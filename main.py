@@ -1940,10 +1940,10 @@ async def on_voice_state_update(member, before, after):
                 await asyncio.sleep(1)
                 await after.channel.guild.get_channel(after.channel.id).connect(cls=wavelink.Player)
                 vclist[after.channel.guild.id] = autojoin["text_channel_id"]
-                '''if (after.channel.permissions_for(after.channel.guild.me)).deafen_members:
+                if (after.channel.permissions_for(after.channel.guild.me)).deafen_members:
                     await after.channel.guild.me.edit(deafen=True)
                 if await getdatabase(after.channel.guild.id, "is_joinnotice", True, "guild"):
-                    await after.channel.guild.get_channel(autojoin["text_channel_id"]).send(embed=embed)'''
+                    await after.channel.guild.get_channel(autojoin["text_channel_id"]).send(embed=embed)
             except Exception as e:
                 logger.error(e)
                 logger.error("自動接続")
