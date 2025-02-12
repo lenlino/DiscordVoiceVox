@@ -469,16 +469,18 @@ async def vc(ctx):
             )
             await ctx.send_followup(embed=embed)
             return
-        vclist[ctx.guild.id] = ctx.channel.id
+
         if is_lavalink:
             try:
                 await ctx.author.voice.channel.connect(cls=wavelink.Player)
+                vclist[ctx.guild.id] = ctx.channel.id
             except Exception as e:
                 logger.error(e)
                 await ctx.send_followup("現在起動中です。")
                 return
         else:
             await ctx.author.voice.channel.connect()
+            vclist[ctx.guild.id] = ctx.channel.id
         if (ctx.author.voice.channel.permissions_for(ctx.guild.me)).deafen_members:
             await ctx.me.edit(deafen=True)
         embed = discord.Embed(
@@ -1086,11 +1088,12 @@ async def auto_join():
                 continue
             try:
                 await voice_channel.connect(cls=wavelink.Player)
+                vclist[guild.id] = server_json["text_ch_id"]
                 await guild.get_channel(server_json["text_ch_id"]).send(embed=embed)
             except Exception as e:
                 logging.warning(f"Error: {e}")
                 pass
-            vclist[guild.id] = server_json["text_ch_id"]
+
             if server_json["is_premium"] is True and "premium_value" in server_json:
                 premium_server_list.append(guild.id)
                 premium_guild_dict[server_json["guild"]] = server_json["premium_value"]
@@ -1774,7 +1777,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             pitch = float(float(pitch) / 100) + 1
             filters.timescale.set(speed=speed, pitch=pitch)
             loop = 0
-            while guild.voice_client.playing:
+            while guild.voice_client.playing is True:
                 await asyncio.sleep(1)
                 loop += 1
                 if loop > 10:
@@ -1899,7 +1902,7 @@ async def on_voice_state_update(member, before, after):
             return
         autojoin = json_str
         if int(autojoin.get("voice_channel_id", 1)) == int(after.channel.id):
-            vclist[after.channel.guild.id] = autojoin["text_channel_id"]
+
             guild_premium_user_id = int(await getdatabase(after.channel.guild.id, "premium_user", 0, "guild"))
             #print(guild_premium_user_id)
             #print(type(guild_premium_user_id))
@@ -1925,6 +1928,7 @@ async def on_voice_state_update(member, before, after):
 
             try:
                 await after.channel.connect(cls=wavelink.Player)
+                vclist[after.channel.guild.id] = autojoin["text_channel_id"]
                 if (after.channel.permissions_for(after.channel.guild.me)).deafen_members:
                     await after.channel.guild.me.edit(deafen=True)
                 if await getdatabase(after.channel.guild.id, "is_joinnotice", True, "guild"):
