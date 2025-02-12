@@ -1061,7 +1061,6 @@ async def save_join_list():
     savelist = []
     for server_id, text_ch_id in vclist.copy().items():
         guild = bot.get_guild(server_id)
-        print(f"server_id:{server_id}, text_ch_id:{text_ch_id}, guild:{guild}")
         if guild.voice_client is None:
             continue
         savelist.append({"guild": server_id, "text_ch_id": text_ch_id, "voice_ch_id": guild.voice_client.channel.id,
@@ -1083,7 +1082,8 @@ async def auto_join():
         for server_json in json_list:
             guild = bot.get_guild(server_json["guild"])
             voice_channel: VoiceChannel = guild.get_channel(server_json["voice_ch_id"])
-            print(f"server_json:{server_json}, voice_channel:{voice_channel}, {len(voice_channel.voice_states)}")
+            if len(voice_channel.voice_states) == 0:
+                continue
             try:
                 await voice_channel.connect(cls=wavelink.Player)
                 await guild.get_channel(server_json["text_ch_id"]).send(embed=embed)
