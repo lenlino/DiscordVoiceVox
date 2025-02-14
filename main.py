@@ -1758,6 +1758,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
 
     except Exception as e:
         logger.error(e)
+        logger.error(f"{output} {voice_id}")
     else:
         if source is None:
             print(f"source is None/ {output}")
