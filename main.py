@@ -1781,15 +1781,12 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             pitch = float(float(pitch) / 100) + 1
             filters.timescale.set(speed=speed, pitch=pitch)
             loop = 0
-            print(f"play: {output} {filters.timescale} {source.title}")
-            print(f"player: {player.ping} ms {player.position} s {player.paused}")
-            print(f"player: {player.connected}")
             while player.playing is True:
                 await asyncio.sleep(1)
                 loop += 1
                 if loop > 10:
                     print(f"player: {player.ping} ms {player.position} s {player.paused}")
-                    print(f"player: {player.connected}")
+                    print(f"player: {player.connected} {output} {guild.id}")
                     logger.error(loop)
             await player.play(source, filters=filters)
         else:
@@ -2155,6 +2152,11 @@ async def dict_and_cache_loop():
 
 
 @tasks.loop(minutes=10)
+async def save_join_list_task():
+    await save_join_list()
+
+
+@tasks.loop(minutes=10)
 async def premium_user_check_loop():
     if stripe.api_key is None:
         return
@@ -2177,10 +2179,6 @@ async def premium_user_check_loop():
         count += 1
         await add_premium_lopp(d)
     print(f"プレミアム数: {count}")
-
-    await bot.wait_until_ready()
-
-    await save_join_list()
 
 
 @tasks.loop(minutes=1, count=1)
@@ -2210,9 +2208,11 @@ async def init_loop():
     bot.loop.create_task(connect_nodes())
     bot.loop.create_task(connect_websocket())
     await updatedict()
+    premium_user_check_loop.start()
     await bot.wait_until_ready()
     await auto_join()
-    premium_user_check_loop.start()
+    save_join_list_task.start()
+
     # ファイル変更検知・自動再起動
     async for changes in awatch(os.path.dirname(os.path.abspath(__file__)) + "/main.py"):
         print(changes)
@@ -2230,7 +2230,7 @@ async def connect_nodes():
     print(len(wavelink.Pool.nodes))
     nodes = []
     for lavalink_host in lavalink_host_list:
-        node: wavelink.Node = wavelink.Node(uri=lavalink_host, password='youshallnotpass')
+        node: wavelink.Node = wavelink.Node(uri=lavalink_host, password='youshallnotpass', retries=5)
         nodes.append(node)
     await wavelink.Pool.connect(client=bot, nodes=nodes)
     print(len(wavelink.Pool.nodes))
