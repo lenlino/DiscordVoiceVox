@@ -25,6 +25,7 @@ import stripe
 import wavelink
 import websockets
 from aiohttp import FormData, ClientTimeout
+from discord import VoiceChannel
 from discord.ext import tasks, pages
 from requests import ReadTimeout
 from ko2kana import toKana
@@ -468,16 +469,18 @@ async def vc(ctx):
             )
             await ctx.send_followup(embed=embed)
             return
-        vclist[ctx.guild.id] = ctx.channel.id
+
         if is_lavalink:
             try:
                 await ctx.author.voice.channel.connect(cls=wavelink.Player)
+                vclist[ctx.guild.id] = ctx.channel.id
             except Exception as e:
                 logger.error(e)
                 await ctx.send_followup("現在起動中です。")
                 return
         else:
             await ctx.author.voice.channel.connect()
+            vclist[ctx.guild.id] = ctx.channel.id
         if (ctx.author.voice.channel.permissions_for(ctx.guild.me)).deafen_members:
             await ctx.me.edit(deafen=True)
         embed = discord.Embed(
@@ -1045,6 +1048,18 @@ async def stop(message="ずんだもんの再起動を行います。数分程�
         color=discord.Colour.red(),
     )
     print("停止中...")
+    await save_join_list()
+    for server_id, text_ch_id in vclist.copy().items():
+        guild = bot.get_guild(server_id)
+        if guild.voice_client is None:
+            continue
+        try:
+            await guild.get_channel(text_ch_id).send(embed=embed)
+        except:
+            pass
+    sys.exit()
+
+async def save_join_list():
     savelist = []
     for server_id, text_ch_id in vclist.copy().items():
         guild = bot.get_guild(server_id)
@@ -1053,13 +1068,8 @@ async def stop(message="ずんだもんの再起動を行います。数分程�
         savelist.append({"guild": server_id, "text_ch_id": text_ch_id, "voice_ch_id": guild.voice_client.channel.id,
                          "is_premium": server_id in premium_guild_dict,
                          "premium_value": premium_guild_dict.get(server_id, 0)})
-        try:
-            await guild.get_channel(text_ch_id).send(embed=embed)
-        except:
-            pass
     with open(os.path.dirname(os.path.abspath(__file__)) + "/" + 'bot_stop.json', 'wt', encoding='utf-8') as f:
         json.dump(savelist, f, ensure_ascii=False)
-    sys.exit()
 
 
 async def auto_join():
@@ -1070,17 +1080,24 @@ async def auto_join():
     )
     with open(os.path.dirname(os.path.abspath(__file__)) + "/" + "bot_stop.json", encoding='utf-8') as f:
         json_list = json.load(f)
+        print(json_list)
         for server_json in json_list:
             guild = bot.get_guild(server_json["guild"])
-            await guild.get_channel(server_json["voice_ch_id"]).connect(cls=wavelink.Player)
+            voice_channel: VoiceChannel = guild.get_channel(server_json["voice_ch_id"])
+            if len(voice_channel.voice_states) == 0:
+                continue
             try:
+                await voice_channel.connect(cls=wavelink.Player)
+                vclist[guild.id] = server_json["text_ch_id"]
                 await guild.get_channel(server_json["text_ch_id"]).send(embed=embed)
-            except:
+            except Exception as e:
+                logging.warning(f"Error: {e}")
                 pass
-            vclist[guild.id] = server_json["text_ch_id"]
+
             if server_json["is_premium"] is True and "premium_value" in server_json:
                 premium_server_list.append(guild.id)
                 premium_guild_dict[server_json["guild"]] = server_json["premium_value"]
+
 
 
 @bot.slash_command(description="辞書に単語を追加するのだ(全サーバー)", guild_ids=ManagerGuilds)
@@ -1210,6 +1227,9 @@ async def get_connection():
 
 async def getdatabase(userid, id, default=None, table="voice"):
     global pool
+    if pool is None:
+        logger.error("pool is None/get database")
+        pool = await get_connection()
     async with pool.acquire() as conn:
         rows = await conn.fetchrow(f'SELECT {id} from {table} where "id" = $1;', (str(userid)))
         if rows is None:
@@ -1535,6 +1555,7 @@ async def add_yomiage_queue(member, guild, text: str, no_read_name=False):
 async def yomiage(member, guild, text: str, no_read_name=False):
     is_premium = False
     time_sta = time.time()
+    source = None
     try:
         if text == "zundamon!!stop":
             del yomiage_queue[guild.id]
@@ -1687,13 +1708,12 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                 wav_list.append(filename)
                 continue
             else:
-                print("合成失敗")
+                logger.error("合成失敗")
                 return
-
         if len(wav_list) > 1:
             filename = await connect_waves(wave_list=wav_list)
             if filename is None:
-                print("結合失敗")
+                logger.error("結合失敗")
                 return
 
         if is_lavalink:
@@ -1739,6 +1759,9 @@ async def yomiage(member, guild, text: str, no_read_name=False):
     except Exception as e:
         logger.error(e)
     else:
+        if source is None:
+            print(f"source is None/ {output}")
+            return
         # 時間測定
         time_end = time.time()
         tim = time_end - time_sta
@@ -1752,13 +1775,22 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             print(f"{premium_text} v:{voice_id} s:{speed} p:{pitch} t:{str(tim)} text:{output}")
 
         if is_lavalink:
-            player = guild.voice_client
+            player: wavelink.Player = guild.voice_client
             filters: wavelink.Filters = player.filters
             speed = float(float(speed) / 100)
             pitch = float(float(pitch) / 100) + 1
             filters.timescale.set(speed=speed, pitch=pitch)
-            while guild.voice_client.playing:
+            loop = 0
+            print(f"play: {output} {filters.timescale} {source.title}")
+            print(f"player: {player.ping} ms {player.position} s {player.paused}")
+            print(f"player: {player.connected}")
+            while player.playing is True:
                 await asyncio.sleep(1)
+                loop += 1
+                if loop > 10:
+                    print(f"player: {player.ping} ms {player.position} s {player.paused}")
+                    print(f"player: {player.connected}")
+                    logger.error(loop)
             await player.play(source, filters=filters)
         else:
             guild.voice_client.play(source)
@@ -1807,7 +1839,7 @@ async def connect_waves(wave_list):
             return None
 
     except Exception as ex:
-        #print(ex)
+        logger.error(ex)
         return None
 
 
@@ -1879,7 +1911,7 @@ async def on_voice_state_update(member, before, after):
             return
         autojoin = json_str
         if int(autojoin.get("voice_channel_id", 1)) == int(after.channel.id):
-            vclist[after.channel.guild.id] = autojoin["text_channel_id"]
+
             guild_premium_user_id = int(await getdatabase(after.channel.guild.id, "premium_user", 0, "guild"))
             #print(guild_premium_user_id)
             #print(type(guild_premium_user_id))
@@ -1904,7 +1936,10 @@ async def on_voice_state_update(member, before, after):
                 premium_server_list.append(after.channel.guild.id)
 
             try:
-                await after.channel.connect(cls=wavelink.Player)
+                # 時間開けないと２重接続？
+                await asyncio.sleep(1)
+                await after.channel.guild.get_channel(after.channel.id).connect(cls=wavelink.Player)
+                vclist[after.channel.guild.id] = autojoin["text_channel_id"]
                 if (after.channel.permissions_for(after.channel.guild.me)).deafen_members:
                     await after.channel.guild.me.edit(deafen=True)
                 if await getdatabase(after.channel.guild.id, "is_joinnotice", True, "guild"):
@@ -1923,7 +1958,7 @@ async def on_voice_state_update(member, before, after):
     if bot.user.id == member.id:
         return
 
-    if (bot.user.id == member.id and after.channel is None) or is_bot_only(voicestate.channel):
+    if (bot.user.id == member.id and after.channel is None) or (member.bot is not True and is_bot_only(voicestate.channel)):
         await voicestate.disconnect()
 
         del vclist[voicestate.guild.id]
@@ -2143,6 +2178,10 @@ async def premium_user_check_loop():
         await add_premium_lopp(d)
     print(f"プレミアム数: {count}")
 
+    await bot.wait_until_ready()
+
+    await save_join_list()
+
 
 @tasks.loop(minutes=1, count=1)
 async def init_loop():
@@ -2152,8 +2191,6 @@ async def init_loop():
     default_conn = aiohttp.TCPConnector(limit=20, limit_per_host=5)
     default_gpu_conn = aiohttp.TCPConnector(limit=20, limit_per_host=5)
     premium_conn = aiohttp.TCPConnector(limit=20, limit_per_host=5)
-    global pool
-    pool = await get_connection()
 
     global voice_cache_dict
     with open(os.path.dirname(os.path.abspath(__file__)) + "/cache/voice_cache.json", "r", encoding='utf-8') as f:
@@ -2161,10 +2198,13 @@ async def init_loop():
         print("起動")
         print(voice_cache_dict)
 
+    global pool
+    pool = await get_connection()
+
     await initdatabase()
     await init_voice_list()
     status_update_loop.start()
-    premium_user_check_loop.start()
+
     dict_and_cache_loop.start()
     bot.add_view(ActivateButtonView())
     bot.loop.create_task(connect_nodes())
@@ -2172,6 +2212,7 @@ async def init_loop():
     await updatedict()
     await bot.wait_until_ready()
     await auto_join()
+    premium_user_check_loop.start()
     # ファイル変更検知・自動再起動
     async for changes in awatch(os.path.dirname(os.path.abspath(__file__)) + "/main.py"):
         print(changes)
