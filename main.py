@@ -55,6 +55,7 @@ lavalink_host_list = os.environ.get("LAVALINK_HOST", "http://127.0.0.1:2333").sp
 lavalink_uploader = os.environ.get("LAVALINK_UPLOADER", None)
 use_lavalink_upload: bool = bool(os.getenv("USE_LAVALINK_UPLOAD", "True") == "True")
 gpu_host = os.environ.get("GPU_HOST", host)
+check_count_id = os.environ.get("CHECK_STATS_COUNT_ID", None)
 DictChannel = 1057517276674400336
 ManagerGuilds = [888020016660893726,864441028866080768]
 intents = discord.Intents.none()
@@ -2057,8 +2058,18 @@ async def status_update_loop():
     global is_use_gpu_server
     is_use_gpu_server = is_use_gpu_server_enabled
     global vclist_len
-    vclist_len = len(vclist)
-    text = f"{str(vclist_len)}/{str(len(bot.guilds))}読み上げ中\n N:{round(avarage, 1)}s P:{round(avarage_p, 1)}s"
+    local_vclen = len(vclist)
+    text = f"{str(local_vclen)}/{str(len(bot.guilds))}読み上げ中\n N:{round(avarage, 1)}s P:{round(avarage_p, 1)}s"
+    if check_count_id is not None:
+        zundamon = bot.get_guild(int(check_count_id.split("_")[0])).get_member(int(check_count_id.split("_")[1]))
+        if zundamon.status == discord.Status.offline or zundamon.activity is None:
+            vclist_len = local_vclen
+        else:
+            activity = extract_number_before_slash(zundamon.activity.name)
+            vclist_len = activity
+            print(vclist_len)
+    else:
+        vclist_len = local_vclen
     logger.error(text)
     voice_generate_time_list_p.clear()
     voice_generate_time_list.clear()
@@ -2072,6 +2083,13 @@ async def status_update_loop():
         # 日を跨ぐもののみ対応
         is_use_gpu_server_time = gpu_start_time < now_time or now_time < gpu_end_time
 
+def extract_number_before_slash(input_string):
+    # 正規表現でスラッシュの前の数字を抽出
+    pattern = r'\b\d+(?=/)'
+    match = re.search(pattern, input_string)
+    if match:
+        return match.group(0)  # マッチした文字列を返す
+    return None
 
 async def add_premium_lopp(d):
     global premium_user_list
