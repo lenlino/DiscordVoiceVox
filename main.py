@@ -2061,13 +2061,11 @@ async def status_update_loop():
     local_vclen = len(vclist)
     text = f"{str(local_vclen)}/{str(len(bot.guilds))}読み上げ中\n N:{round(avarage, 1)}s P:{round(avarage_p, 1)}s"
     if check_count_id is not None:
-        zundamon = bot.get_guild(int(check_count_id.split("_")[0])).get_member(int(check_count_id.split("_")[1]))
-        if zundamon.status == discord.Status.offline or zundamon.activity is None:
+        beta_count = await get_server_count()
+        if beta_count is None:
             vclist_len = local_vclen
         else:
-            activity = extract_number_before_slash(zundamon.activity.name)
-            vclist_len = activity
-            print(vclist_len)
+            vclist_len = beta_count
     else:
         vclist_len = local_vclen
     logger.error(text)
@@ -2083,13 +2081,25 @@ async def status_update_loop():
         # 日を跨ぐもののみ対応
         is_use_gpu_server_time = gpu_start_time < now_time or now_time < gpu_end_time
 
-def extract_number_before_slash(input_string):
-    # 正規表現でスラッシュの前の数字を抽出
-    pattern = r'\b\d+(?=/)'
-    match = re.search(pattern, input_string)
-    if match:
-        return match.group(0)  # マッチした文字列を返す
-    return None
+async def get_server_count():
+    url = check_count_id
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=5) as response:
+                if response.status == 200:
+                    text = await response.text()  # レスポンスのテキストを取得
+                    server_count = int(text.strip())  # 取得した値を整数に変換
+                    return server_count
+                else:
+                    print(f"エラー: ステータスコード {response.status}")
+                    return None
+    except aiohttp.ClientError as e:
+        print(f"リクエストエラー: {e}")
+        return None
+    except ValueError:
+        print("取得した値を整数に変換できませんでした。")
+        return None
+
 
 async def add_premium_lopp(d):
     global premium_user_list
