@@ -1728,11 +1728,16 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                     return
             elif type(filename) == str and filename.startswith("usegpu"):
                 filename = filename.split("_")
+                if urllib.parse.quote(filename[1]) == gpu_host:
+                    lavalink_retry = 1
+                else:
+                    lavalink_retry = 0
                 try:
                     source_serch = await asyncio.wait_for(
                         wavelink.Playable.search(f"vv://voicevox?"
                                                        f"&speaker={int(filename[3])}&address={urllib.parse.quote(filename[1])}"
-                                                       f"&query-address={urllib.parse.quote(filename[2])}&text={urllib.parse.quote(output_list[0])}",
+                                                       f"&query-address={urllib.parse.quote(filename[2])}&text={urllib.parse.quote(output_list[0])}"
+                                                 f"&retry={lavalink_retry}",
                                                        source="voicevox"),
                         timeout=5.0  # タイムアウトを5秒に設定
                     )
