@@ -2065,6 +2065,7 @@ async def status_update_loop():
         if beta_count is None:
             vclist_len = local_vclen
         else:
+            print(beta_count)
             vclist_len = beta_count
     else:
         vclist_len = local_vclen
