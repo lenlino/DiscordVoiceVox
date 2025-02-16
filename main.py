@@ -1320,7 +1320,7 @@ async def generate_wav(text, speaker=1, filepath=None, target_host='localhost', 
     if is_use_gpu_server and (speaker == 3 or speaker == 1 or speaker == 42 or speaker == 8):
         use_gpu_server = True
     elif is_use_gpu_server and is_premium:
-        if vclist_len >= 1500 and await is_premium_check(guild_id, 100):
+        if vclist_len >= 1500:
             use_gpu_server = True
         elif vclist_len >= 800 and await is_premium_check(guild_id, 300):
             use_gpu_server = True
@@ -1702,6 +1702,10 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                     wav_list.append(filename)
                 continue
 
+            if not is_premium and check_count_id is not None:
+                logger.error(f"{guild.id} {voice_id} {await is_premium_check(guild.id, 100)} "
+                             f"{await is_premium_check(member.id, 100)}")
+
             filename = await text2wav(gen_text, int(voice_id), is_premium,
                                       speed="100",
                                       pitch="0", guild_id=guild.id, is_self_upload=is_self_gen)
@@ -1795,6 +1799,8 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                     print(f"player: {player.ping} ms {player.position} s {player.paused}")
                     print(f"player: {player.connected} {output} {guild.id}")
                     logger.error(loop)
+                if loop > 30:
+                    break
             await player.play(source, filters=filters)
         else:
             guild.voice_client.play(source)
