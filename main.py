@@ -55,6 +55,7 @@ lavalink_host_list = os.environ.get("LAVALINK_HOST", "http://127.0.0.1:2333").sp
 lavalink_uploader = os.environ.get("LAVALINK_UPLOADER", None)
 use_lavalink_upload: bool = bool(os.getenv("USE_LAVALINK_UPLOAD", "True") == "True")
 gpu_host = os.environ.get("GPU_HOST", host)
+check_count_id = os.environ.get("CHECK_STATS_COUNT_ID", None)
 DictChannel = 1057517276674400336
 ManagerGuilds = [888020016660893726,864441028866080768]
 intents = discord.Intents.none()
@@ -1319,7 +1320,7 @@ async def generate_wav(text, speaker=1, filepath=None, target_host='localhost', 
     if is_use_gpu_server and (speaker == 3 or speaker == 1 or speaker == 42 or speaker == 8):
         use_gpu_server = True
     elif is_use_gpu_server and is_premium:
-        if vclist_len >= 1500 and await is_premium_check(guild_id, 100):
+        if vclist_len >= 1500:
             use_gpu_server = True
         elif vclist_len >= 800 and await is_premium_check(guild_id, 300):
             use_gpu_server = True
@@ -1701,6 +1702,10 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                     wav_list.append(filename)
                 continue
 
+            if not is_premium and check_count_id is not None:
+                logger.error(f"{guild.id} {voice_id} {await is_premium_check(guild.id, 100)} "
+                             f"{await is_premium_check(member.id, 100)}")
+
             filename = await text2wav(gen_text, int(voice_id), is_premium,
                                       speed="100",
                                       pitch="0", guild_id=guild.id, is_self_upload=is_self_gen)
@@ -1728,11 +1733,16 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                     return
             elif type(filename) == str and filename.startswith("usegpu"):
                 filename = filename.split("_")
+                if urllib.parse.quote(filename[1]) == gpu_host:
+                    lavalink_retry = 1
+                else:
+                    lavalink_retry = 0
                 try:
                     source_serch = await asyncio.wait_for(
                         wavelink.Playable.search(f"vv://voicevox?"
                                                        f"&speaker={int(filename[3])}&address={urllib.parse.quote(filename[1])}"
-                                                       f"&query-address={urllib.parse.quote(filename[2])}&text={urllib.parse.quote(output_list[0])}",
+                                                       f"&query-address={urllib.parse.quote(filename[2])}&text={urllib.parse.quote(output_list[0])}"
+                                                 f"&retry={lavalink_retry}",
                                                        source="voicevox"),
                         timeout=5.0  # タイムアウトを5秒に設定
                     )
@@ -1758,6 +1768,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
 
     except Exception as e:
         logger.error(e)
+        logger.error(f"{output} {voice_id}")
     else:
         if source is None:
             print(f"source is None/ {output}")
@@ -1788,6 +1799,8 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                     print(f"player: {player.ping} ms {player.position} s {player.paused}")
                     print(f"player: {player.connected} {output} {guild.id}")
                     logger.error(loop)
+                if loop > 30:
+                    break
             await player.play(source, filters=filters)
         else:
             guild.voice_client.play(source)
@@ -2050,8 +2063,17 @@ async def status_update_loop():
     global is_use_gpu_server
     is_use_gpu_server = is_use_gpu_server_enabled
     global vclist_len
-    vclist_len = len(vclist)
-    text = f"{str(vclist_len)}/{str(len(bot.guilds))}読み上げ中\n N:{round(avarage, 1)}s P:{round(avarage_p, 1)}s"
+    local_vclen = len(vclist)
+    text = f"{str(local_vclen)}/{str(len(bot.guilds))}読み上げ中\n N:{round(avarage, 1)}s P:{round(avarage_p, 1)}s"
+    if check_count_id is not None:
+        beta_count = await get_server_count()
+        if beta_count is None:
+            vclist_len = local_vclen
+        else:
+            print(beta_count)
+            vclist_len = beta_count
+    else:
+        vclist_len = local_vclen
     logger.error(text)
     voice_generate_time_list_p.clear()
     voice_generate_time_list.clear()
@@ -2064,6 +2086,25 @@ async def status_update_loop():
         global is_use_gpu_server_time
         # 日を跨ぐもののみ対応
         is_use_gpu_server_time = gpu_start_time < now_time or now_time < gpu_end_time
+
+async def get_server_count():
+    url = check_count_id
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=5) as response:
+                if response.status == 200:
+                    text = await response.text()  # レスポンスのテキストを取得
+                    server_count = int(text.strip())  # 取得した値を整数に変換
+                    return server_count
+                else:
+                    print(f"エラー: ステータスコード {response.status}")
+                    return None
+    except aiohttp.ClientError as e:
+        print(f"リクエストエラー: {e}")
+        return None
+    except ValueError:
+        print("取得した値を整数に変換できませんでした。")
+        return None
 
 
 async def add_premium_lopp(d):
