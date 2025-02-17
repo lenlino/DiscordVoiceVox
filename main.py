@@ -1083,11 +1083,11 @@ async def auto_join():
         json_list = json.load(f)
         print(json_list)
         for server_json in json_list:
-            guild = bot.get_guild(server_json["guild"])
-            voice_channel: VoiceChannel = guild.get_channel(server_json["voice_ch_id"])
-            if len(voice_channel.voice_states) == 0:
-                continue
             try:
+                guild = bot.get_guild(server_json["guild"])
+                voice_channel: VoiceChannel = guild.get_channel(server_json["voice_ch_id"])
+                if len(voice_channel.voice_states) == 0:
+                    continue
                 await voice_channel.connect(cls=wavelink.Player)
                 vclist[guild.id] = server_json["text_ch_id"]
                 await guild.get_channel(server_json["text_ch_id"]).send(embed=embed)
@@ -1800,6 +1800,19 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                     print(f"player: {player.connected} {output} {guild.id}")
                     logger.error(loop)
                 if loop > 30:
+                    logger.error("再接続")
+                    channel = player.channel
+                    await player.disconnect()
+                    await asyncio.sleep(3)
+                    if is_lavalink:
+                        try:
+                            await channel.connect(cls=wavelink.Player)
+                        except Exception as e:
+                            logger.error(e)
+                            return
+                    else:
+                        await channel.connect()
+                    logger.error("再接続完了")
                     break
             await player.play(source, filters=filters)
         else:
@@ -2685,7 +2698,7 @@ async def is_premium_check(id, value):
         is_check = id_str in premium_server_list_500 or id_str in premium_server_list_1000
     elif 1000 >= value > 500:
         is_check = id_str in premium_server_list_1000
-    elif id in premium_guild_dict:
+    if is_check is False and id in premium_guild_dict:
         is_check = premium_guild_dict[id] >= value
 
     if is_check is False and id not in non_premium_user:
