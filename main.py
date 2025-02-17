@@ -1724,8 +1724,9 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         if is_lavalink:
             if type(filename) == str and filename.endswith(".wav"):
                 try:
+                    player: wavelink.Player = guild.voice_client
                     source_serch = await asyncio.wait_for(
-                        wavelink.Playable.search(filename.replace("\"", ""), source=None),
+                        wavelink.Playable.search(filename.replace("\"", ""), source=None, node=player.node),
                         timeout=5.0  # タイムアウトを5秒に設定
                     )
                 except asyncio.TimeoutError:
