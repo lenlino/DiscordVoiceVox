@@ -2037,37 +2037,38 @@ vclist_len = 0
 @tasks.loop(minutes=1)
 async def status_update_loop():
     for key in list(vclist):
-        guild = bot.get_guild(key)
-        if guild is None:
-            del vclist[key]
-            continue
-        if guild.voice_client is None or guild.voice_client.channel is None:
-            del vclist[key]
-            remove_premium_guild_dict(str(guild.id))
-            continue
+        try:
+            guild = bot.get_guild(key)
+            if guild is None:
+                del vclist[key]
+                continue
+            if guild.voice_client is None or guild.voice_client.channel is None:
+                del vclist[key]
+                remove_premium_guild_dict(str(guild.id))
+                continue
 
-        setting_json = await get_guild_setting(guild.id)
-        alarm_setting_json = setting_json.get("alarm", [])
-        now_datetime = datetime.datetime.now()
-        now_youbi = now_datetime.weekday()
-        for alarm in alarm_setting_json:
-            alarm_datetime = datetime.datetime.strptime(alarm.get("time", "2023/4/1 11:11"), "%Y/%m/%d %H:%M")
-            alarm_youbi_list = alarm.get("loop", "1111111")
-            if now_datetime.hour != alarm_datetime.hour or now_datetime.minute != alarm_datetime.minute:
-                continue
-            if alarm_youbi_list[now_youbi] == "0":
-                continue
-            alarm_message = alarm.get('message', 'アラームなのだ')
-            asyncio.create_task(add_yomiage_queue(guild.me, guild, f"{alarm_message}"))
-            try:
-                await guild.get_channel(vclist[key]).send(embed=discord.Embed(
-                    title=f"Alarm",
-                    description=f"{alarm_message}",
-                    color=discord.Color.gold()
-                ))
-            except Exception as e:
-                logger.error(e)
-                pass
+            setting_json = await get_guild_setting(guild.id)
+            alarm_setting_json = setting_json.get("alarm", [])
+            now_datetime = datetime.datetime.now()
+            now_youbi = now_datetime.weekday()
+            for alarm in alarm_setting_json:
+                alarm_datetime = datetime.datetime.strptime(alarm.get("time", "2023/4/1 11:11"), "%Y/%m/%d %H:%M")
+                alarm_youbi_list = alarm.get("loop", "1111111")
+                if now_datetime.hour != alarm_datetime.hour or now_datetime.minute != alarm_datetime.minute:
+                    continue
+                if alarm_youbi_list[now_youbi] == "0":
+                    continue
+                alarm_message = alarm.get('message', 'アラームなのだ')
+                asyncio.create_task(add_yomiage_queue(guild.me, guild, f"{alarm_message}"))
+
+                asyncio.create_task(guild.get_channel(vclist[key]).send(embed=discord.Embed(
+                        title=f"Alarm",
+                        description=f"{alarm_message}",
+                        color=discord.Color.gold()
+                    )))
+        except Exception as e:
+            logger.error(e)
+            pass
 
     if len(voice_generate_time_list) != 0 and len(voice_generate_time_list_p) != 0:
         avarage = sum(voice_generate_time_list) / len(voice_generate_time_list)
