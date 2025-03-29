@@ -1411,7 +1411,7 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
             dir = os.path.dirname(os.path.abspath(__file__)) + "/" + filepath
         if filepath is None and use_gpu_server and is_use_gpu_server and is_lavalink and not is_self_upload:
             return f"usegpu_{gpu_host}_{query_host}_{speaker}"
-        elif filepath is None and target_host != aivoice_host and is_lavalink and not is_self_upload:
+        elif filepath is None and is_lavalink and not is_self_upload:
             return f"usegpu_{target_host}_{query_host}_{speaker}"
         async with aiohttp.ClientSession(connector_owner=False, connector=conn, timeout=ClientTimeout(connect=5)) as private_session:
             async with private_session.post(f'http://{query_host}/audio_query',
@@ -1621,6 +1621,9 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                             else:
                                 output = re.sub(pattern, "ユーアールエル画像省略", output)'''
 
+        if voice_id is None:
+            voice_id = await getdatabase(member.id, "voiceid", 0)
+
         if lang == "ko":
             output = re.sub(pattern, "유알엘생략", output)
         elif lang == "ja":
@@ -1658,7 +1661,6 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         else:
             split_output = [await honyaku_and_ikaryaku(lang, output, voice_id, member.id, guild.id, is_premium)]
 
-
         if guild.voice_client is None:
             return
         #print(output)
@@ -1677,9 +1679,6 @@ async def yomiage(member, guild, text: str, no_read_name=False):
 
         speed = await getdatabase(member.id, "speed", 100)
         pitch = await getdatabase(member.id, "pitch", 0)
-
-        if voice_id is None:
-            voice_id = await getdatabase(member.id, "voiceid", 0)
 
         wav_list = []
         is_self_gen = len(output_list) > 1
@@ -1866,6 +1865,21 @@ async def connect_waves(wave_list):
         logger.error(ex)
         return None
 
+def remove_symbols_except_last(text):
+    # 非記号（アルファベット、数字、空白、ひらがな、カタカナ、漢字）を全て許可
+    symbols = re.findall(r'[^\w\sぁ-んァ-ヶ一-龥]', text)
+
+    if symbols:
+        # 最後の記号を取得
+        last_symbol = symbols[-1]
+        # 最後の記号以外の記号をすべて削除
+        text = re.sub(r'[^\w\sぁ-んァ-ヶ一-龥]', '', text)
+        # 最後の記号を末尾に追加
+        text = text + last_symbol
+
+    return text
+
+
 
 async def honyaku_and_ikaryaku(lang, output, voice_id, member_id, guild_id, is_premium):
     if lang == "ko":
@@ -1914,6 +1928,10 @@ async def honyaku_and_ikaryaku(lang, output, voice_id, member_id, guild_id, is_p
         else:
             if len(output) > 50:
                 output = output[:50] + "以下略"
+
+    if 4000 > int(voice_id) >= 3000:
+        output = remove_symbols_except_last(output)
+
     return output
 
 
