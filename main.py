@@ -1534,7 +1534,7 @@ async def on_ready():
 async def on_message(message):
     voice = message.guild.voice_client
     if voice and (message.channel.id == vclist.get(message.guild.id) or message.channel.id == voice.channel.id):
-        asyncio.create_task(add_yomiage_queue(message.author, message.guild, message.content))
+        await add_yomiage_queue(message.author, message.guild, message.content)
 
 @dataclass
 class YomiageQueue:
