@@ -141,6 +141,24 @@ user_dict_loc = os.getenv("DICT_LOC", os.path.dirname(os.path.abspath(__file__))
 member_cache_flags = discord.MemberCacheFlags.from_intents(intents=intents)
 bot = discord.AutoShardedBot(intents=intents, chunk_guilds_at_startup=False, member_cache_flags=member_cache_flags)
 
+import sentry_sdk
+
+sentry_sdk.init(
+    dsn=os.getenv("SENTRY_DSN", None),
+    # Add data like request headers and IP for users,
+    # see https://docs.sentry.io/platforms/python/data-management/data-collected/ for more info
+    send_default_pii=True,
+    # Set traces_sample_rate to 1.0 to capture 100%
+    # of transactions for tracing.
+    traces_sample_rate=1.0,
+    # Set profile_session_sample_rate to 1.0 to profile 100%
+    # of profile sessions.
+    profile_session_sample_rate=1.0,
+    # Profiles will be automatically collected while
+    # there is an active span.
+    profile_lifecycle="trace",
+)
+
 
 async def initdatabase():
     async with pool.acquire() as conn:
@@ -1535,6 +1553,11 @@ async def on_message(message):
     voice = message.guild.voice_client
     if voice and (message.channel.id == vclist.get(message.guild.id) or message.channel.id == voice.channel.id):
         await add_yomiage_queue(message.author, message.guild, message.content)
+
+@bot.event
+async def on_application_command_error(ctx: discord.ApplicationContext, error: discord.DiscordException):
+    capture_exception(error)
+    return await super().on_command_error(ctx, error)
 
 @dataclass
 class YomiageQueue:
