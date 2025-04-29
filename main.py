@@ -142,6 +142,7 @@ member_cache_flags = discord.MemberCacheFlags.from_intents(intents=intents)
 bot = discord.AutoShardedBot(intents=intents, chunk_guilds_at_startup=False, member_cache_flags=member_cache_flags)
 
 import sentry_sdk
+from sentry_sdk import capture_exception
 
 sentry_sdk.init(
     dsn=os.getenv("SENTRY_DSN", None),
@@ -158,6 +159,22 @@ sentry_sdk.init(
     # there is an active span.
     profile_lifecycle="trace",
 )
+
+# Set up global exception handler
+def global_exception_handler(exctype, value, traceback):
+    capture_exception(value)
+    sys.__excepthook__(exctype, value, traceback)
+
+sys.excepthook = global_exception_handler
+
+# Set up asyncio exception handler
+def asyncio_exception_handler(loop, context):
+    exception = context.get('exception')
+    if exception:
+        capture_exception(exception)
+    loop.default_exception_handler(context)
+
+asyncio.get_event_loop().set_exception_handler(asyncio_exception_handler)
 
 
 async def initdatabase():
@@ -495,6 +512,7 @@ async def vc(ctx):
                 vclist[ctx.guild.id] = ctx.channel.id
             except Exception as e:
                 logger.error(e)
+                capture_exception(e)
                 await ctx.send_followup("現在起動中です。")
                 return
         else:
@@ -1111,6 +1129,7 @@ async def auto_join():
                 await guild.get_channel(server_json["text_ch_id"]).send(embed=embed)
             except Exception as e:
                 logging.warning(f"Error: {e}")
+                capture_exception(e)
                 pass
 
             if server_json["is_premium"] is True and "premium_value" in server_json:
@@ -1557,7 +1576,7 @@ async def on_message(message):
 @bot.event
 async def on_application_command_error(ctx: discord.ApplicationContext, error: discord.DiscordException):
     capture_exception(error)
-    return await super().on_command_error(ctx, error)
+    return await super().on_application_command_error(ctx, error)
 
 @dataclass
 class YomiageQueue:
@@ -1792,6 +1811,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
     except Exception as e:
         logger.error(e)
         logger.error(f"{output} {voice_id}")
+        capture_exception(e)
     else:
         if source is None:
             print(f"source is None/ {output}")
@@ -1832,6 +1852,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                             await channel.connect(cls=wavelink.Player)
                         except Exception as e:
                             logger.error(e)
+                            capture_exception(e)
                             return
                     else:
                         await channel.connect()
@@ -1886,6 +1907,7 @@ async def connect_waves(wave_list):
 
     except Exception as ex:
         logger.error(ex)
+        capture_exception(ex)
         return None
 
 def remove_symbols_except_last(text):
@@ -2012,6 +2034,7 @@ async def on_voice_state_update(member, before, after):
             except Exception as e:
                 logger.error(e)
                 logger.error("自動接続")
+                capture_exception(e)
                 return
 
 
@@ -2041,7 +2064,8 @@ async def on_voice_state_update(member, before, after):
         )
         try:
             await after.channel.guild.get_channel(vclist[after.channel.guild.id]).send(embed=embed)
-        except:
+        except Exception as e:
+            capture_exception(e)
             pass
 
     if await getdatabase(member.guild.id, "is_readjoin", False, "guild"):
@@ -2109,6 +2133,7 @@ async def status_update_loop():
                     )))
         except Exception as e:
             logger.error(e)
+            capture_exception(e)
             pass
 
     if len(voice_generate_time_list) != 0 and len(voice_generate_time_list_p) != 0:
