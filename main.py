@@ -2282,6 +2282,7 @@ async def init_loop():
     bot.add_view(ActivateButtonView())
     bot.loop.create_task(connect_nodes())
     bot.loop.create_task(connect_websocket())
+    bot.loop.create_task(auto_restart())
     await updatedict()
     premium_user_check_loop.start()
     await bot.wait_until_ready()
@@ -2791,6 +2792,15 @@ async def connect_websocket():
             logger.error(e)
             continue
 
+@bot.event
+async def on_wavelink_node_closed(self, node: wavelink.Node, disconnected: list) -> None:
+    logger.error("ノード切断のため自動再起動")
+    await bot.close()
+
+@tasks.loop(time=datetime.time(hour=6, minute=0, second=0,
+                               tzinfo=datetime.timezone(datetime.timedelta(hours=+9), 'JST')))
+async def auto_restart():
+    await stop("ずんだもんの定期再起動を行います")
 
 if __name__ == '__main__':
     bot.loop.create_task(init_loop())
