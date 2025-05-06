@@ -2325,12 +2325,12 @@ async def init_loop():
     await initdatabase()
     await init_voice_list()
     status_update_loop.start()
+    auto_restart.start()
 
     dict_and_cache_loop.start()
     bot.add_view(ActivateButtonView())
     bot.loop.create_task(connect_nodes())
     bot.loop.create_task(connect_websocket())
-    bot.loop.create_task(auto_restart())
     await updatedict()
     premium_user_check_loop.start()
     await bot.wait_until_ready()
