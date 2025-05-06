@@ -1841,9 +1841,9 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                 if loop > 10:
                     print(f"player: {player.ping} ms {player.position} s {player.paused}")
                     print(f"player: {player.connected} {output} {guild.id}")
-                    logger.error(loop)
+                    logger.info(loop)
                 if loop > 30:
-                    logger.error("再接続")
+                    logger.info("再接続")
                     channel = player.channel
                     await player.disconnect()
                     await asyncio.sleep(3)
@@ -1856,7 +1856,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                             return
                     else:
                         await channel.connect()
-                    logger.error("再接続完了")
+                    logger.info("再接続完了")
                     break
             await player.play(source, filters=filters)
         else:
@@ -2156,7 +2156,7 @@ async def status_update_loop():
             vclist_len = beta_count
     else:
         vclist_len = local_vclen
-    logger.error(text)
+    logger.info(text)
     voice_generate_time_list_p.clear()
     voice_generate_time_list.clear()
     non_premium_user.clear()
@@ -2325,6 +2325,7 @@ async def init_loop():
     await initdatabase()
     await init_voice_list()
     status_update_loop.start()
+    auto_restart.start()
 
     dict_and_cache_loop.start()
     bot.add_view(ActivateButtonView())
@@ -2824,7 +2825,7 @@ async def connect_websocket():
                 )
                 embed.set_thumbnail(url="https://free-icons.net/wp-content/uploads/2020/09/symbol018.png")
                 embed.set_footer(text="気象庁の情報を利用")
-                logger.error(prefs_str)
+                logger.info(prefs_str)
                 for guild_id in premium_server_list:
                     guild = bot.get_guild(guild_id)
                     if await getdatabase(guild.id, "is_eew", True, "guild"):
@@ -2839,6 +2840,15 @@ async def connect_websocket():
             logger.error(e)
             continue
 
+@bot.event
+async def on_wavelink_node_closed(self, node: wavelink.Node, disconnected: list) -> None:
+    logger.error("ノード切断のため自動再起動")
+    await bot.close()
+
+@tasks.loop(time=datetime.time(hour=6, minute=0, second=0,
+                               tzinfo=datetime.timezone(datetime.timedelta(hours=+9), 'JST')))
+async def auto_restart():
+    await stop("ずんだもんの定期再起動を行います")
 
 if __name__ == '__main__':
     bot.loop.create_task(init_loop())
