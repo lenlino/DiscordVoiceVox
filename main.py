@@ -1084,7 +1084,7 @@ async def stop(message="ずんだもんの再起動を行います。数分程�
         description=message,
         color=discord.Colour.red(),
     )
-    print("停止中...")
+    logger.warn(f"停止中... {message}")
     await save_join_list()
     for server_id, text_ch_id in vclist.copy().items():
         guild = bot.get_guild(server_id)
@@ -1094,6 +1094,7 @@ async def stop(message="ずんだもんの再起動を行います。数分程�
             await guild.get_channel(text_ch_id).send(embed=embed)
         except:
             pass
+    await bot.close()
     sys.exit()
 
 async def save_join_list():
