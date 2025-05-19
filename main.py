@@ -168,7 +168,9 @@ class LavalinkVoiceClient(discord.VoiceProtocol):
                 return
             nodes = []
             for lavalink_host in lavalink_host_list:
-                self.client.lavalink.add_node(host=lavalink_host.split(":")[0], port=int(lavalink_host.split(":")[1]),
+                print(f'{lavalink_host.split(":")[0].replace("http://", "")} {int(lavalink_host.split(":")[1])}')
+                self.client.lavalink.add_node(host=lavalink_host.split(":")[0].replace("http://", ""),
+                                              port=int(lavalink_host.split(":")[1]),
                                               password='youshallnotpass', region='us', name='default-node')
 
         # Create a shortcut to the Lavalink client here.
@@ -266,12 +268,15 @@ async def connect_nodes():
         bot.lavalink = lavalink.Client(bot.user.id)
 
     # Add nodes
+    print(lavalink_host_list)
     for lavalink_host in lavalink_host_list:
+        host_text = lavalink_host.replace("http://", "")
+        print(f'{host_text.split(":")[0]} {int(host_text.split(":")[1])}')
         bot.lavalink.add_node(
-            host=lavalink_host.split(":")[0], 
-            port=int(lavalink_host.split(":")[1]),
-            password='youshallnotpass', 
-            region='us', 
+            host=host_text.split(":")[0],
+            port=int(host_text.split(":")[1]),
+            password='youshallnotpass',
+            region='us',
             name='default-node'
         )
 
@@ -1222,7 +1227,7 @@ async def auto_join():
         for server_json in json_list:
             try:
                 guild = bot.get_guild(server_json["guild"])
-                guild.get_channel(server_json["text_ch_id"]).send(embed=embed)
+                await guild.get_channel(server_json["text_ch_id"]).send(embed=embed)
                 voice_channel: VoiceChannel = guild.get_channel(server_json["voice_ch_id"])
                 if len(voice_channel.voice_states) == 0:
                     continue
