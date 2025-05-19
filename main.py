@@ -21,12 +21,13 @@ import aiofiles as aiofiles
 import aiohttp
 import asyncpg as asyncpg
 import discord
+import lavalink
 import stripe
-import wavelink
 import websockets
 from aiohttp import FormData, ClientTimeout
 from discord import VoiceChannel
 from discord.ext import tasks, pages
+from lavalink import ClientError
 from requests import ReadTimeout
 from ko2kana import toKana
 from dotenv import load_dotenv
@@ -36,7 +37,8 @@ from watchfiles import watch, awatch
 import emoji
 import romajitable
 import unicodedata
-from wavelink import player
+
+from LavalinkClient import LavalinkWavelink, LavalinkPlayer
 
 load_dotenv()
 
@@ -141,6 +143,108 @@ user_dict_loc = os.getenv("DICT_LOC", os.path.dirname(os.path.abspath(__file__))
 member_cache_flags = discord.MemberCacheFlags.from_intents(intents=intents)
 bot = discord.AutoShardedBot(intents=intents, chunk_guilds_at_startup=False, member_cache_flags=member_cache_flags)
 
+class LavalinkVoiceClient(discord.VoiceProtocol):
+    """
+    This is the preferred way to handle external voice sending
+    This client will be created via a cls in the connect method of the channel
+    see the following documentation:
+    https://discordpy.readthedocs.io/en/latest/api.html#voiceprotocol
+    """
+
+    def __init__(self, client: discord.Client, channel: discord.abc.Connectable):
+        self.client = client
+        self.channel = channel
+        self.guild_id = channel.guild.id
+        self._destroyed = False
+
+        if not hasattr(self.client, 'lavalink'):
+            # Instantiate a client if one doesn't exist.
+            # We store it in `self.client` so that it may persist across cog reloads,
+            # however this is not mandatory.
+            self.client.lavalink = lavalink.Client(client.user.id)
+            """Connect to our Lavalink nodes."""
+            if is_lavalink is False:
+                print("lavalink無効")
+                return
+            nodes = []
+            for lavalink_host in lavalink_host_list:
+                self.client.lavalink.add_node(host=lavalink_host.split(":")[0], port=int(lavalink_host.split(":")[1]),
+                                              password='youshallnotpass', region='us', name='default-node')
+
+        # Create a shortcut to the Lavalink client here.
+        self.lavalink = self.client.lavalink
+
+    async def on_voice_server_update(self, data):
+        # the data needs to be transformed before being handed down to
+        # voice_update_handler
+        lavalink_data = {
+            't': 'VOICE_SERVER_UPDATE',
+            'd': data
+        }
+        await self.lavalink.voice_update_handler(lavalink_data)
+
+    async def on_voice_state_update(self, data):
+        channel_id = data['channel_id']
+
+        if not channel_id:
+            await self._destroy()
+            return
+
+        self.channel = self.client.get_channel(int(channel_id))
+
+        # the data needs to be transformed before being handed down to
+        # voice_update_handler
+        lavalink_data = {
+            't': 'VOICE_STATE_UPDATE',
+            'd': data
+        }
+
+        await self.lavalink.voice_update_handler(lavalink_data)
+
+    async def connect(self, *, timeout: float, reconnect: bool, self_deaf: bool = False, self_mute: bool = False) -> None:
+        """
+        Connect the bot to the voice channel and create a player_manager
+        if it doesn't exist yet.
+        """
+        # ensure there is a player_manager when creating a new voice_client
+        self.lavalink.player_manager.create(guild_id=self.channel.guild.id)
+        await self.channel.guild.change_voice_state(channel=self.channel, self_mute=self_mute, self_deaf=self_deaf)
+
+    async def disconnect(self, *, force: bool = False) -> None:
+        """
+        Handles the disconnect.
+        Cleans up running player and leaves the voice client.
+        """
+        player = self.lavalink.player_manager.get(self.channel.guild.id)
+
+        # no need to disconnect if we are not connected
+        if not force and not player.is_connected:
+            return
+
+        # None means disconnect
+        await self.channel.guild.change_voice_state(channel=None)
+
+        # update the channel_id of the player to None
+        # this must be done because the on_voice_state_update that would set channel_id
+        # to None doesn't get dispatched after the disconnect
+        player.channel_id = None
+        await self._destroy()
+
+    async def _destroy(self):
+        self.cleanup()
+
+        if self._destroyed:
+            # Idempotency handling, if `disconnect()` is called, the changed voice state
+            # could cause this to run a second time.
+            return
+
+        self._destroyed = True
+
+        try:
+            await self.lavalink.player_manager.destroy(self.guild_id)
+        except ClientError:
+            pass
+
 # Set up global exception handler
 def global_exception_handler(exctype, value, traceback):
     sys.__excepthook__(exctype, value, traceback)
@@ -150,7 +254,26 @@ sys.excepthook = global_exception_handler
 # Set up asyncio exception handler
 def asyncio_exception_handler(loop, context):
     exception = context.get('exception')
-    loop.default_exception_handler(context)
+
+async def connect_nodes():
+    """Connect to our Lavalink nodes."""
+    if is_lavalink is False:
+        print("lavalink無効")
+        return
+
+    # Create a client instance
+    if not hasattr(bot, 'lavalink'):
+        bot.lavalink = lavalink.Client(bot.user.id)
+
+    # Add nodes
+    for lavalink_host in lavalink_host_list:
+        bot.lavalink.add_node(
+            host=lavalink_host.split(":")[0], 
+            port=int(lavalink_host.split(":")[1]),
+            password='youshallnotpass', 
+            region='us', 
+            name='default-node'
+        )
 
 asyncio.get_event_loop().set_exception_handler(asyncio_exception_handler)
 
@@ -486,7 +609,7 @@ async def vc(ctx):
 
         if is_lavalink:
             try:
-                await ctx.author.voice.channel.connect(cls=wavelink.Player)
+                await ctx.author.voice.channel.connect(cls=LavalinkVoiceClient)
                 vclist[ctx.guild.id] = ctx.channel.id
             except Exception as e:
                 logger.error(e)
@@ -1103,7 +1226,7 @@ async def auto_join():
                 voice_channel: VoiceChannel = guild.get_channel(server_json["voice_ch_id"])
                 if len(voice_channel.voice_states) == 0:
                     continue
-                await voice_channel.connect(cls=wavelink.Player)
+                await voice_channel.connect(cls=LavalinkVoiceClient)
                 vclist[guild.id] = server_json["text_ch_id"]
                 await guild.get_channel(server_json["text_ch_id"]).send(embed=embed)
             except Exception as e:
@@ -1742,9 +1865,9 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         if is_lavalink:
             if type(filename) == str and filename.endswith(".wav"):
                 try:
-                    player: wavelink.Player = guild.voice_client
+                    player: lavalink.Player = guild.voice_client
                     source_serch = await asyncio.wait_for(
-                        wavelink.Playable.search(filename.replace("\"", ""), source=None, node=player.node),
+                        lavalink.Playable.search(filename.replace("\"", ""), source=None, node=player.node),
                         timeout=5.0  # タイムアウトを5秒に設定
                     )
                 except asyncio.TimeoutError:
@@ -1758,7 +1881,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                     lavalink_retry = 0
                 try:
                     source_serch = await asyncio.wait_for(
-                        wavelink.Playable.search(f"vv://voicevox?"
+                        LavalinkWavelink.Playable.search(f"vv://voicevox?"
                                                        f"&speaker={int(filename[3])}&address={urllib.parse.quote(filename[1])}"
                                                        f"&query-address={urllib.parse.quote(filename[2])}&text={urllib.parse.quote(output_list[0])}"
                                                  f"&retry={lavalink_retry}",
@@ -1771,7 +1894,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             else:
                 try:
                     source_serch = await asyncio.wait_for(
-                        wavelink.Playable.search(base64.urlsafe_b64encode(filename).decode('utf-8'), source="wav"),
+                        LavalinkWavelink.Playable.search(base64.urlsafe_b64encode(filename).decode('utf-8'), source="wav"),
                         timeout=5.0  # タイムアウトを5秒に設定
                     )
                 except asyncio.TimeoutError:
@@ -1805,8 +1928,8 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             print(f"{premium_text} v:{voice_id} s:{speed} p:{pitch} t:{str(tim)} text:{output}")
 
         if is_lavalink:
-            player: wavelink.Player = guild.voice_client
-            filters: wavelink.Filters = player.filters
+            player = guild.voice_client
+            filters = player.filters
             speed = float(float(speed) / 100)
             pitch = float(float(pitch) / 100) + 1
             filters.timescale.set(speed=speed, pitch=pitch)
@@ -1825,7 +1948,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                     await asyncio.sleep(3)
                     if is_lavalink:
                         try:
-                            await channel.connect(cls=wavelink.Player)
+                            await channel.connect(cls=LavalinkVoiceClient)
                         except Exception as e:
                             logger.error(e)
                             return
@@ -1999,7 +2122,7 @@ async def on_voice_state_update(member, before, after):
             try:
                 # 時間開けないと２重接続？
                 await asyncio.sleep(1)
-                await after.channel.guild.get_channel(after.channel.id).connect(cls=wavelink.Player)
+                await after.channel.guild.get_channel(after.channel.id).connect(cls=LavalinkVoiceClient)
                 vclist[after.channel.guild.id] = autojoin["text_channel_id"]
                 if (after.channel.permissions_for(after.channel.guild.me)).deafen_members:
                     await after.channel.guild.me.edit(deafen=True)
@@ -2315,20 +2438,6 @@ async def init_loop():
         break
     while datetime.datetime.now().minute % 10 != 0:
         await asyncio.sleep(0.1)
-
-
-async def connect_nodes():
-    """Connect to our Lavalink nodes."""
-    if is_lavalink is False:
-        print("lavalink無効")
-        return
-    print(len(wavelink.Pool.nodes))
-    nodes = []
-    for lavalink_host in lavalink_host_list:
-        node: wavelink.Node = wavelink.Node(uri=lavalink_host, password='youshallnotpass', retries=5)
-        nodes.append(node)
-    await wavelink.Pool.connect(client=bot, nodes=nodes)
-    print(len(wavelink.Pool.nodes))
 
 
 async def save_customemoji(custom_emoji, kana):
@@ -2810,11 +2919,6 @@ async def connect_websocket():
         except websockets.ConnectionClosed as e:
             logger.error(e)
             continue
-
-@bot.event
-async def on_wavelink_node_closed(self, node: wavelink.Node, disconnected: list) -> None:
-    logger.error("ノード切断のため自動再起動")
-    await bot.close()
 
 @tasks.loop(time=datetime.time(hour=6, minute=0, second=0,
                                tzinfo=datetime.timezone(datetime.timedelta(hours=+9), 'JST')))
