@@ -191,6 +191,12 @@ class LavalinkVoiceClient(discord.VoiceProtocol):
         player = self.lavalink.player_manager.get(self.guild_id)
         return player is not None and player.is_playing
 
+    @property
+    def connected(self):
+        """Return whether the client is connected to a voice channel."""
+        player = self.lavalink.player_manager.get(self.guild_id)
+        return player is not None and player.is_connected
+
     async def play(self, track, filters=None, **kwargs):
         """Play a track with the specified filters."""
         player = self.lavalink.player_manager.get(self.guild_id)
@@ -1727,7 +1733,17 @@ async def on_message(message):
 
 @bot.event
 async def on_application_command_error(ctx: discord.ApplicationContext, error: discord.DiscordException):
-    return await super().on_application_command_error(ctx, error)
+    # Log the error
+    logger.error(f"Application command error: {error}")
+
+    # Send a user-friendly error message
+    try:
+        await ctx.respond("コマンドの実行中にエラーが発生しました。しばらく経ってからもう一度お試しください。", ephemeral=True)
+    except discord.errors.InteractionResponded:
+        try:
+            await ctx.send_followup("コマンドの実行中にエラーが発生しました。しばらく経ってからもう一度お試しください。", ephemeral=True)
+        except Exception as e:
+            logger.error(f"Failed to send error message: {e}")
 
 @dataclass
 class YomiageQueue:
