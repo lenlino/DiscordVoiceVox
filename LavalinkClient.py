@@ -33,13 +33,13 @@ class LavalinkPlayer(lavalink.BasePlayer):
         """Search for tracks."""
         if source == "voicevox":
             # Handle voicevox source
-            return await self.node.rest_api.search(query)
+            return await self.node.get_tracks(query)
         elif source == "wav":
             # Handle wav source
-            return await self.node.rest_api.search(query)
+            return await self.node.get_tracks(query)
         else:
             # Default search
-            return await self.node.rest_api.search(query)
+            return await self.node.get_tracks(query)
 
 
 class Filters:
@@ -109,13 +109,13 @@ class LavalinkWavelink:
         try:
             if source == "voicevox":
                 # Handle voicevox source
-                return await node.rest_api.search(query)
+                return await node.get_tracks(query)
             elif source == "wav":
                 # Handle wav source
-                return await node.rest_api.search(query)
+                return await node.get_tracks(query)
             else:
                 # Default search
-                return await node.rest_api.search(query)
+                return await node.get_tracks(query)
         except Exception as e:
             print(f"Error searching tracks: {e}")
             return []

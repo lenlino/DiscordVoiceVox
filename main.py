@@ -38,7 +38,7 @@ import emoji
 import romajitable
 import unicodedata
 
-from LavalinkClient import LavalinkWavelink, LavalinkPlayer
+from LavalinkClient import LavalinkWavelink, LavalinkPlayer, Filters
 
 load_dotenv()
 
@@ -156,6 +156,7 @@ class LavalinkVoiceClient(discord.VoiceProtocol):
         self.channel = channel
         self.guild_id = channel.guild.id
         self._destroyed = False
+        self.filters = Filters()
 
         if not hasattr(self.client, 'lavalink'):
             # Instantiate a client if one doesn't exist.
@@ -175,6 +176,47 @@ class LavalinkVoiceClient(discord.VoiceProtocol):
 
         # Create a shortcut to the Lavalink client here.
         self.lavalink = self.client.lavalink
+
+    @property
+    def node(self):
+        """Return the first node from the lavalink client's node_manager."""
+        if hasattr(self, 'lavalink') and hasattr(self.lavalink, 'node_manager'):
+            nodes = self.lavalink.node_manager.nodes
+            return nodes[0] if nodes else None
+        return None
+
+    @property
+    def playing(self):
+        """Return whether the player is currently playing audio."""
+        player = self.lavalink.player_manager.get(self.guild_id)
+        return player is not None and player.is_playing
+
+    async def play(self, track, filters=None, **kwargs):
+        """Play a track with the specified filters."""
+        player = self.lavalink.player_manager.get(self.guild_id)
+        if player is None:
+            raise ValueError("No player available for this guild")
+
+        # Apply filters if provided
+        if filters is not None and hasattr(player, 'filters'):
+            for filter_name, filter_instance in filters.__dict__.items():
+                if hasattr(filter_instance, 'active') and filter_instance.active:
+                    if not hasattr(player.filters, filter_name):
+                        continue
+                    player_filter = getattr(player.filters, filter_name)
+                    if hasattr(filter_instance, 'to_dict'):
+                        filter_dict = filter_instance.to_dict()
+                        for key, value in filter_dict.items():
+                            if hasattr(player_filter, key):
+                                setattr(player_filter, key, value)
+                    player_filter.active = True
+
+            # Apply the filters to the player
+            await player._apply_filters()
+
+        # Play the track
+        await player.play(track, **kwargs)
+        return player
 
     async def on_voice_server_update(self, data):
         # the data needs to be transformed before being handed down to
@@ -268,10 +310,8 @@ async def connect_nodes():
         bot.lavalink = lavalink.Client(bot.user.id)
 
     # Add nodes
-    print(lavalink_host_list)
     for lavalink_host in lavalink_host_list:
         host_text = lavalink_host.replace("http://", "")
-        print(f'{host_text.split(":")[0]} {int(host_text.split(":")[1])}')
         bot.lavalink.add_node(
             host=host_text.split(":")[0],
             port=int(host_text.split(":")[1]),
@@ -279,6 +319,7 @@ async def connect_nodes():
             region='us',
             name='default-node'
         )
+    print(f"Node count: {len(bot.lavalink.nodes)}")
 
 asyncio.get_event_loop().set_exception_handler(asyncio_exception_handler)
 
@@ -1478,17 +1519,26 @@ async def generate_wav(text, speaker=1, filepath=None, target_host='localhost', 
     else:
         conn = default_conn
 
-    # COEIROINKAPI用に対応
-    if coeiroink_host == target_host or sharevox_host == target_host:
-        # return await synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, filepath)
-        return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, volume=0.8)
-    elif aivoice_host == target_host:
-        return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath)
-    elif aivis_host == target_host:
-        return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, query_host=target_host)
-    else:
-        return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath,
-                               use_gpu_server=use_gpu_server, query_host=query_host, is_self_upload=is_self_upload)
+    # Generate audio data directly
+    try:
+        # Create a temporary file path if needed
+        if filepath is None:
+            filepath = "output/" + get_temp_name()
+
+        # COEIROINKAPI用に対応
+        if coeiroink_host == target_host or sharevox_host == target_host:
+            # return await synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, filepath)
+            return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, volume=0.8)
+        elif aivoice_host == target_host:
+            return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath)
+        elif aivis_host == target_host:
+            return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, query_host=target_host)
+        else:
+            return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath,
+                                use_gpu_server=use_gpu_server, query_host=query_host, is_self_upload=is_self_upload)
+    except Exception as e:
+        logger.error(f"音声生成中にエラーが発生しました: {e}")
+        return "failed"
 
 
 async def synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, filepath):
@@ -1552,10 +1602,6 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
             query_host = target_host
         if filepath is not None:
             dir = os.path.dirname(os.path.abspath(__file__)) + "/" + filepath
-        if filepath is None and use_gpu_server and is_use_gpu_server and is_lavalink and not is_self_upload:
-            return f"usegpu_{gpu_host}_{query_host}_{speaker}"
-        elif filepath is None and is_lavalink and not is_self_upload:
-            return f"usegpu_{target_host}_{query_host}_{speaker}"
         async with aiohttp.ClientSession(connector_owner=False, connector=conn, timeout=ClientTimeout(connect=5)) as private_session:
             async with private_session.post(f'http://{query_host}/audio_query',
                                             params=params,
@@ -1872,38 +1918,30 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                 try:
                     player: lavalink.Player = guild.voice_client
                     source_serch = await asyncio.wait_for(
-                        lavalink.Playable.search(filename.replace("\"", ""), source=None, node=player.node),
+                        LavalinkWavelink.Playable.search(filename.replace("\"", ""), source=None, node=player.node),
                         timeout=5.0  # タイムアウトを5秒に設定
                     )
                 except asyncio.TimeoutError:
                     logger.error("検索がタイムアウトしました！:localfile")
                     return
-            elif type(filename) == str and filename.startswith("usegpu"):
-                filename = filename.split("_")
-                if urllib.parse.quote(filename[1]) == gpu_host:
-                    lavalink_retry = 1
-                else:
-                    lavalink_retry = 0
-                try:
-                    source_serch = await asyncio.wait_for(
-                        LavalinkWavelink.Playable.search(f"vv://voicevox?"
-                                                       f"&speaker={int(filename[3])}&address={urllib.parse.quote(filename[1])}"
-                                                       f"&query-address={urllib.parse.quote(filename[2])}&text={urllib.parse.quote(output_list[0])}"
-                                                 f"&retry={lavalink_retry}",
-                                                       source="voicevox"),
-                        timeout=5.0  # タイムアウトを5秒に設定
-                    )
-                except asyncio.TimeoutError:
-                    logger.error("検索がタイムアウトしました！:voicevox")
-                    return
             else:
                 try:
+                    # Generate a temporary file for the audio data
+                    temp_filename = os.path.dirname(os.path.abspath(__file__)) + "/output/" + get_temp_name()
+                    async with aiofiles.open(temp_filename, mode='wb') as f:
+                        await f.write(filename)
+
+                    # Use the temporary file for playback
+                    player: lavalink.Player = guild.voice_client
                     source_serch = await asyncio.wait_for(
-                        LavalinkWavelink.Playable.search(base64.urlsafe_b64encode(filename).decode('utf-8'), source="wav"),
+                        LavalinkWavelink.Playable.search(temp_filename.replace("\"", ""), source=None, node=player.node),
                         timeout=5.0  # タイムアウトを5秒に設定
                     )
                 except asyncio.TimeoutError:
-                    logger.error("検索がタイムアウトしました！:voicevox")
+                    logger.error("検索がタイムアウトしました！:tempfile")
+                    return
+                except Exception as e:
+                    logger.error(f"エラーが発生しました: {e}")
                     return
             if len(source_serch) == 0:
                 logger.error("結果が見つかりませんでした。")
