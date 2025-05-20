@@ -2234,7 +2234,8 @@ async def on_voice_state_update(member, before, after):
     if (bot.user.id == member.id and after.channel is None) or (member.bot is not True and is_bot_only(voicestate.channel)):
         await voicestate.disconnect()
 
-        del vclist[voicestate.guild.id]
+        if voicestate.guild.id in vclist:
+            del vclist[voicestate.guild.id]
         remove_premium_guild_dict(voicestate.guild.id)
         return
 
@@ -2303,10 +2304,12 @@ async def status_update_loop():
         try:
             guild = bot.get_guild(key)
             if guild is None:
-                del vclist[key]
+                if key in vclist:
+                    del vclist[key]
                 continue
             if guild.voice_client is None or guild.voice_client.channel is None:
-                del vclist[key]
+                if key in vclist:
+                    del vclist[key]
                 remove_premium_guild_dict(str(guild.id))
                 continue
 
