@@ -1644,10 +1644,15 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                     use_gpu_server=False, query_host=None, is_self_upload=False):
     try:
         global is_use_gpu_server
+        global is_use_gpu_server
         if query_host is None:
             query_host = target_host
         if filepath is not None:
             dir = os.path.dirname(os.path.abspath(__file__)) + "/" + filepath
+        if filepath is None and use_gpu_server and is_use_gpu_server and is_lavalink and not is_self_upload:
+            return f"usegpu_{gpu_host}_{query_host}_{speaker}"
+        elif filepath is None and is_lavalink and not is_self_upload:
+            return f"usegpu_{target_host}_{query_host}_{speaker}"
         async with aiohttp.ClientSession(connector_owner=False, connector=conn, timeout=ClientTimeout(connect=5)) as private_session:
             async with private_session.post(f'http://{query_host}/audio_query',
                                             params=params,
