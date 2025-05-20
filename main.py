@@ -465,6 +465,14 @@ class HogeList(discord.ui.View):
         self.add_item(VoiceSelectView(default=name, id_list=voice_id_list[start:end], start=start, end=end))
         self.add_item(VoiceSelectView2(name=name, start=start))
 
+    async def on_timeout(self) -> None:
+        """Override the default on_timeout to handle the case when the message has been deleted."""
+        try:
+            await super().on_timeout()
+        except discord.errors.NotFound:
+            # Message was deleted before timeout, just ignore the error
+            pass
+
 
 class VoiceSelectView2(discord.ui.Select):
     def __init__(self, name, start=1):
@@ -1636,10 +1644,15 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
                     use_gpu_server=False, query_host=None, is_self_upload=False):
     try:
         global is_use_gpu_server
+        global is_use_gpu_server
         if query_host is None:
             query_host = target_host
         if filepath is not None:
             dir = os.path.dirname(os.path.abspath(__file__)) + "/" + filepath
+        if filepath is None and use_gpu_server and is_use_gpu_server and is_lavalink and not is_self_upload:
+            return f"usegpu_{gpu_host}_{query_host}_{speaker}"
+        elif filepath is None and is_lavalink and not is_self_upload:
+            return f"usegpu_{target_host}_{query_host}_{speaker}"
         async with aiohttp.ClientSession(connector_owner=False, connector=conn, timeout=ClientTimeout(connect=5)) as private_session:
             async with private_session.post(f'http://{query_host}/audio_query',
                                             params=params,
