@@ -666,8 +666,13 @@ async def vc(ctx):
 
         if is_lavalink:
             try:
-                await ctx.author.voice.channel.connect(cls=LavalinkVoiceClient)
-                vclist[ctx.guild.id] = ctx.channel.id
+                # Check if already connected to a voice channel
+                if ctx.guild.voice_client is not None:
+                    logger.info("Already connected to a voice channel, using existing connection")
+                    vclist[ctx.guild.id] = ctx.channel.id
+                else:
+                    await ctx.author.voice.channel.connect(cls=LavalinkVoiceClient)
+                    vclist[ctx.guild.id] = ctx.channel.id
             except Exception as e:
                 logger.error(e)
                 await ctx.send_followup("現在起動中です。")
@@ -1283,8 +1288,13 @@ async def auto_join():
                 voice_channel: VoiceChannel = guild.get_channel(server_json["voice_ch_id"])
                 if len(voice_channel.voice_states) == 0:
                     continue
-                await voice_channel.connect(cls=LavalinkVoiceClient)
-                vclist[guild.id] = server_json["text_ch_id"]
+                # Check if already connected to a voice channel
+                if guild.voice_client is not None:
+                    logger.info(f"Already connected to a voice channel in guild {guild.id}, using existing connection")
+                    vclist[guild.id] = server_json["text_ch_id"]
+                else:
+                    await voice_channel.connect(cls=LavalinkVoiceClient)
+                    vclist[guild.id] = server_json["text_ch_id"]
                 await guild.get_channel(server_json["text_ch_id"]).send(embed=embed)
             except Exception as e:
                 logging.warning(f"Error: {e}")
@@ -2169,6 +2179,10 @@ async def on_voice_state_update(member, before, after):
             try:
                 # 時間開けないと２重接続？
                 await asyncio.sleep(1)
+                # Check again if the bot is already connected to a voice channel
+                if after.channel.guild.voice_client is not None:
+                    logger.info("Already connected to a voice channel, skipping connection attempt")
+                    return
                 await after.channel.guild.get_channel(after.channel.id).connect(cls=LavalinkVoiceClient)
                 vclist[after.channel.guild.id] = autojoin["text_channel_id"]
                 if (after.channel.permissions_for(after.channel.guild.me)).deafen_members:
