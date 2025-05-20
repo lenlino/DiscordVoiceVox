@@ -1935,35 +1935,18 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                 return
 
         if is_lavalink:
-            if type(filename) == str and filename.endswith(".wav"):
-                try:
-                    player: lavalink.Player = guild.voice_client
-                    source_serch = await asyncio.wait_for(
-                        LavalinkWavelink.Playable.search(filename.replace("\"", ""), source=None, node=player.node),
-                        timeout=5.0  # タイムアウトを5秒に設定
-                    )
-                except asyncio.TimeoutError:
-                    logger.error("検索がタイムアウトしました！:localfile")
-                    return
-            else:
-                try:
-                    # Generate a temporary file for the audio data
-                    temp_filename = os.path.dirname(os.path.abspath(__file__)) + "/output/" + get_temp_name()
-                    async with aiofiles.open(temp_filename, mode='wb') as f:
-                        await f.write(filename)
-
-                    # Use the temporary file for playback
-                    player: lavalink.Player = guild.voice_client
-                    source_serch = await asyncio.wait_for(
-                        LavalinkWavelink.Playable.search(temp_filename.replace("\"", ""), source=None, node=player.node),
-                        timeout=5.0  # タイムアウトを5秒に設定
-                    )
-                except asyncio.TimeoutError:
-                    logger.error("検索がタイムアウトしました！:tempfile")
-                    return
-                except Exception as e:
-                    logger.error(f"エラーが発生しました: {e}")
-                    return
+            try:
+                player: lavalink.Player = guild.voice_client
+                source_serch = await asyncio.wait_for(
+                    LavalinkWavelink.Playable.search(filename, source=None, node=player.node),
+                    timeout=5.0  # タイムアウトを5秒に設定
+                )
+            except asyncio.TimeoutError:
+                logger.error("検索がタイムアウトしました！")
+                return
+            except Exception as e:
+                logger.error(f"エラーが発生しました: {e}")
+                return
             if len(source_serch) == 0:
                 logger.error("結果が見つかりませんでした。")
                 return

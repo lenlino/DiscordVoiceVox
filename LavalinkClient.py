@@ -126,6 +126,26 @@ class LavalinkWavelink:
         @staticmethod
         async def search(query, source=None, node=None):
             """Search for tracks."""
+            import base64
+            import urllib.parse
+
+            # Handle different types of queries based on the issue description
+            if isinstance(query, str) and query.endswith(".wav"):
+                # Handle .wav files (already supported)
+                pass
+            elif isinstance(query, str) and query.startswith("usegpu"):
+                # Handle voicevox files
+                from main import gpu_host
+                parts = query.split("_")
+                if len(parts) >= 4:
+                    lavalink_retry = 1 if urllib.parse.quote(parts[1]) == gpu_host else 0
+                    query = f"vv://voicevox?&speaker={int(parts[3])}&address={urllib.parse.quote(parts[1])}&query-address={urllib.parse.quote(parts[2])}&text={urllib.parse.quote(parts[4] if len(parts) > 4 else '')}&retry={lavalink_retry}"
+                    source = "voicevox"
+            elif not isinstance(query, str) or not query.endswith(".wav"):
+                # Handle other file types using base64 encoding
+                query = base64.urlsafe_b64encode(query if isinstance(query, bytes) else query.encode('utf-8')).decode('utf-8')
+                source = "wav"
+
             results = await LavalinkWavelink.get_tracks(query, source, node)
             if not results or not results.tracks:
                 return []
