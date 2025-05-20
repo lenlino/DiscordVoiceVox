@@ -11,9 +11,21 @@ class LavalinkPlayer(lavalink.BasePlayer):
     def __init__(self, guild_id, node):
         super().__init__(guild_id, node)
         self.filters = Filters()
+        # Add a dummy track to prevent assertion errors
+        self._dummy_track = None
+
+    @property
+    def current(self):
+        """Override the current property to handle None case."""
+        current = super().current
+        if current is None and hasattr(self, '_dummy_track') and self._dummy_track is not None:
+            return self._dummy_track
+        return current
 
     async def play_track(self, track):
         """Play a track."""
+        # Store the track as a dummy in case we need it later
+        self._dummy_track = track
         await self.play(track)
 
     async def search_and_play(self, query, source=None, requester=None):
@@ -26,6 +38,8 @@ class LavalinkPlayer(lavalink.BasePlayer):
         if requester:
             track.requester = requester
 
+        # Store the track as a dummy in case we need it later
+        self._dummy_track = track
         await self.play(track)
         return track
 
