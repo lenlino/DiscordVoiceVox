@@ -666,8 +666,13 @@ async def vc(ctx):
 
         if is_lavalink:
             try:
-                await ctx.author.voice.channel.connect(cls=LavalinkVoiceClient)
-                vclist[ctx.guild.id] = ctx.channel.id
+                # Check if already connected to a voice channel
+                if ctx.guild.voice_client is not None:
+                    logger.info("Already connected to a voice channel, using existing connection")
+                    vclist[ctx.guild.id] = ctx.channel.id
+                else:
+                    await ctx.author.voice.channel.connect(cls=LavalinkVoiceClient)
+                    vclist[ctx.guild.id] = ctx.channel.id
             except Exception as e:
                 logger.error(e)
                 await ctx.send_followup("現在起動中です。")
@@ -1279,13 +1284,35 @@ async def auto_join():
         for server_json in json_list:
             try:
                 guild = bot.get_guild(server_json["guild"])
-                await guild.get_channel(server_json["text_ch_id"]).send(embed=embed)
+                if guild is None:
+                    logger.error(f"Could not find guild with ID {server_json['guild']}")
+                    continue
+
+                text_channel = guild.get_channel(server_json["text_ch_id"])
+                if text_channel is None:
+                    logger.error(f"Could not find text channel with ID {server_json['text_ch_id']} in guild {guild.id}")
+                    continue
+
+                await text_channel.send(embed=embed)
+
                 voice_channel: VoiceChannel = guild.get_channel(server_json["voice_ch_id"])
+                if voice_channel is None:
+                    logger.error(f"Could not find voice channel with ID {server_json['voice_ch_id']} in guild {guild.id}")
+                    continue
+
                 if len(voice_channel.voice_states) == 0:
                     continue
-                await voice_channel.connect(cls=LavalinkVoiceClient)
-                vclist[guild.id] = server_json["text_ch_id"]
-                await guild.get_channel(server_json["text_ch_id"]).send(embed=embed)
+
+                # Check if already connected to a voice channel
+                if guild.voice_client is not None:
+                    logger.info(f"Already connected to a voice channel in guild {guild.id}, using existing connection")
+                    vclist[guild.id] = server_json["text_ch_id"]
+                else:
+                    await voice_channel.connect(cls=LavalinkVoiceClient)
+                    vclist[guild.id] = server_json["text_ch_id"]
+
+                # No need to get the channel again, we already have it
+                await text_channel.send(embed=embed)
             except Exception as e:
                 logging.warning(f"Error: {e}")
                 pass
@@ -2169,12 +2196,27 @@ async def on_voice_state_update(member, before, after):
             try:
                 # 時間開けないと２重接続？
                 await asyncio.sleep(1)
-                await after.channel.guild.get_channel(after.channel.id).connect(cls=LavalinkVoiceClient)
+                # Check again if the bot is already connected to a voice channel
+                if after.channel is None or after.channel.guild is None:
+                    logger.error("Channel or guild is None, skipping connection attempt")
+                    return
+                if after.channel.guild.voice_client is not None:
+                    logger.info("Already connected to a voice channel, skipping connection attempt")
+                    return
+                channel = after.channel.guild.get_channel(after.channel.id)
+                if channel is None:
+                    logger.error(f"Could not find channel with ID {after.channel.id}")
+                    return
+                await channel.connect(cls=LavalinkVoiceClient)
                 vclist[after.channel.guild.id] = autojoin["text_channel_id"]
                 if (after.channel.permissions_for(after.channel.guild.me)).deafen_members:
                     await after.channel.guild.me.edit(deafen=True)
                 if await getdatabase(after.channel.guild.id, "is_joinnotice", True, "guild"):
-                    await after.channel.guild.get_channel(autojoin["text_channel_id"]).send(embed=embed)
+                    text_channel = after.channel.guild.get_channel(autojoin["text_channel_id"])
+                    if text_channel is not None:
+                        await text_channel.send(embed=embed)
+                    else:
+                        logger.error(f"Could not find text channel with ID {autojoin['text_channel_id']}")
             except Exception as e:
                 logger.error(e)
                 logger.error("自動接続")
@@ -2192,7 +2234,8 @@ async def on_voice_state_update(member, before, after):
     if (bot.user.id == member.id and after.channel is None) or (member.bot is not True and is_bot_only(voicestate.channel)):
         await voicestate.disconnect()
 
-        del vclist[voicestate.guild.id]
+        if voicestate.guild.id in vclist:
+            del vclist[voicestate.guild.id]
         remove_premium_guild_dict(voicestate.guild.id)
         return
 
@@ -2206,8 +2249,22 @@ async def on_voice_state_update(member, before, after):
             description="プレミアムモードに切り替わりました。"
         )
         try:
-            await after.channel.guild.get_channel(vclist[after.channel.guild.id]).send(embed=embed)
+            if after.channel is None or after.channel.guild is None:
+                logger.error("Channel or guild is None, skipping premium notification")
+                return
+
+            channel_id = vclist.get(after.channel.guild.id)
+            if channel_id is None:
+                logger.error(f"No text channel ID found for guild {after.channel.guild.id}")
+                return
+
+            text_channel = after.channel.guild.get_channel(channel_id)
+            if text_channel is not None:
+                await text_channel.send(embed=embed)
+            else:
+                logger.error(f"Could not find text channel with ID {channel_id}")
         except Exception as e:
+            logger.error(f"Error sending premium notification: {e}")
             pass
 
     if await getdatabase(member.guild.id, "is_readjoin", False, "guild"):
@@ -2247,10 +2304,12 @@ async def status_update_loop():
         try:
             guild = bot.get_guild(key)
             if guild is None:
-                del vclist[key]
+                if key in vclist:
+                    del vclist[key]
                 continue
             if guild.voice_client is None or guild.voice_client.channel is None:
-                del vclist[key]
+                if key in vclist:
+                    del vclist[key]
                 remove_premium_guild_dict(str(guild.id))
                 continue
 
@@ -2268,7 +2327,17 @@ async def status_update_loop():
                 alarm_message = alarm.get('message', 'アラームなのだ')
                 asyncio.create_task(add_yomiage_queue(guild.me, guild, f"{alarm_message}"))
 
-                asyncio.create_task(guild.get_channel(vclist[key]).send(embed=discord.Embed(
+                channel_id = vclist.get(key)
+                if channel_id is None:
+                    logger.error(f"No text channel ID found for guild {key}")
+                    continue
+
+                channel = guild.get_channel(channel_id)
+                if channel is None:
+                    logger.error(f"Could not find channel with ID {channel_id} in guild {key}")
+                    continue
+
+                asyncio.create_task(channel.send(embed=discord.Embed(
                         title=f"Alarm",
                         description=f"{alarm_message}",
                         color=discord.Color.gold()
@@ -2371,6 +2440,10 @@ async def dict_and_cache_loop():
         print("実行")
         # 辞書登録チェック
         channel = bot.get_channel(DictChannel)
+        if channel is None:
+            logger.error(f"Could not find dictionary channel with ID {DictChannel}")
+            return
+
         async for mes in channel.history(before=(datetime.datetime.now() + datetime.timedelta(days=-1))):
             if len(mes.embeds) == 0:
                 continue
@@ -2955,11 +3028,25 @@ async def connect_websocket():
                 logger.info(prefs_str)
                 for guild_id in premium_server_list:
                     guild = bot.get_guild(guild_id)
+                    if guild is None:
+                        logger.error(f"Could not find guild with ID {guild_id}")
+                        continue
+
                     if await getdatabase(guild.id, "is_eew", True, "guild"):
                         try:
-                            channel = guild.get_channel(vclist[guild.id])
+                            channel_id = vclist.get(guild.id)
+                            if channel_id is None:
+                                logger.error(f"No text channel ID found for guild {guild.id}")
+                                continue
+
+                            channel = guild.get_channel(channel_id)
+                            if channel is None:
+                                logger.error(f"Could not find channel with ID {channel_id} in guild {guild.id}")
+                                continue
+
                             await channel.send(embed=embed)
-                        except:
+                        except Exception as e:
+                            logger.error(f"Error sending earthquake notification: {e}")
                             pass
                         await add_yomiage_queue(guild.me, guild, f"緊急地震速報　{prefs_str}")
 
