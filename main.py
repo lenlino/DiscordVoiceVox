@@ -186,6 +186,11 @@ class LavalinkVoiceClient(discord.VoiceProtocol):
         return None
 
     @property
+    def guild(self):
+        """Return the guild associated with this voice client."""
+        return self.channel.guild if self.channel else None
+
+    @property
     def playing(self):
         """Return whether the player is currently playing audio."""
         player = self.lavalink.player_manager.get(self.guild_id)
