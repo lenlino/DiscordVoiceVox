@@ -33,12 +33,13 @@ from ko2kana import toKana
 from dotenv import load_dotenv
 import translators as ts
 from watchfiles import watch, awatch
+from lavalink.filters import Timescale
 
 import emoji
 import romajitable
 import unicodedata
 
-from LavalinkClient import LavalinkWavelink, LavalinkPlayer, Filters
+from LavalinkClient import LavalinkWavelink, LavalinkPlayer
 
 load_dotenv()
 
@@ -156,7 +157,6 @@ class LavalinkVoiceClient(discord.VoiceProtocol):
         self.channel = channel
         self.guild_id = channel.guild.id
         self._destroyed = False
-        self.filters = Filters()
 
         if not hasattr(self.client, 'lavalink'):
             # Instantiate a client if one doesn't exist.
@@ -2015,10 +2015,13 @@ async def yomiage(member, guild, text: str, no_read_name=False):
 
         if is_lavalink:
             player = guild.voice_client
-            filters = player.filters
+
+            filter_player = bot.lavalink.player_manager.get(guild.id)
+            timescale = Timescale()
             speed = float(float(speed) / 100)
             pitch = float(float(pitch) / 100) + 1
-            filters.timescale.set(speed=speed, pitch=pitch)
+            timescale.update(speed=speed, pitch=pitch)
+            await filter_player.set_filter(timescale)
             loop = 0
             while player.playing is True:
                 await asyncio.sleep(1)
@@ -2042,7 +2045,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                         await channel.connect()
                     logger.info("再接続完了")
                     break
-            await player.play(source, filters=filters)
+            await player.play(source)
         else:
             guild.voice_client.play(source)
     finally:
