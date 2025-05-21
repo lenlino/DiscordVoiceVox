@@ -14,6 +14,24 @@ class LavalinkPlayer(lavalink.BasePlayer):
         # Add a dummy track to prevent assertion errors
         self._dummy_track = None
 
+    async def _apply_filters(self):
+        """Apply filters to the player."""
+        if not self.is_connected:
+            return
+
+        # Convert filters to a dictionary
+        filter_dict = self.filters.to_dict()
+
+        # Remove None values
+        filter_dict = {k: v for k, v in filter_dict.items() if v is not None}
+
+        # Send filter data to Lavalink
+        await self.node.send({
+            'op': 'filters',
+            'guildId': str(self.guild_id),
+            **filter_dict
+        })
+
     @property
     def current(self):
         """Override the current property to handle None case."""
