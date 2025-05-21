@@ -151,9 +151,10 @@ class LavalinkWavelink:
                 # Handle voicevox files
                 from main import gpu_host
                 parts = query.split("_")
-                if len(parts) >= 4:
+                if len(parts) >= 5:  # Ensure we have at least 5 parts (including the text)
                     lavalink_retry = 1 if urllib.parse.quote(parts[1]) == gpu_host else 0
-                    query = f"vv://voicevox?&speaker={int(parts[3])}&address={urllib.parse.quote(parts[1])}&query-address={urllib.parse.quote(parts[2])}&text={urllib.parse.quote(parts[4] if len(parts) > 4 else '')}&retry={lavalink_retry}"
+                    text = parts[4]  # The text is now always the 5th part
+                    query = f"vv://voicevox?&speaker={int(parts[3])}&address={urllib.parse.quote(parts[1])}&query-address={urllib.parse.quote(parts[2])}&text={urllib.parse.quote(text)}&retry={lavalink_retry}"
                     source = "voicevox"
             elif not isinstance(query, str) or not query.endswith(".wav"):
                 # Handle other file types using base64 encoding

@@ -1567,9 +1567,6 @@ async def generate_wav(text, speaker=1, filepath=None, target_host='localhost', 
 
     # Generate audio data directly
     try:
-        # Create a temporary file path if needed
-        if filepath is None:
-            filepath = "output/" + get_temp_name()
 
         # COEIROINKAPI用に対応
         if coeiroink_host == target_host or sharevox_host == target_host:
@@ -1649,10 +1646,11 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
             query_host = target_host
         if filepath is not None:
             dir = os.path.dirname(os.path.abspath(__file__)) + "/" + filepath
+        text = dict(params).get('text', '')
         if filepath is None and use_gpu_server and is_use_gpu_server and is_lavalink and not is_self_upload:
-            return f"usegpu_{gpu_host}_{query_host}_{speaker}"
+            return f"usegpu_{gpu_host}_{query_host}_{speaker}_{text}"
         elif filepath is None and is_lavalink and not is_self_upload:
-            return f"usegpu_{target_host}_{query_host}_{speaker}"
+            return f"usegpu_{target_host}_{query_host}_{speaker}_{text}"
         async with aiohttp.ClientSession(connector_owner=False, connector=conn, timeout=ClientTimeout(connect=5)) as private_session:
             async with private_session.post(f'http://{query_host}/audio_query',
                                             params=params,
@@ -1955,6 +1953,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                     wav_list.append(filename)
                 continue
 
+            # プレミアムではない＋サブボット
             if not is_premium and check_count_id is not None:
                 logger.error(f"{guild.id} {voice_id} {await is_premium_check(guild.id, 100)} "
                              f"{await is_premium_check(member.id, 100)}")
