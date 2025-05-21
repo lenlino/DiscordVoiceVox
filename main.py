@@ -1567,9 +1567,7 @@ async def generate_wav(text, speaker=1, filepath=None, target_host='localhost', 
 
     # Generate audio data directly
     try:
-        # Create a temporary file path if needed
-        if filepath is None:
-            filepath = "output/" + get_temp_name()
+
 
         # COEIROINKAPI用に対応
         if coeiroink_host == target_host or sharevox_host == target_host:
@@ -2020,6 +2018,8 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             speed = float(float(speed) / 100)
             pitch = float(float(pitch) / 100) + 1
             filters.timescale.set(speed=speed, pitch=pitch)
+            # Apply filters immediately
+            await player._apply_filters()
             loop = 0
             while player.playing is True:
                 await asyncio.sleep(1)
