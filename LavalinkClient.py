@@ -3,6 +3,7 @@ import lavalink
 from lavalink import ClientError
 import re
 import urllib.parse
+from lavalink.filters import Timescale
 
 
 class LavalinkPlayer(lavalink.BasePlayer):
@@ -10,7 +11,6 @@ class LavalinkPlayer(lavalink.BasePlayer):
 
     def __init__(self, guild_id, node):
         super().__init__(guild_id, node)
-        self.filters = Filters()
         # Add a dummy track to prevent assertion errors
         self._dummy_track = None
 
@@ -54,55 +54,6 @@ class LavalinkPlayer(lavalink.BasePlayer):
         else:
             # Default search
             return await self.node.get_tracks(query)
-
-
-class Filters:
-    """Filters for audio playback."""
-
-    def __init__(self):
-        self.timescale = TimescaleFilter()
-
-    def reset(self):
-        """Reset all filters."""
-        self.timescale.reset()
-
-    def to_dict(self):
-        """Convert filters to dictionary."""
-        return {
-            'timescale': self.timescale.to_dict() if self.timescale.active else None
-        }
-
-
-class TimescaleFilter:
-    """Timescale filter for adjusting speed and pitch."""
-
-    def __init__(self):
-        self.speed = 1.0
-        self.pitch = 1.0
-        self.active = False
-
-    def set(self, speed=None, pitch=None):
-        """Set filter values."""
-        if speed is not None:
-            self.speed = float(speed)
-        if pitch is not None:
-            self.pitch = float(pitch)
-        self.active = True
-        return self
-
-    def reset(self):
-        """Reset filter values."""
-        self.speed = 1.0
-        self.pitch = 1.0
-        self.active = False
-        return self
-
-    def to_dict(self):
-        """Convert filter to dictionary."""
-        return {
-            'speed': self.speed,
-            'pitch': self.pitch
-        }
 
 
 class LavalinkWavelink:
@@ -151,9 +102,10 @@ class LavalinkWavelink:
                 # Handle voicevox files
                 from main import gpu_host
                 parts = query.split("_")
-                if len(parts) >= 4:
+                if len(parts) >= 5:  # Ensure we have at least 5 parts (including the text)
                     lavalink_retry = 1 if urllib.parse.quote(parts[1]) == gpu_host else 0
-                    query = f"vv://voicevox?&speaker={int(parts[3])}&address={urllib.parse.quote(parts[1])}&query-address={urllib.parse.quote(parts[2])}&text={urllib.parse.quote(parts[4] if len(parts) > 4 else '')}&retry={lavalink_retry}"
+                    text = parts[4]  # The text is now always the 5th part
+                    query = f"vv://voicevox?&speaker={int(parts[3])}&address={urllib.parse.quote(parts[1])}&query-address={urllib.parse.quote(parts[2])}&text={urllib.parse.quote(text)}&retry={lavalink_retry}"
                     source = "voicevox"
             elif not isinstance(query, str) or not query.endswith(".wav"):
                 # Handle other file types using base64 encoding
