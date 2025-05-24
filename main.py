@@ -2554,7 +2554,7 @@ async def init_loop():
     await initdatabase()
     await init_voice_list()
     status_update_loop.start()
-    auto_restart.start()
+    # auto_restart.start()
 
     dict_and_cache_loop.start()
     bot.add_view(ActivateButtonView())
