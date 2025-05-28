@@ -1491,7 +1491,7 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0", guil
 
 
     if voiceid >= 4000:
-        target_host = f"{aivis_host}"
+        target_host = f"{coeiroink_host}"
     elif voiceid >= 3000:
         target_host = f"{aivoice_host}"
         voiceid -= 3000
