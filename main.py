@@ -1767,7 +1767,7 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
 
 @bot.event
 async def on_ready():
-    print(f"起動しました shards: {bot.shard_count}")
+    print("起動しました")
 
 
 @bot.event
