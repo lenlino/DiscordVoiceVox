@@ -142,7 +142,8 @@ gpu_end_time = datetime.datetime.strptime(os.getenv("END_TIME", "02:00"), "%H:%M
 
 user_dict_loc = os.getenv("DICT_LOC", os.path.dirname(os.path.abspath(__file__)) + "/user_dict")
 member_cache_flags = discord.MemberCacheFlags.from_intents(intents=intents)
-bot = discord.AutoShardedBot(intents=intents, chunk_guilds_at_startup=False, member_cache_flags=member_cache_flags)
+bot = discord.AutoShardedBot(intents=intents, chunk_guilds_at_startup=False, member_cache_flags=member_cache_flags,
+                             shard_count=int(os.getenv("SHARD_COUNT", 1)))
 
 class LavalinkVoiceClient(discord.VoiceProtocol):
     """
