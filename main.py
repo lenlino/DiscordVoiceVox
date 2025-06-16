@@ -142,8 +142,14 @@ gpu_end_time = datetime.datetime.strptime(os.getenv("END_TIME", "02:00"), "%H:%M
 
 user_dict_loc = os.getenv("DICT_LOC", os.path.dirname(os.path.abspath(__file__)) + "/user_dict")
 member_cache_flags = discord.MemberCacheFlags.from_intents(intents=intents)
+
+async def create_session():
+    return aiohttp.TCPConnector(limit=0)
+
+aiohttp_client_session = asyncio.get_event_loop().run_until_complete(create_session())
+
 bot = discord.AutoShardedBot(intents=intents, chunk_guilds_at_startup=False, member_cache_flags=member_cache_flags,
-                             shard_count=int(os.getenv("SHARD_COUNT", 1)))
+                             connector=aiohttp_client_session)
 
 class LavalinkVoiceClient(discord.VoiceProtocol):
     """
@@ -2029,8 +2035,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                 await asyncio.sleep(1)
                 loop += 1
                 if loop > 10:
-                    print(f"player: {player.ping} ms {player.position} s {player.paused}")
-                    print(f"player: {player.connected} {output} {guild.id}")
+                    print(f"player: {output} {guild.id}")
                     logger.info(loop)
                 if loop > 30:
                     logger.info("再接続")
