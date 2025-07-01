@@ -1320,7 +1320,8 @@ async def auto_join():
 
                 # Check if already connected to a voice channel
                 if guild.voice_client is not None:
-                    logger.info(f"Already connected to a voice channel in guild {guild.id}, using existing connection")
+                    logger.error(f"Already connected to a voice channel in guild {guild.id}, using existing connection")
+                    await voice_channel.connect(cls=LavalinkVoiceClient)
                     vclist[guild.id] = server_json["text_ch_id"]
                 else:
                     await voice_channel.connect(cls=LavalinkVoiceClient)
@@ -2223,7 +2224,7 @@ async def on_voice_state_update(member, before, after):
                     logger.error("Channel or guild is None, skipping connection attempt")
                     return
                 if after.channel.guild.voice_client is not None:
-                    logger.info("Already connected to a voice channel, skipping connection attempt")
+                    logger.error("Already connected to a voice channel, skipping connection attempt")
                     return
                 channel = after.channel.guild.get_channel(after.channel.id)
                 if channel is None:
