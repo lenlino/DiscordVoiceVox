@@ -27,7 +27,7 @@ import websockets
 from aiohttp import FormData, ClientTimeout
 from discord import VoiceChannel
 from discord.ext import tasks, pages
-from lavalink import ClientError
+from lavalink import ClientError, NodeDisconnectedEvent, NodeReadyEvent
 from requests import ReadTimeout
 from ko2kana import toKana
 from dotenv import load_dotenv
@@ -170,6 +170,14 @@ class LavalinkVoiceClient(discord.VoiceProtocol):
             # We store it in `self.client` so that it may persist across cog reloads,
             # however this is not mandatory.
             self.client.lavalink = lavalink.Client(client.user.id)
+            # Register lavalink event hooks once if not registered yet
+            if not hasattr(self.client, '_ll_hooks_registered'):
+                try:
+                    self.client.lavalink.add_event_hook(_ll_on_node_ready, event=NodeReadyEvent)
+                    self.client.lavalink.add_event_hook(_ll_on_node_disconnected, event=NodeDisconnectedEvent)
+                    setattr(self.client, '_ll_hooks_registered', True)
+                except Exception as e:
+                    logger.error(f'Failed to register lavalink hooks in VoiceClient: {e}')
             """Connect to our Lavalink nodes."""
             if is_lavalink is False:
                 print("lavalink無効")
@@ -186,10 +194,12 @@ class LavalinkVoiceClient(discord.VoiceProtocol):
 
     @property
     def node(self):
-        """Return the first node from the lavalink client's node_manager."""
+        """Return a healthy node from the lavalink client, falling back to any node."""
         if hasattr(self, 'lavalink') and hasattr(self.lavalink, 'node_manager'):
-            nodes = self.lavalink.node_manager.nodes
-            return nodes[0] if nodes else None
+            nodes = list(self.lavalink.node_manager.nodes)
+            if nodes:
+                healthy = [n for n in nodes if getattr(n, 'available', False)]
+                return (healthy[0] if healthy else nodes[0])
         return None
 
     @property
@@ -317,6 +327,25 @@ sys.excepthook = global_exception_handler
 def asyncio_exception_handler(loop, context):
     exception = context.get('exception')
 
+# Lavalink event hooks for node lifecycle
+async def _ll_on_node_ready(event):
+    try:
+        node = getattr(event, 'node', None)
+        name = getattr(node, 'name', 'unknown')
+        logger.info(f'Lavalink node ready: {name}')
+    except Exception as e:
+        logger.error(f'Lavalink node ready hook error: {e}')
+
+async def _ll_on_node_disconnected(event):
+    try:
+        node = getattr(event, 'node', None)
+        name = getattr(node, 'name', 'unknown')
+        code = getattr(event, 'code', None)
+        reason = getattr(event, 'reason', None)
+        logger.warning(f'Lavalink node disconnected: {name} code={code} reason={reason}')
+    except Exception as e:
+        logger.error(f'Lavalink node disconnect hook error: {e}')
+
 async def connect_nodes():
     """Connect to our Lavalink nodes."""
     if is_lavalink is False:
@@ -326,6 +355,15 @@ async def connect_nodes():
     # Create a client instance
     if not hasattr(bot, 'lavalink'):
         bot.lavalink = lavalink.Client(bot.user.id)
+
+    # Register lavalink event hooks once
+    if not hasattr(bot, '_ll_hooks_registered'):
+        try:
+            bot.lavalink.add_event_hook(_ll_on_node_ready, event=NodeReadyEvent)
+            bot.lavalink.add_event_hook(_ll_on_node_disconnected, event=NodeDisconnectedEvent)
+            setattr(bot, '_ll_hooks_registered', True)
+        except Exception as e:
+            logger.error(f'Failed to register lavalink hooks: {e}')
 
     # Add nodes
     for lavalink_host in lavalink_host_list:
