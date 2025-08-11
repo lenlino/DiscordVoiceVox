@@ -44,16 +44,9 @@ class LavalinkPlayer(lavalink.BasePlayer):
         return track
 
     async def search_tracks(self, query, source=None):
-        """Search for tracks."""
-        if source == "voicevox":
-            # Handle voicevox source
-            return await self.node.get_tracks(query)
-        elif source == "wav":
-            # Handle wav source
-            return await self.node.get_tracks(query)
-        else:
-            # Default search
-            return await self.node.get_tracks(query)
+        """Search for tracks with node failover."""
+        # Prefer the player's current node first, then fall back across others via LavalinkWavelink
+        return await LavalinkWavelink.get_tracks(query, source, node=self.node)
 
 
 class LavalinkWavelink:
@@ -61,29 +54,44 @@ class LavalinkWavelink:
 
     @staticmethod
     async def get_tracks(query, source=None, node=None):
-        """Get tracks from lavalink."""
-        if node is None:
-            # Use the first available node
-            from main import bot
-            if not hasattr(bot, 'lavalink'):
-                return []
-            node = bot.lavalink.node_manager.nodes[0] if bot.lavalink.node_manager.nodes else None
-            if node is None:
-                return []
+        """Get tracks from lavalink with failover across healthy nodes."""
+        # If an explicit node is supplied, try it first; otherwise iterate healthy nodes.
+        nodes_to_try = []
+        if node is not None:
+            nodes_to_try.append(node)
+        else:
+            try:
+                from main import bot
+                if hasattr(bot, 'lavalink') and getattr(bot.lavalink, 'nodes', None):
+                    # Prefer available/ready nodes first, then any remaining nodes as fallback
+                    all_nodes = list(bot.lavalink.nodes)
+                    # Node.available is a method, call it.
+                    healthy = [n for n in all_nodes if getattr(n, 'available', False)]
+                    unhealthy = [n for n in all_nodes if n not in healthy]
+                    nodes_to_try.extend(healthy + unhealthy)
+            except Exception:
+                pass
 
-        try:
-            if source == "voicevox":
-                # Handle voicevox source
-                return await node.get_tracks(query)
-            elif source == "wav":
-                # Handle wav source
-                return await node.get_tracks(query)
-            else:
-                # Default search
-                return await node.get_tracks(query)
-        except Exception as e:
-            print(f"Error searching tracks: {e}")
+        if not nodes_to_try:
             return []
+
+        last_err = None
+        for n in nodes_to_try:
+            try:
+                if source == "voicevox":
+                    return await n.get_tracks(query)
+                elif source == "wav":
+                    return await n.get_tracks(query)
+                else:
+                    return await n.get_tracks(query)
+            except Exception as e:
+                last_err = e
+                continue
+
+        # If all nodes failed, log the last error and return empty
+        if last_err:
+            print(f"Error searching tracks across nodes: {last_err}")
+        return []
 
     class Playable:
         """Adapter for wavelink.Playable."""
