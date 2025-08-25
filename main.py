@@ -537,7 +537,8 @@ class VoiceSelectView2(discord.ui.Select):
             description=f"**{self.name}({self.values[0]})** id:{id}に変更したのだ",
             color=discord.Colour.brand_green(),
         )
-        if 1000 <= id < 2000 and str(interaction.user.id) not in premium_user_list:
+        is_premium: bool = str(interaction.user.id) in premium_user_list
+        if 1000 <= id < 2000 and is_premium is not True:
             embed = discord.Embed(
                 title="**Error**",
                 description=f"この音声はプレミアムプラン限定です",
@@ -547,6 +548,8 @@ class VoiceSelectView2(discord.ui.Select):
             await setdatabase(interaction.user.id, "voiceid", str(id))
         if 4000 > int(id) >= 3000:
             embed.description = f"**{self.name}({self.values[0]})** id:{id}に変更したのだ\n**A.I.VOICEは録音・配信での利用はできません**"
+        elif int(id) not in free_voice_list and is_premium is not True:
+            embed.description = f"**{self.name}({self.values[0]})** id:{id}に変更したのだ\n(この音声は混雑時、ずんだもんに切り替わります)"
         #print(f"**{self.name}({self.values[0]})**")
         await interaction.response.send_message(embed=embed)
         await interaction.message.delete()
@@ -733,8 +736,8 @@ async def vc(ctx):
         else:
             await ctx.author.voice.channel.connect()
             vclist[ctx.guild.id] = ctx.channel.id
-        if (ctx.author.voice.channel.permissions_for(ctx.guild.me)).deafen_members:
-            await ctx.me.edit(deafen=True)
+        '''if (ctx.author.voice.channel.permissions_for(ctx.guild.me)).deafen_members:
+            await ctx.me.edit(deafen=True)'''
         embed = discord.Embed(
             title="Connect",
             color=discord.Colour.brand_green(),
@@ -803,6 +806,7 @@ async def set(ctx, key: discord.Option(str, choices=[
             return
         else:
             value = toLowerCase(value)
+            is_premium: bool = str(ctx.author.id) in premium_user_list
             if value.isdecimal() is False:
                 embed = discord.Embed(
                     title="**Error**",
@@ -812,7 +816,7 @@ async def set(ctx, key: discord.Option(str, choices=[
                 print(f"**errorid**")
                 await ctx.send_followup(embed=embed)
                 return
-            elif 2000 > int(value) >= 1000 and str(ctx.author.id) not in premium_user_list:
+            elif 2000 > int(value) >= 1000 and is_premium is not True:
                 embed = discord.Embed(
                     title="**Error**",
                     description=f"この音声はプレミアムプラン限定なのだ",
@@ -848,6 +852,8 @@ async def set(ctx, key: discord.Option(str, choices=[
             )
             if 4000 > int(value) >= 3000:
                 embed.description = f"**{name}** id:{value}に変更したのだ\n**A.I.VOICEは録音・配信での利用はできません**"
+            elif int(value) not in free_voice_list and is_premium is not True:
+                embed.description = f"**{name}** id:{value}に変更したのだ\n(この音声は混雑時、ずんだもんに切り替わります)"
             await ctx.send_followup(embed=embed)
     elif key == "speed":
         if value is None:
@@ -1178,6 +1184,8 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=int,
         await paginator.respond(ctx.interaction)
         return
 
+    is_premium = str(ctx.author.id) in premium_user_list
+
     if voiceid.isdecimal() is False:
         embed = discord.Embed(
             title="**Error**",
@@ -1188,7 +1196,8 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=int,
         await ctx.send_followup(embed=embed)
         return
 
-    elif 2000 > int(voiceid) >= 1000 and str(ctx.author.id) not in premium_user_list:
+
+    elif 2000 > int(voiceid) >= 1000 and is_premium is False:
         embed = discord.Embed(
             title="**Error**",
             description=f"この音声はプレミアムプラン限定です。",
@@ -1224,6 +1233,8 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=int,
     )
     if 4000 > int(voiceid) >= 3000:
         embed.description = f"**{name}** id:{voiceid}に変更したのだ\n**A.I.VOICEは録音・配信での利用はできません**"
+    elif int(voiceid) not in free_voice_list and is_premium is not True:
+        embed.description = f"**{name}** id:{voiceid}に変更したのだ\n(この音声は混雑時、ずんだもんに切り替わります)"
     #print(f"**{name}**")
     if speed is not None:
         if speed.isdecimal() is False:
@@ -1579,6 +1590,7 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0", guil
     return await generate_wav(text, voiceid, filename, target_host=target_host,
                               is_premium=is_premium, speed=speed, pitch=pitch, guild_id=guild_id, is_self_upload=is_self_upload)
 
+free_voice_list: list = [3,1,42,8,5,14,2,76,10,7,75,22,0,58,60,45,47,4,46,61,54,66,38]
 
 async def generate_wav(text, speaker=1, filepath=None, target_host='localhost', target_port=50021,
                        is_premium=False, speed="100", pitch="0", guild_id="0", is_self_upload=False):
@@ -1594,7 +1606,7 @@ async def generate_wav(text, speaker=1, filepath=None, target_host='localhost', 
     global is_use_gpu_server
     global vclist_len
     use_gpu_server = False
-    if is_use_gpu_server and (speaker == 3 or speaker == 1 or speaker == 42 or speaker == 8):
+    if is_use_gpu_server and speaker in free_voice_list:
         use_gpu_server = True
     elif is_use_gpu_server and is_premium:
         if vclist_len >= 1500:
@@ -1603,6 +1615,9 @@ async def generate_wav(text, speaker=1, filepath=None, target_host='localhost', 
             use_gpu_server = True
         elif await is_premium_check(guild_id, 500):
             use_gpu_server = True
+
+
+
     len_limit = 80
     if is_premium:
         conn = premium_conn
@@ -1624,6 +1639,9 @@ async def generate_wav(text, speaker=1, filepath=None, target_host='localhost', 
         elif aivis_host == target_host:
             return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, query_host=target_host)
         else:
+            if use_gpu_server is not True and vclist_len >= 1500:
+                use_gpu_server = True
+                speaker = 3
             return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath,
                                 use_gpu_server=use_gpu_server, query_host=query_host, is_self_upload=is_self_upload)
     except Exception as e:
@@ -1824,16 +1842,17 @@ async def on_message(message):
 @bot.event
 async def on_application_command_error(ctx: discord.ApplicationContext, error: discord.DiscordException):
     # Log the error
-    logger.error(f"Application command error: {error}")
+    uid = uuid.uuid4()
+    logger.error(f"Application command error: {error} uuid: {uid}")
 
     # Send a user-friendly error message
     try:
-        await ctx.respond("コマンドの実行中にエラーが発生しました。しばらく経ってからもう一度お試しください。", ephemeral=True)
+        await ctx.respond(f"コマンドの実行中にエラーが発生しました。しばらく経ってからもう一度お試しください。uuid: {uid}", ephemeral=True)
     except discord.errors.InteractionResponded:
         try:
-            await ctx.send_followup("コマンドの実行中にエラーが発生しました。しばらく経ってからもう一度お試しください。", ephemeral=True)
+            await ctx.send_followup(f"コマンドの実行中にエラーが発生しました。しばらく経ってからもう一度お試しください。uuid: {uid}", ephemeral=True)
         except Exception as e:
-            logger.error(f"Failed to send error message: {e}")
+            logger.error(f"Failed to send error message: {e} uuid: {uid}")
 
 @dataclass
 class YomiageQueue:
@@ -2674,7 +2693,7 @@ async def adddict_local(ctx, surface: discord.Option(input_type=str, description
             if await update_private_dict(ctx.guild.id, content, import_dict.get(content)) is not True:
                 embed = discord.Embed(
                     title="**Error**",
-                    description=f"登録数の上限に達しました。(サポートサーバーへお問い合わせください。)\n"
+                    description=f"登録数の上限に達しました。\n"
                                 f"{content}まで登録しました。",
                     color=discord.Colour.brand_red(),
                 )
