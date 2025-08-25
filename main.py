@@ -2675,7 +2675,7 @@ async def adddict_local(ctx, surface: discord.Option(input_type=str, description
             if await update_private_dict(ctx.guild.id, content, import_dict.get(content)) is not True:
                 embed = discord.Embed(
                     title="**Error**",
-                    description=f"登録数の上限に達しました。(サポートサーバーへお問い合わせください。)\n"
+                    description=f"登録数の上限に達しました。\n"
                                 f"{content}まで登録しました。",
                     color=discord.Colour.brand_red(),
                 )
