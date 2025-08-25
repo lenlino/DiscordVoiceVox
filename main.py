@@ -1824,16 +1824,17 @@ async def on_message(message):
 @bot.event
 async def on_application_command_error(ctx: discord.ApplicationContext, error: discord.DiscordException):
     # Log the error
-    logger.error(f"Application command error: {error}")
+    uid = uuid.uuid4()
+    logger.error(f"Application command error: {error} uuid: {uid}")
 
     # Send a user-friendly error message
     try:
-        await ctx.respond("コマンドの実行中にエラーが発生しました。しばらく経ってからもう一度お試しください。", ephemeral=True)
+        await ctx.respond(f"コマンドの実行中にエラーが発生しました。しばらく経ってからもう一度お試しください。uuid: {uid}", ephemeral=True)
     except discord.errors.InteractionResponded:
         try:
-            await ctx.send_followup("コマンドの実行中にエラーが発生しました。しばらく経ってからもう一度お試しください。", ephemeral=True)
+            await ctx.send_followup(f"コマンドの実行中にエラーが発生しました。しばらく経ってからもう一度お試しください。uuid: {uid}", ephemeral=True)
         except Exception as e:
-            logger.error(f"Failed to send error message: {e}")
+            logger.error(f"Failed to send error message: {e} uuid: {uid}")
 
 @dataclass
 class YomiageQueue:
