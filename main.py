@@ -733,8 +733,8 @@ async def vc(ctx):
         else:
             await ctx.author.voice.channel.connect()
             vclist[ctx.guild.id] = ctx.channel.id
-        if (ctx.author.voice.channel.permissions_for(ctx.guild.me)).deafen_members:
-            await ctx.me.edit(deafen=True)
+        '''if (ctx.author.voice.channel.permissions_for(ctx.guild.me)).deafen_members:
+            await ctx.me.edit(deafen=True)'''
         embed = discord.Embed(
             title="Connect",
             color=discord.Colour.brand_green(),
