@@ -1579,6 +1579,7 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0", guil
     return await generate_wav(text, voiceid, filename, target_host=target_host,
                               is_premium=is_premium, speed=speed, pitch=pitch, guild_id=guild_id, is_self_upload=is_self_upload)
 
+free_voice_list: list = [3,1,42,8,5,14,2,76,10,7,75,22,0,58,60,45,47,4,46,61,54,66,38]
 
 async def generate_wav(text, speaker=1, filepath=None, target_host='localhost', target_port=50021,
                        is_premium=False, speed="100", pitch="0", guild_id="0", is_self_upload=False):
@@ -1594,7 +1595,7 @@ async def generate_wav(text, speaker=1, filepath=None, target_host='localhost', 
     global is_use_gpu_server
     global vclist_len
     use_gpu_server = False
-    if is_use_gpu_server and (speaker == 3 or speaker == 1 or speaker == 42 or speaker == 8):
+    if is_use_gpu_server and speaker in free_voice_list:
         use_gpu_server = True
     elif is_use_gpu_server and is_premium:
         if vclist_len >= 1500:
