@@ -59,6 +59,7 @@ lavalink_uploader = os.environ.get("LAVALINK_UPLOADER", None)
 use_lavalink_upload: bool = bool(os.getenv("USE_LAVALINK_UPLOAD", "True") == "True")
 gpu_host = os.environ.get("GPU_HOST", host)
 check_count_id = os.environ.get("CHECK_STATS_COUNT_ID", None)
+check_premium_id = os.environ.get("CHECK_PREMIUM_ID", None)
 DictChannel = 1057517276674400336
 ManagerGuilds = [888020016660893726,864441028866080768]
 intents = discord.Intents.none()
@@ -2479,12 +2480,12 @@ async def get_server_count():
         return None
 
 
-async def add_premium_lopp(d):
+async def add_premium_lopp(user_id, amount):
     global premium_user_list
     global premium_server_list_300
     global premium_server_list_500
     global premium_server_list_1000
-    user_id = d['metadata']['discord_user_id']
+
     premium_user_list.append(user_id)
     premium_guild_list = []
     for i in range(1, 4):
@@ -2493,7 +2494,6 @@ async def add_premium_lopp(d):
             continue
         premium_guild_list.append(str(p_guild))
 
-    amount = d["plan"]["amount"]
     if amount == 300:
         premium_server_list_300.append(user_id)
         premium_server_list_300.extend(premium_guild_list)
@@ -2575,7 +2575,7 @@ async def save_join_list_task():
 
 @tasks.loop(minutes=10)
 async def premium_user_check_loop():
-    if stripe.api_key is None:
+    if check_premium_id is None:
         return
     global premium_user_list
     global premium_server_list_300
@@ -2587,14 +2587,25 @@ async def premium_user_check_loop():
     premium_server_list_1000.clear()
     count = 0
 
-    async for d in (await stripe.Subscription.search_auto_paging_iter_async(limit=100,
-                                        query="status:'active' AND -metadata['discord_user_id']:null")):
-        count += 1
-        await add_premium_lopp(d)
-    async for d in (await stripe.Subscription.search_auto_paging_iter_async(limit=100,
-                                        query="status:'trialing' AND -metadata['discord_user_id']:null")):
-        count += 1
-        await add_premium_lopp(d)
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(check_premium_id, timeout=5) as response:
+                if response.status == 200:
+                    response_json = await response.json()  # レスポンスのテキストを取得
+                    for (amount, value) in response_json.items():
+                        for user_id in value:
+                            await add_premium_lopp(user_id, int(amount))
+                            count += 1
+                else:
+                    print(f"エラー: ステータスコード {response.status}")
+                    return None
+    except aiohttp.ClientError as e:
+        print(f"リクエストエラー: {e}")
+        return None
+    except ValueError:
+        print("取得した値を整数に変換できませんでした。")
+        return None
+
     print(f"プレミアム数: {count}")
 
 
