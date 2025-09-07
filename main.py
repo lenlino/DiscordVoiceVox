@@ -1939,7 +1939,6 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         if stripe.api_key is None:
             is_premium = True
         output = text
-        print(output)
         output = re.sub("\n", "", output)
 
         if output == "":
