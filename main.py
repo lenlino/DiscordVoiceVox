@@ -760,6 +760,47 @@ async def vc(ctx):
         return
 
 
+@bot.slash_command(description="今の読み上げをスキップするのだ", name="skip")
+async def skip_reading(ctx: discord.ApplicationContext):
+    """Skips the currently playing TTS in this guild."""
+    await ctx.defer()
+
+    # Preconditions: must be connected and user should share the voice channel with the bot
+    vc = ctx.guild.voice_client
+    if vc is None or not vc.connected:
+        embed = discord.Embed(title="Skip", description="ボイスチャンネルに接続していないのだ。", color=discord.Colour.brand_red())
+        await ctx.send_followup(embed=embed)
+        return
+
+    if ctx.author.voice is None or ctx.author.voice.channel != vc.channel:
+        embed = discord.Embed(title="Skip", description="同じボイスチャンネルにいないため操作できないのだ。", color=discord.Colour.brand_red())
+        await ctx.send_followup(embed=embed)
+        return
+
+    skipped = False
+    try:
+        if is_lavalink:
+            # Use the underlying lavalink player to stop current track
+            try:
+                ll_player = bot.lavalink.player_manager.get(ctx.guild.id)
+            except Exception:
+                ll_player = None
+            if ll_player and getattr(ll_player, 'is_playing', False):
+                await ll_player.stop()
+                skipped = True
+        else:
+            # Use discord.py voice client stop
+            if hasattr(vc, 'is_playing') and vc.is_playing():
+                vc.stop()
+                skipped = True
+    except Exception as e:
+        logger.error(f"Skip error: {e}")
+
+    embed = discord.Embed(title="Skip", description="今の読み上げをスキップしたのだ。",
+                          color=discord.Colour.brand_green())
+    await ctx.send_followup(embed=embed)
+
+
 async def add_premium_guild_dict(search_id: str, guild_id: str):
     if await is_premium_check(search_id, 1000):
         premium_guild_dict[guild_id] = 1000
@@ -1835,10 +1876,13 @@ async def on_ready():
 
 
 @bot.event
-async def on_message(message):
+async def on_message(message: discord.Message):
     voice = message.guild.voice_client
     if voice and (message.channel.id == vclist.get(message.guild.id) or message.channel.id == voice.channel.id):
-        await add_yomiage_queue(message.author, message.guild, message.content)
+        output = message.content
+        if len(message.attachments) >= 1:
+            output = "テンプファイル" + output
+        await add_yomiage_queue(message.author, message.guild, output)
 
 @bot.event
 async def on_application_command_error(ctx: discord.ApplicationContext, error: discord.DiscordException):
@@ -1886,14 +1930,16 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         elif member.id in await getdatabase(guild.id, "mute_list", [], "guild"):
             return
         pattern = "https?://[\w/:%#\$&\?\(\)~\.=\+\-@]+"
-        pattern_emoji = "\<.+?\>"
-
+        pattern_emoji = "\<:.+?\>"
+        pattern_mension = "\<@.+?\>"
         pattern_spoiler = "\|\|.*?\|\|"
+        pattern_codeblock = "```.*?```"
         voice_id = None
         is_premium = guild.id in premium_server_list
         if stripe.api_key is None:
             is_premium = True
         output = text
+        print(output)
         output = re.sub("\n", "", output)
 
         if output == "":
@@ -1957,6 +2003,12 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         output = re.sub(pattern_emoji, "", output)
         output = re.sub(pattern_voice, "", output)
         output = re.sub(pattern_spoiler, "", output)
+        output = re.sub(pattern_codeblock, "コードブロック省略", output)
+
+        if is_premium:
+            output = await replace_mentions_with_names(output, guild)
+        else:
+            output = re.sub(pattern_mension, "", output)
 
         if len(output) <= 0:
             return
@@ -2121,6 +2173,29 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             await yomiage(queue.member, queue.guild, queue.text, queue.no_read_name)
         else:
             del yomiage_queue[guild.id]
+
+
+async def replace_mentions_with_names(text, guild):
+    # メンションIDリスト取得
+    user_ids = re.findall(r"<@(\d+)>", text)
+    id_to_name = {}
+
+    # それぞれのメンバーからニックネーム/名前取得
+    for user_id in user_ids:
+        if user_id not in id_to_name:
+            try:
+                member = await guild.fetch_member(int(user_id))
+                id_to_name[user_id] = "メンション" + member.nick or member.name
+            except Exception:
+                id_to_name[user_id] = "メンション(不明)"
+
+    # メンション表現を名前に置換
+    def replacer(match):
+        uid = match.group(1)
+        return id_to_name.get(uid, match.group(0))
+
+    result = re.sub(r"<@(\d+)>", replacer, text)
+    return result
 
 
 async def connect_waves(wave_list):
