@@ -1886,8 +1886,8 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         elif member.id in await getdatabase(guild.id, "mute_list", [], "guild"):
             return
         pattern = "https?://[\w/:%#\$&\?\(\)~\.=\+\-@]+"
-        pattern_emoji = "\<.+?\>"
-
+        pattern_emoji = "\<:.+?\>"
+        pattern_mension = "\<@.+?\>"
         pattern_spoiler = "\|\|.*?\|\|"
         pattern_codeblock = "```.*?```"
         voice_id = None
@@ -1895,6 +1895,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         if stripe.api_key is None:
             is_premium = True
         output = text
+        print(output)
         output = re.sub("\n", "", output)
 
         if output == "":
@@ -1958,7 +1959,12 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         output = re.sub(pattern_emoji, "", output)
         output = re.sub(pattern_voice, "", output)
         output = re.sub(pattern_spoiler, "", output)
-        output = re.sub(pattern_codeblock, "", output)
+        output = re.sub(pattern_codeblock, "コードブロック省略", output)
+
+        if is_premium:
+            output = await replace_mentions_with_names(output, guild)
+        else:
+            output = re.sub(pattern_mension, "", output)
 
         if len(output) <= 0:
             return
@@ -2123,6 +2129,29 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             await yomiage(queue.member, queue.guild, queue.text, queue.no_read_name)
         else:
             del yomiage_queue[guild.id]
+
+
+async def replace_mentions_with_names(text, guild):
+    # メンションIDリスト取得
+    user_ids = re.findall(r"<@(\d+)>", text)
+    id_to_name = {}
+
+    # それぞれのメンバーからニックネーム/名前取得
+    for user_id in user_ids:
+        if user_id not in id_to_name:
+            try:
+                member = await guild.fetch_member(int(user_id))
+                id_to_name[user_id] = "メンション" + member.nick or member.name
+            except Exception:
+                id_to_name[user_id] = "メンション(不明)"
+
+    # メンション表現を名前に置換
+    def replacer(match):
+        uid = match.group(1)
+        return id_to_name.get(uid, match.group(0))
+
+    result = re.sub(r"<@(\d+)>", replacer, text)
+    return result
 
 
 async def connect_waves(wave_list):
