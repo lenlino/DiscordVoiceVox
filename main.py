@@ -760,6 +760,47 @@ async def vc(ctx):
         return
 
 
+@bot.slash_command(description="今の読み上げをスキップするのだ", name="skip")
+async def skip_reading(ctx: discord.ApplicationContext):
+    """Skips the currently playing TTS in this guild."""
+    await ctx.defer()
+
+    # Preconditions: must be connected and user should share the voice channel with the bot
+    vc = ctx.guild.voice_client
+    if vc is None or not vc.connected:
+        embed = discord.Embed(title="Skip", description="ボイスチャンネルに接続していないのだ。", color=discord.Colour.brand_red())
+        await ctx.send_followup(embed=embed)
+        return
+
+    if ctx.author.voice is None or ctx.author.voice.channel != vc.channel:
+        embed = discord.Embed(title="Skip", description="同じボイスチャンネルにいないため操作できないのだ。", color=discord.Colour.brand_red())
+        await ctx.send_followup(embed=embed)
+        return
+
+    skipped = False
+    try:
+        if is_lavalink:
+            # Use the underlying lavalink player to stop current track
+            try:
+                ll_player = bot.lavalink.player_manager.get(ctx.guild.id)
+            except Exception:
+                ll_player = None
+            if ll_player and getattr(ll_player, 'is_playing', False):
+                await ll_player.stop()
+                skipped = True
+        else:
+            # Use discord.py voice client stop
+            if hasattr(vc, 'is_playing') and vc.is_playing():
+                vc.stop()
+                skipped = True
+    except Exception as e:
+        logger.error(f"Skip error: {e}")
+
+    embed = discord.Embed(title="Skip", description="今の読み上げをスキップしたのだ。",
+                          color=discord.Colour.brand_green())
+    await ctx.send_followup(embed=embed)
+
+
 async def add_premium_guild_dict(search_id: str, guild_id: str):
     if await is_premium_check(search_id, 1000):
         premium_guild_dict[guild_id] = 1000
