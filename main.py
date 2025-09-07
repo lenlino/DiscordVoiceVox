@@ -1835,10 +1835,13 @@ async def on_ready():
 
 
 @bot.event
-async def on_message(message):
+async def on_message(message: discord.Message):
     voice = message.guild.voice_client
     if voice and (message.channel.id == vclist.get(message.guild.id) or message.channel.id == voice.channel.id):
-        await add_yomiage_queue(message.author, message.guild, message.content)
+        output = message.content
+        if len(message.attachments) >= 1:
+            output = "テンプファイル" + output
+        await add_yomiage_queue(message.author, message.guild, output)
 
 @bot.event
 async def on_application_command_error(ctx: discord.ApplicationContext, error: discord.DiscordException):
