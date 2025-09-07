@@ -1889,6 +1889,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         pattern_emoji = "\<.+?\>"
 
         pattern_spoiler = "\|\|.*?\|\|"
+        pattern_codeblock = "```.*?```"
         voice_id = None
         is_premium = guild.id in premium_server_list
         if stripe.api_key is None:
@@ -1957,6 +1958,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         output = re.sub(pattern_emoji, "", output)
         output = re.sub(pattern_voice, "", output)
         output = re.sub(pattern_spoiler, "", output)
+        output = re.sub(pattern_codeblock, "", output)
 
         if len(output) <= 0:
             return
