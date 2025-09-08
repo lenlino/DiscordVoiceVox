@@ -111,7 +111,7 @@ tips_list = ["</setvc:1083939849381359697>で自分の声を変更できます",
              "詳しくは[VOICEVOXホームページ](https://voicevox.hiroshiba.jp/term/)をご確認ください",
              "1000円プランではVOICEVOX APIの利用が可能です。詳しくは[こちら](https://lnetwork.jp/page-74/)",
              "[500円以上のプラン](https://lenlino.com/?page_id=2510)ではすべてのVOICEVOX音声が高速なGPUによる生成を利用しています",
-             "A.I.VOICE 琴葉茜・葵に対応しました! /setvcコマンドより変更できます"]
+             "A.I.VOICE 琴葉茜・葵に対応しました! </setvc:1083939849381359697>コマンドより変更できます"]
 USAGE_LIMIT_PRICE: int = int(os.getenv("USAGE_LIMIT_PRICE", 0))
 GLOBAL_DICT_CHECK: bool = bool(os.getenv("GLOBAL_DICT_CHECK", "True") == "True")
 BOT_NICKNAME = os.getenv("BOT_NICKNAME", "ずんだもんβ")
@@ -570,7 +570,7 @@ class ActivateButtonView(discord.ui.View):  # Create a class called MyView that 
     async def token_button_callback(self, button, interaction):
         await interaction.response.defer()
         embed = discord.Embed(title="Failed",
-                              description="有効なプレミアムプランが存在しないかアクティベートされていません。")
+                              description="有効なプレミアムプランが存在しないかアクティベートされていないのだ。")
         if str(interaction.user.id) not in premium_user_list:
             await interaction.followup.send(embeds=[embed], ephemeral=True)
             return
@@ -587,14 +587,14 @@ class ActivateButtonView(discord.ui.View):  # Create a class called MyView that 
         amount = target_subscription[0]["plan"]["amount"]
 
         if amount < 1000:
-            embed.description = "1000円未満のプランのため発行が行えませんでした。"
+            embed.description = "1000円未満のプランのため発行が行えなかったのだ。"
             await interaction.followup.send(embeds=[embed], ephemeral=True)
             return
         subscription_id = target_subscription[0]["id"]
         api_token = uuid.uuid4()
         stripe.Subscription.modify(subscription_id, metadata={"voicevox_token": str(api_token)})
         embed.title = "Success"
-        embed.description = "APIトークンを発行しました。利用方法などはホームページをご確認ください。"
+        embed.description = "APIトークンを発行したのだ。利用方法などはホームページをご確認くださいなのだ。"
         embed.add_field(name="Token", value=str(api_token))
         await interaction.followup.send(embeds=[embed], ephemeral=True)
 
@@ -604,7 +604,7 @@ class ActivateModal(discord.ui.Modal):
         super().__init__(*args, **kwargs)
 
         self.add_item(
-            discord.ui.InputText(label="メールアドレスを入力してください。(登録状況の参照にのみ使用されます。)"))
+            discord.ui.InputText(label="メールアドレスを入力してくださいなのだ。(登録状況の参照にのみ使用されます。)"))
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer()
@@ -612,7 +612,7 @@ class ActivateModal(discord.ui.Modal):
         customer: list = stripe.Customer.search(query=f"email: '{mail}'")["data"]
         if len(customer) == 0:
             embed = discord.Embed(title="fail", color=discord.Colour.brand_red())
-            embed.description = "ユーザーが存在しません。"
+            embed.description = "ユーザーが存在しないのだ。"
             await interaction.followup.send(embeds=[embed], ephemeral=True)
             return
         customer_ids = []
@@ -627,18 +627,18 @@ class ActivateModal(discord.ui.Modal):
         if len(target_subscription) == 0:
             if str(interaction.user.id) in premium_user_list:
                 embed = discord.Embed(title="success", color=discord.Colour.brand_green())
-                embed.description = "すでにアクティベート済みです"
+                embed.description = "すでにアクティベート済みなのだ"
                 await interaction.followup.send(embeds=[embed], ephemeral=True)
                 return
             embed = discord.Embed(title="fail", color=discord.Colour.brand_red())
-            embed.description = "有効なサブスクリプションが存在しません"
+            embed.description = "有効なサブスクリプションが存在しないのだ"
             await interaction.followup.send(embeds=[embed], ephemeral=True)
             return
 
         subscription_id = target_subscription[0]["id"]
         stripe.Subscription.modify(subscription_id, metadata={"discord_user_id": interaction.user.id})
         embed = discord.Embed(title="success", color=discord.Colour.brand_green())
-        embed.description = "プレミアムプランへの登録が完了しました"
+        embed.description = "プレミアムプランへの登録が完了したのだ"
         amount = target_subscription[0]["plan"]["amount"]
         add_premium_user(interaction.user.id, amount)
         if amount == 100:
@@ -666,7 +666,7 @@ def add_premium_user(user_id, amount):
 async def vc(ctx):
     await ctx.defer()
     if ctx.author.voice is None:
-        await ctx.send_followup("音声チャンネルに入っていないため操作できません。")
+        await ctx.send_followup("音声チャンネルに入っていないため操作できないのだ。")
         return
     if ctx.guild.voice_client is not None and ctx.guild.voice_client.connected and ctx.guild.id in vclist:
         del vclist[ctx.guild.id]
@@ -716,7 +716,7 @@ async def vc(ctx):
             embed = discord.Embed(
                 title="Error",
                 color=discord.Colour.brand_red(),
-                description=f"{USAGE_LIMIT_PRICE}円以上のプランが必要です"
+                description=f"{USAGE_LIMIT_PRICE}円以上のプランが必要なのだ"
             )
             await ctx.send_followup(embed=embed)
             return
@@ -880,7 +880,7 @@ async def set(ctx, key: discord.Option(str, choices=[
                 embed = discord.Embed(
                     title="**Error**",
                     description=f"存在しないボイスidです。[こちら](https://lenlino.com/?page_id=2171)のボイス一覧を参照"
-                                f"または/setvcのみで実行することで選択方式で設定できます。",
+                                f"または</setvc:1083939849381359697>のみで実行することで選択方式で設定できます。",
                     color=discord.Colour.brand_red(),
                 )
                 print(f"**errorempyvoice**")
@@ -1261,7 +1261,7 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=int,
         embed = discord.Embed(
             title="**Error**",
             description=f"存在しないボイスidです。[こちら](https://lenlino.com/?page_id=2171)のボイス一覧を参照"
-                        f"または/setvcのみで実行することで選択方式で設定できます。",
+                        f"または</setvc:1083939849381359697>のみで実行することで選択方式で設定できます。",
             color=discord.Colour.brand_red(),
         )
         print(f"**errorempyvoice**")
