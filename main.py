@@ -1931,6 +1931,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             return
         pattern = "https?://[\w/:%#\$&\?\(\)~\.=\+\-@]+"
         pattern_emoji = "\<:.+?\>"
+        pattern_aniemoji = "\<a.+?\>"
         pattern_mension = "\<@.+?\>"
         pattern_spoiler = "\|\|.*?\|\|"
         pattern_codeblock = "```.*?```"
@@ -2000,6 +2001,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             output = emoji.demojize(output, language="ja")
 
         output = re.sub(pattern_emoji, "", output)
+        output = re.sub(pattern_aniemoji, "", output)
         output = re.sub(pattern_voice, "", output)
         output = re.sub(pattern_spoiler, "", output)
         output = re.sub(pattern_codeblock, "コードブロック省略", output)
