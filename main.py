@@ -95,7 +95,7 @@ DB_PORT = os.getenv("DB_PORT", 5432)
 DB_NAME = os.getenv("DB_NAME", "postgres")
 DB_USER = os.getenv("DB_USER", "postgres")
 DB_PASS = os.getenv("DB_PASS", "maikura123")
-tips_list = ["/setvc　で自分の声を変更できます",
+tips_list = ["</setvc:1083939849381359697>で自分の声を変更できます",
              "[プレミアムプラン](https://lenlino.com/?page_id=2510)(月100円～)あります",
              "[要望・不具合募集中](https://forms.gle/1TvbqzHRz6Q1vSfq9)",
              "使い方やコマンド一覧は[こちら](https://lenlino.com/?page_id=2171)",
@@ -103,9 +103,9 @@ tips_list = ["/setvc　で自分の声を変更できます",
              "ずんだもん(ノーマル、あまあま)、春日部つむぎ(ノーマル)、ちび式じい(ノーマル)のボイスはすべてのサーバーで高速なGPUによる生成を使用しています",
              "A.I.VOICEのボイスについては配信・録画は禁止されています",
              "プレミアムプランでは開発版のずんだもんαが利用できます。追加は[サポートサーバー](https://discord.gg/MWnnkbXSDJ)内から可能です",
-             "/set　で自分の声、速度、ピッチを変更できます",
-             "/server-set　で入退室、名前の読み上げ・自動接続などを設定できます",
-             "/adddict　で辞書の登録が可能です",
+             "</set:1070888120297467954>で自分の声、速度、ピッチを変更できます",
+             "</server-set:1073368354942885908>で入退室、名前の読み上げ・自動接続などを設定できます",
+             "</adddict:1122648752415580291>で辞書の登録が可能です",
              "コマンドが表示されない場合はDiscordアプリを最新版にすると治る場合があります",
              "VOICEVOXの音声はVOICEVOX:ずんだもんの表記を行えば配信等でも利用可能です。\n"
              "詳しくは[VOICEVOXホームページ](https://voicevox.hiroshiba.jp/term/)をご確認ください",
