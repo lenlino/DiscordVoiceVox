@@ -41,18 +41,18 @@ class SetAlarmCommand(commands.Cog):
         await ctx.defer()
         embed = discord.Embed(
             title="**Error**",
-            description=f"50文字以下の単語のみ登録できます。",
+            description=f"50文字以下の単語のみ登録できるのだ。",
             color=discord.Colour.brand_red(),
         )
         if await main.is_premium_check(ctx.author.id, 100) is False and await main.is_premium_check(ctx.guild.id, 100):
-            embed.description = "プレミアムプラン限定機能です"
+            embed.description = "プレミアムプラン限定機能なのだ"
             await ctx.send_followup(embed=embed)
             return
         setting_json = await main.get_guild_setting(ctx.guild.id)
         alarm_setting_json = setting_json.get("alarm", [])
         if action == "add":
             if time is None:
-                embed.description = "時刻(time)を指定してください。"
+                embed.description = "時刻(time)を指定してくださいなのだ。"
                 await ctx.send_followup(embed=embed)
                 return
             time = unicodedata.normalize('NFKC', time)
@@ -68,7 +68,7 @@ class SetAlarmCommand(commands.Cog):
             await main.update_guild_setting(ctx.guild.id, "alarm", alarm_setting_json)
             embed = discord.Embed(
                 title="**Success**",
-                description=f"アラームを登録しました",
+                description=f"アラームを登録したのだ",
                 color=discord.Colour.brand_green(),
             )
             embed.add_field(name="時刻(time)", value=f"{hours}:{minutes}")
@@ -81,7 +81,7 @@ class SetAlarmCommand(commands.Cog):
             await main.update_guild_setting(ctx.guild.id, "alarm", alarm_setting_json)
             embed = discord.Embed(
                 title="**Success**",
-                description=f"アラームを削除しました",
+                description=f"アラームを削除したのだ",
                 color=discord.Colour.brand_green(),
             )
             embed.add_field(name="メッセージ", value=f"{pop_alarm.get('message', 'アラームなのだ')}")
