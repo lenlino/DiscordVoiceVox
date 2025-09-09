@@ -403,6 +403,7 @@ async def initdatabase():
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_joinnotice boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_eew boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_translate boolean;')
+        await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readmention boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS premium_user char(20);')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS lang char(2);')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS mute_list bigint[];')
@@ -969,7 +970,7 @@ async def set(ctx, key: discord.Option(str, choices=[
 async def get_server_set_value(ctx: discord.AutocompleteContext):
     setting_type = ctx.options["key"]
     bool_settings = ["reademoji", "readname", "readurl", "readjoinleave", "readsan", "joinnotice", "eew", "translate",
-                     "autojoin"]
+                     "autojoin", "readmention"]
     if setting_type in bool_settings:
         return ["off", "on"]
     elif setting_type == "lang":
@@ -991,7 +992,8 @@ async def server_set(ctx, key: discord.Option(str, choices=[
     discord.OptionChoice(name="さん付け(readsan)", value="readsan"),
     discord.OptionChoice(name="参加退出表示(joinnotice)", value="joinnotice"),
     discord.OptionChoice(name="緊急地震速報通知(eew)", value="eew"),
-    discord.OptionChoice(name="翻訳(translate)", value="translate")], description="設定項目"),
+    discord.OptionChoice(name="翻訳(translate)", value="translate"),
+    discord.OptionChoice(name="メンションの読み上げ(readmention)", value="readmention")], description="設定項目"),
                      value: discord.Option(str, description="設定値", required=False,
                                            autocomplete=get_server_set_value), ):
     await ctx.defer()
@@ -1200,6 +1202,26 @@ async def server_set(ctx, key: discord.Option(str, choices=[
         elif value == "on":
             embed.description = "緊急地震速報通知をオンにしました"
             await setdatabase(ctx.guild.id, "is_eew", True, "guild")
+        else:
+            embed.title = "Error"
+            embed.description = "on/offをvalueに指定してください。"
+            embed.color = discord.Colour.brand_red()
+        await ctx.send_followup(embed=embed)
+    elif key == "readmention":
+        embed = discord.Embed(
+            title="Changed readmention",
+            description="名前",
+            color=discord.Colour.brand_green()
+        )
+        if value is None:
+            embed.description = "メンションの読み上げをオンにしました（デフォルト）"
+            await setdatabase(ctx.guild.id, "is_readmention", True, "guild")
+        elif value == "off":
+            embed.description = "メンションの読み上げをオフにしました"
+            await setdatabase(ctx.guild.id, "is_readmention", False, "guild")
+        elif value == "on":
+            embed.description = "メンションの読み上げをオンにしました"
+            await setdatabase(ctx.guild.id, "is_readmention", True, "guild")
         else:
             embed.title = "Error"
             embed.description = "on/offをvalueに指定してください。"
@@ -2006,7 +2028,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         output = re.sub(pattern_spoiler, "", output)
         output = re.sub(pattern_codeblock, "コードブロック省略", output)
 
-        if is_premium:
+        if is_premium and (await getdatabase(guild.id, "is_readmention", True, "guild")):
             output = await replace_mentions_with_names(output, guild)
         else:
             output = re.sub(pattern_mension, "", output)
@@ -2177,26 +2199,43 @@ async def yomiage(member, guild, text: str, no_read_name=False):
 
 
 async def replace_mentions_with_names(text, guild):
-    # メンションIDリスト取得
+    # ユーザー・ロールメンションIDリスト取得
     user_ids = re.findall(r"<@(\d+)>", text)
+    role_ids = re.findall(r"<@&(\d+)>", text)
     id_to_name = {}
 
-    # それぞれのメンバーからニックネーム/名前取得
+    # ユーザーメンション置換辞書作成
     for user_id in user_ids:
         if user_id not in id_to_name:
             try:
                 member = await guild.fetch_member(int(user_id))
-                id_to_name[user_id] = "メンション" + member.nick or member.name
+                id_to_name[user_id] = "メンション" + member.display_name
             except Exception:
-                id_to_name[user_id] = "メンション(不明)"
+                id_to_name[user_id] = "メンション"
 
-    # メンション表現を名前に置換
-    def replacer(match):
+    # ロールメンション置換辞書作成
+    for role_id in role_ids:
+        if role_id not in id_to_name:
+            try:
+                role = guild.get_role(int(role_id))
+                id_to_name[role_id] = "メンション" + role.name
+            except Exception:
+                id_to_name[role_id] = "メンション"
+
+    # ユーザーメンション置換
+    def user_replacer(match):
         uid = match.group(1)
         return id_to_name.get(uid, match.group(0))
 
-    result = re.sub(r"<@(\d+)>", replacer, text)
-    return result
+    # ロールメンション置換
+    def role_replacer(match):
+        rid = match.group(1)
+        return id_to_name.get(rid, match.group(0))
+
+    # それぞれ置換
+    text = re.sub(r"<@(\d+)>", user_replacer, text)
+    text = re.sub(r"<@&(\d+)>", role_replacer, text)
+    return text
 
 
 async def connect_waves(wave_list):
