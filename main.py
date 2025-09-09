@@ -403,6 +403,7 @@ async def initdatabase():
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_joinnotice boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_eew boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_translate boolean;')
+        await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readmention boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS premium_user char(20);')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS lang char(2);')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS mute_list bigint[];')
@@ -969,7 +970,7 @@ async def set(ctx, key: discord.Option(str, choices=[
 async def get_server_set_value(ctx: discord.AutocompleteContext):
     setting_type = ctx.options["key"]
     bool_settings = ["reademoji", "readname", "readurl", "readjoinleave", "readsan", "joinnotice", "eew", "translate",
-                     "autojoin"]
+                     "autojoin", "readmention"]
     if setting_type in bool_settings:
         return ["off", "on"]
     elif setting_type == "lang":
@@ -991,7 +992,8 @@ async def server_set(ctx, key: discord.Option(str, choices=[
     discord.OptionChoice(name="さん付け(readsan)", value="readsan"),
     discord.OptionChoice(name="参加退出表示(joinnotice)", value="joinnotice"),
     discord.OptionChoice(name="緊急地震速報通知(eew)", value="eew"),
-    discord.OptionChoice(name="翻訳(translate)", value="translate")], description="設定項目"),
+    discord.OptionChoice(name="翻訳(translate)", value="translate"),
+    discord.OptionChoice(name="メンションの読み上げ(readmention)", value="readmention")], description="設定項目"),
                      value: discord.Option(str, description="設定値", required=False,
                                            autocomplete=get_server_set_value), ):
     await ctx.defer()
@@ -1200,6 +1202,26 @@ async def server_set(ctx, key: discord.Option(str, choices=[
         elif value == "on":
             embed.description = "緊急地震速報通知をオンにしました"
             await setdatabase(ctx.guild.id, "is_eew", True, "guild")
+        else:
+            embed.title = "Error"
+            embed.description = "on/offをvalueに指定してください。"
+            embed.color = discord.Colour.brand_red()
+        await ctx.send_followup(embed=embed)
+    elif key == "readmention":
+        embed = discord.Embed(
+            title="Changed readmention",
+            description="名前",
+            color=discord.Colour.brand_green()
+        )
+        if value is None:
+            embed.description = "メンションの読み上げをオンにしました（デフォルト）"
+            await setdatabase(ctx.guild.id, "is_readmention", True, "guild")
+        elif value == "off":
+            embed.description = "メンションの読み上げをオフにしました"
+            await setdatabase(ctx.guild.id, "is_readmention", False, "guild")
+        elif value == "on":
+            embed.description = "メンションの読み上げをオンにしました"
+            await setdatabase(ctx.guild.id, "is_readmention", True, "guild")
         else:
             embed.title = "Error"
             embed.description = "on/offをvalueに指定してください。"
@@ -2006,7 +2028,8 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         output = re.sub(pattern_spoiler, "", output)
         output = re.sub(pattern_codeblock, "コードブロック省略", output)
 
-        if is_premium:
+        if is_premium and await getdatabase(guild.id, "is_readmention", True, "guild"):
+            output = re.sub(pattern_mension, "", output)
             output = await replace_mentions_with_names(output, guild)
         else:
             output = re.sub(pattern_mension, "", output)
