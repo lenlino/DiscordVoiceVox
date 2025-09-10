@@ -9,7 +9,7 @@ import json
 import logging
 import os
 import random
-import re
+import re2 as re
 import sys
 import time
 import importlib
