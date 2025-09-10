@@ -1001,8 +1001,11 @@ async def server_set(ctx, key: discord.Option(str, choices=[
     if key == "autojoin":
         text_channel_id = ctx.channel_id
         if value == "off":
+            # Turn off all autojoin settings
             await update_guild_setting(ctx.guild.id, "text_channel_id", 1)
             await update_guild_setting(ctx.guild.id, "voice_channel_id", 1)
+            await update_guild_setting(ctx.guild.id, "voice_channel_ids", [])
+            await update_guild_setting(ctx.guild.id, "text_channel_ids", [])
             embed = discord.Embed(
                 title="Changed AutoJoin",
                 description="自動接続を削除しました。",
@@ -1019,6 +1022,35 @@ async def server_set(ctx, key: discord.Option(str, choices=[
             await ctx.send_followup(embed=embed)
             return
         voice_channel_id = ctx.author.voice.channel.id
+        # Append to list-based settings for multi-autojoin; keep legacy single values for backward compatibility
+        try:
+            current = await get_guild_setting(ctx.guild.id)
+        except Exception:
+            current = {}
+        vc_list = current.get("voice_channel_ids") or []
+        tc_list = current.get("text_channel_ids") or []
+        # ensure ints and uniqueness while keeping paired order
+        try:
+            vc_list = [int(x) for x in vc_list]
+            tc_list = [int(x) for x in tc_list]
+        except Exception:
+            vc_list, tc_list = [], []
+        if int(voice_channel_id) in vc_list:
+            idx = vc_list.index(int(voice_channel_id))
+            # update paired text channel id
+            if idx < len(tc_list):
+                tc_list[idx] = int(text_channel_id)
+            else:
+                # align lengths
+                while len(tc_list) < len(vc_list):
+                    tc_list.append(current.get("text_channel_id", text_channel_id))
+                tc_list[idx] = int(text_channel_id)
+        else:
+            vc_list.append(int(voice_channel_id))
+            tc_list.append(int(text_channel_id))
+        await update_guild_setting(ctx.guild.id, "voice_channel_ids", vc_list)
+        await update_guild_setting(ctx.guild.id, "text_channel_ids", tc_list)
+        # Keep single fields for backward compatibility (most recent set)
         await update_guild_setting(ctx.guild.id, "text_channel_id", text_channel_id)
         await update_guild_setting(ctx.guild.id, "voice_channel_id", voice_channel_id)
         embed = discord.Embed(
@@ -2364,7 +2396,22 @@ async def on_voice_state_update(member, before, after):
         if json_str is None:
             return
         autojoin = json_str
-        if int(autojoin.get("voice_channel_id", 1)) == int(after.channel.id):
+        # Support multiple autojoin voice channels. Backward compatible with single value.
+        target_voice_ids = []
+        vcid = autojoin.get("voice_channel_id")
+        vcids = autojoin.get("voice_channel_ids")
+        if isinstance(vcids, list):
+            # ensure ints
+            try:
+                target_voice_ids = [int(x) for x in vcids]
+            except Exception:
+                target_voice_ids = []
+        if isinstance(vcid, (int, str)):
+            try:
+                target_voice_ids.append(int(vcid))
+            except Exception:
+                pass
+        if int(after.channel.id) in target_voice_ids:
 
             guild_premium_user_id = int(await getdatabase(after.channel.guild.id, "premium_user", 0, "guild"))
             #print(guild_premium_user_id)
@@ -2404,15 +2451,30 @@ async def on_voice_state_update(member, before, after):
                     logger.error(f"Could not find channel with ID {after.channel.id}")
                     return
                 await channel.connect(cls=LavalinkVoiceClient)
-                vclist[after.channel.guild.id] = autojoin["text_channel_id"]
+                # Resolve text channel for this voice channel: prefer mapping list "text_channel_ids" with same index as voice_channel_ids; fallback to single text_channel_id; otherwise use invoking text channel if available
+                text_channel_id = None
+                try:
+                    if isinstance(autojoin.get("voice_channel_ids"), list) and isinstance(autojoin.get("text_channel_ids"), list):
+                        vc_list = [int(x) for x in autojoin.get("voice_channel_ids")]
+                        tc_list = [int(x) for x in autojoin.get("text_channel_ids")]
+                        if int(after.channel.id) in vc_list:
+                            idx = vc_list.index(int(after.channel.id))
+                            if idx < len(tc_list):
+                                text_channel_id = tc_list[idx]
+                except Exception:
+                    text_channel_id = None
+                if text_channel_id is None:
+                    text_channel_id = autojoin.get("text_channel_id")
+                vclist[after.channel.guild.id] = text_channel_id
                 if (after.channel.permissions_for(after.channel.guild.me)).deafen_members:
                     await after.channel.guild.me.edit(deafen=True)
                 if await getdatabase(after.channel.guild.id, "is_joinnotice", True, "guild"):
-                    text_channel = after.channel.guild.get_channel(autojoin["text_channel_id"])
+                    notify_channel_id = vclist.get(after.channel.guild.id)
+                    text_channel = after.channel.guild.get_channel(notify_channel_id) if notify_channel_id else None
                     if text_channel is not None:
                         await text_channel.send(embed=embed)
                     else:
-                        logger.error(f"Could not find text channel with ID {autojoin['text_channel_id']}")
+                        logger.error(f"Could not find text channel with ID {notify_channel_id}")
             except Exception as e:
                 logger.error(e)
                 logger.error("自動接続")
