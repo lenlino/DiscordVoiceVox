@@ -9,7 +9,8 @@ import json
 import logging
 import os
 import random
-import re2 as re
+import re2
+import re
 import sys
 import time
 import importlib
@@ -2048,7 +2049,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         elif lang == "ja":
             output = re.sub(pattern, "ユーアールエル省略", output)
 
-        output = await henkan_private_dict(guild.id, output)
+        output = await henkan_private_dict(guild.id, output, is_premium)
         output = await henkan_private_dict(9686, output)
 
         if await getdatabase(guild.id, "is_reademoji", True, "guild"):
@@ -2878,6 +2879,8 @@ async def adddict_local(ctx, surface: discord.Option(input_type=str, description
             return
         import_dict: dict = json.loads((await dict_file.read()).decode('utf-8'))
         for content in import_dict.keys():
+            if content.startswith('/') and content.endswith('/') and len(content) >= 3 and not is_valid_regex(content[1:-1]):
+                continue
             if await update_private_dict(ctx.guild.id, content, import_dict.get(content)) is not True:
                 embed = discord.Embed(
                     title="**Error**",
@@ -2908,6 +2911,15 @@ async def adddict_local(ctx, surface: discord.Option(input_type=str, description
         embed = discord.Embed(
             title="**Error**",
             description=f"pronunciationまたはaudio_fileを指定してください",
+            color=discord.Colour.brand_red(),
+        )
+        await ctx.respond(embed=embed)
+        return
+
+    if surface.startswith('/') and surface.endswith('/') and len(surface) >= 3 and not is_valid_regex(surface[1:-1]):
+        embed = discord.Embed(
+            title="**Error**",
+            description=f"不正な正規表現です。",
             color=discord.Colour.brand_red(),
         )
         await ctx.respond(embed=embed)
@@ -3108,8 +3120,17 @@ async def showmute(ctx):
     )
     await ctx.respond(embed=embed)
 
+def is_valid_regex(pattern: str) -> bool:
+    if len(pattern) <= 0:
+        return False
+    try:
+        re2.compile(pattern)
+        return True
+    except re2.error:
+        print(pattern)
+        return False
 
-async def henkan_private_dict(server_id, source):
+async def henkan_private_dict(server_id, source, is_premium=False):
     try:
         with open(user_dict_loc + "/" + f"{server_id}.json", "r",
                   encoding='utf-8') as f:
@@ -3131,7 +3152,13 @@ async def henkan_private_dict(server_id, source):
             continue
         for k in dict_data:
             if json_data[k].startswith("#%&$"):
-                split_text = split_text.replace(k, json_data[k])
+                if is_premium and k.startswith('/') and k.endswith('/') and len(k) >= 3:
+                    try:
+                        split_text = re2.sub(k[1:-1], json_data[k], split_text).encode("latin1").decode("utf-8")
+                    except Exception:
+                        pass
+                else:
+                    split_text = split_text.replace(k, json_data[k])
                 if len(split_text) > limit:
                     split_text = split_text[:(text_limit_100 + 50)]
         output += split_text
@@ -3147,7 +3174,13 @@ async def henkan_private_dict(server_id, source):
         for k in dict_data:
             if json_data[k].startswith("#%&$"):
                 continue
-            split_text = split_text.replace(k, json_data[k])
+            if is_premium and k.startswith('/') and k.endswith('/') and len(k) >= 3:
+                try:
+                    split_text = re2.sub(k[1:-1], json_data[k], split_text).encode("latin1").decode("utf-8")
+                except Exception:
+                    pass
+            else:
+                split_text = split_text.replace(k, json_data[k])
             if len(split_text) > limit:
                 split_text = split_text[:(text_limit_100 + 50)]
         output += split_text
