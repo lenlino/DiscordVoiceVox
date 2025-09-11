@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import random
+import re2
 import re
 import sys
 import time
@@ -1001,8 +1002,11 @@ async def server_set(ctx, key: discord.Option(str, choices=[
     if key == "autojoin":
         text_channel_id = ctx.channel_id
         if value == "off":
+            # Turn off all autojoin settings
             await update_guild_setting(ctx.guild.id, "text_channel_id", 1)
             await update_guild_setting(ctx.guild.id, "voice_channel_id", 1)
+            await update_guild_setting(ctx.guild.id, "voice_channel_ids", [])
+            await update_guild_setting(ctx.guild.id, "text_channel_ids", [])
             embed = discord.Embed(
                 title="Changed AutoJoin",
                 description="自動接続を削除しました。",
@@ -1019,6 +1023,35 @@ async def server_set(ctx, key: discord.Option(str, choices=[
             await ctx.send_followup(embed=embed)
             return
         voice_channel_id = ctx.author.voice.channel.id
+        # Append to list-based settings for multi-autojoin; keep legacy single values for backward compatibility
+        try:
+            current = await get_guild_setting(ctx.guild.id)
+        except Exception:
+            current = {}
+        vc_list = current.get("voice_channel_ids") or []
+        tc_list = current.get("text_channel_ids") or []
+        # ensure ints and uniqueness while keeping paired order
+        try:
+            vc_list = [int(x) for x in vc_list]
+            tc_list = [int(x) for x in tc_list]
+        except Exception:
+            vc_list, tc_list = [], []
+        if int(voice_channel_id) in vc_list:
+            idx = vc_list.index(int(voice_channel_id))
+            # update paired text channel id
+            if idx < len(tc_list):
+                tc_list[idx] = int(text_channel_id)
+            else:
+                # align lengths
+                while len(tc_list) < len(vc_list):
+                    tc_list.append(current.get("text_channel_id", text_channel_id))
+                tc_list[idx] = int(text_channel_id)
+        else:
+            vc_list.append(int(voice_channel_id))
+            tc_list.append(int(text_channel_id))
+        await update_guild_setting(ctx.guild.id, "voice_channel_ids", vc_list)
+        await update_guild_setting(ctx.guild.id, "text_channel_ids", tc_list)
+        # Keep single fields for backward compatibility (most recent set)
         await update_guild_setting(ctx.guild.id, "text_channel_id", text_channel_id)
         await update_guild_setting(ctx.guild.id, "voice_channel_id", voice_channel_id)
         embed = discord.Embed(
@@ -2016,7 +2049,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         elif lang == "ja":
             output = re.sub(pattern, "ユーアールエル省略", output)
 
-        output = await henkan_private_dict(guild.id, output)
+        output = await henkan_private_dict(guild.id, output, is_premium)
         output = await henkan_private_dict(9686, output)
 
         if await getdatabase(guild.id, "is_reademoji", True, "guild"):
@@ -2364,7 +2397,22 @@ async def on_voice_state_update(member, before, after):
         if json_str is None:
             return
         autojoin = json_str
-        if int(autojoin.get("voice_channel_id", 1)) == int(after.channel.id):
+        # Support multiple autojoin voice channels. Backward compatible with single value.
+        target_voice_ids = []
+        vcid = autojoin.get("voice_channel_id")
+        vcids = autojoin.get("voice_channel_ids")
+        if isinstance(vcids, list):
+            # ensure ints
+            try:
+                target_voice_ids = [int(x) for x in vcids]
+            except Exception:
+                target_voice_ids = []
+        if isinstance(vcid, (int, str)):
+            try:
+                target_voice_ids.append(int(vcid))
+            except Exception:
+                pass
+        if int(after.channel.id) in target_voice_ids:
 
             guild_premium_user_id = int(await getdatabase(after.channel.guild.id, "premium_user", 0, "guild"))
             #print(guild_premium_user_id)
@@ -2404,15 +2452,30 @@ async def on_voice_state_update(member, before, after):
                     logger.error(f"Could not find channel with ID {after.channel.id}")
                     return
                 await channel.connect(cls=LavalinkVoiceClient)
-                vclist[after.channel.guild.id] = autojoin["text_channel_id"]
+                # Resolve text channel for this voice channel: prefer mapping list "text_channel_ids" with same index as voice_channel_ids; fallback to single text_channel_id; otherwise use invoking text channel if available
+                text_channel_id = None
+                try:
+                    if isinstance(autojoin.get("voice_channel_ids"), list) and isinstance(autojoin.get("text_channel_ids"), list):
+                        vc_list = [int(x) for x in autojoin.get("voice_channel_ids")]
+                        tc_list = [int(x) for x in autojoin.get("text_channel_ids")]
+                        if int(after.channel.id) in vc_list:
+                            idx = vc_list.index(int(after.channel.id))
+                            if idx < len(tc_list):
+                                text_channel_id = tc_list[idx]
+                except Exception:
+                    text_channel_id = None
+                if text_channel_id is None:
+                    text_channel_id = autojoin.get("text_channel_id")
+                vclist[after.channel.guild.id] = text_channel_id
                 if (after.channel.permissions_for(after.channel.guild.me)).deafen_members:
                     await after.channel.guild.me.edit(deafen=True)
                 if await getdatabase(after.channel.guild.id, "is_joinnotice", True, "guild"):
-                    text_channel = after.channel.guild.get_channel(autojoin["text_channel_id"])
+                    notify_channel_id = vclist.get(after.channel.guild.id)
+                    text_channel = after.channel.guild.get_channel(notify_channel_id) if notify_channel_id else None
                     if text_channel is not None:
                         await text_channel.send(embed=embed)
                     else:
-                        logger.error(f"Could not find text channel with ID {autojoin['text_channel_id']}")
+                        logger.error(f"Could not find text channel with ID {notify_channel_id}")
             except Exception as e:
                 logger.error(e)
                 logger.error("自動接続")
@@ -2816,6 +2879,8 @@ async def adddict_local(ctx, surface: discord.Option(input_type=str, description
             return
         import_dict: dict = json.loads((await dict_file.read()).decode('utf-8'))
         for content in import_dict.keys():
+            if content.startswith('/') and content.endswith('/') and len(content) >= 3 and not is_valid_regex(content[1:-1]):
+                continue
             if await update_private_dict(ctx.guild.id, content, import_dict.get(content)) is not True:
                 embed = discord.Embed(
                     title="**Error**",
@@ -2846,6 +2911,15 @@ async def adddict_local(ctx, surface: discord.Option(input_type=str, description
         embed = discord.Embed(
             title="**Error**",
             description=f"pronunciationまたはaudio_fileを指定してください",
+            color=discord.Colour.brand_red(),
+        )
+        await ctx.respond(embed=embed)
+        return
+
+    if surface.startswith('/') and surface.endswith('/') and len(surface) >= 3 and not is_valid_regex(surface[1:-1]):
+        embed = discord.Embed(
+            title="**Error**",
+            description=f"不正な正規表現です。",
             color=discord.Colour.brand_red(),
         )
         await ctx.respond(embed=embed)
@@ -3046,8 +3120,17 @@ async def showmute(ctx):
     )
     await ctx.respond(embed=embed)
 
+def is_valid_regex(pattern: str) -> bool:
+    if len(pattern) <= 0:
+        return False
+    try:
+        re2.compile(pattern)
+        return True
+    except re2.error:
+        print(pattern)
+        return False
 
-async def henkan_private_dict(server_id, source):
+async def henkan_private_dict(server_id, source, is_premium=False):
     try:
         with open(user_dict_loc + "/" + f"{server_id}.json", "r",
                   encoding='utf-8') as f:
@@ -3069,7 +3152,13 @@ async def henkan_private_dict(server_id, source):
             continue
         for k in dict_data:
             if json_data[k].startswith("#%&$"):
-                split_text = split_text.replace(k, json_data[k])
+                if is_premium and k.startswith('/') and k.endswith('/') and len(k) >= 3:
+                    try:
+                        split_text = re2.sub(k[1:-1], json_data[k], split_text).encode("latin1").decode("utf-8")
+                    except Exception:
+                        pass
+                else:
+                    split_text = split_text.replace(k, json_data[k])
                 if len(split_text) > limit:
                     split_text = split_text[:(text_limit_100 + 50)]
         output += split_text
@@ -3085,7 +3174,13 @@ async def henkan_private_dict(server_id, source):
         for k in dict_data:
             if json_data[k].startswith("#%&$"):
                 continue
-            split_text = split_text.replace(k, json_data[k])
+            if is_premium and k.startswith('/') and k.endswith('/') and len(k) >= 3:
+                try:
+                    split_text = re2.sub(k[1:-1], json_data[k], split_text).encode("latin1").decode("utf-8")
+                except Exception:
+                    pass
+            else:
+                split_text = split_text.replace(k, json_data[k])
             if len(split_text) > limit:
                 split_text = split_text[:(text_limit_100 + 50)]
         output += split_text
