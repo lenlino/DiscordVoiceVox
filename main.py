@@ -26,7 +26,7 @@ import lavalink
 import stripe
 import websockets
 from aiohttp import FormData, ClientTimeout
-from discord import VoiceChannel
+from discord import VoiceChannel, OptionChoice, AutocompleteContext
 from discord.ext import tasks, pages
 from lavalink import ClientError, NodeDisconnectedEvent, NodeReadyEvent
 from requests import ReadTimeout
@@ -119,7 +119,7 @@ BOT_NICKNAME = os.getenv("BOT_NICKNAME", "ずんだもんβ")
 EEW_WEBHOOK_URL = os.getenv("EEW_WEBHOOK_URL", None)
 voice_id_list = []
 non_premium_user = []
-
+voice_choices = []
 generating_guilds = {}
 pool = None
 
@@ -485,6 +485,12 @@ async def init_voice_list():
 
     global voice_id_list
     voice_id_list = json
+    global voice_choices
+    for voice_info in voice_id_list:
+        for style_info in voice_info["styles"]:
+            voice_choices.append(f"{voice_info['name']}({style_info['name']}) id:{style_info['id']}")
+
+    print(f"ボイス数: {len(voice_choices)}")
     print(json)
     print(type(json))
     print([discord.SelectOption(label=e) for e in [d["name"] for d in voice_id_list]])
@@ -552,7 +558,7 @@ class VoiceSelectView2(discord.ui.Select):
         if 4000 > int(id) >= 3000:
             embed.description = f"**{self.name}({self.values[0]})** id:{id}に変更したのだ\n**A.I.VOICEは録音・配信での利用はできません**"
         elif int(id) not in free_voice_list and is_premium is not True:
-            embed.description = f"**{self.name}({self.values[0]})** id:{id}に変更したのだ\n(この音声は混雑時、ずんだもんに切り替わります)"
+            embed.description = f"**{self.name}({self.values[0]})** id:{id}に変更したのだ\n(この音声は無料プランでは混雑時、ずんだもんに切り替わります)"
         #print(f"**{self.name}({self.values[0]})**")
         await interaction.response.send_message(embed=embed)
         await interaction.message.delete()
@@ -897,7 +903,7 @@ async def set(ctx, key: discord.Option(str, choices=[
             if 4000 > int(value) >= 3000:
                 embed.description = f"**{name}** id:{value}に変更したのだ\n**A.I.VOICEは録音・配信での利用はできません**"
             elif int(value) not in free_voice_list and is_premium is not True:
-                embed.description = f"**{name}** id:{value}に変更したのだ\n(この音声は混雑時、ずんだもんに切り替わります)"
+                embed.description = f"**{name}** id:{value}に変更したのだ\n(この音声は無料プランでは混雑時、ずんだもんに切り替わります)"
             await ctx.send_followup(embed=embed)
     elif key == "speed":
         if value is None:
@@ -1262,9 +1268,15 @@ async def server_set(ctx, key: discord.Option(str, choices=[
         await ctx.send_followup(embed=embed)
 
 
+def vc_choice_filter(ctx: AutocompleteContext, item) -> bool:
+    item = getattr(item, "name", item)
+    return str(ctx.value or "").lower() in str(item).lower()
+
+
 @bot.slash_command(description="自分の声を変更できるのだ")
 async def setvc(ctx, voiceid: discord.Option(required=False, input_type=int,
-                                             description="指定しない場合は一覧が表示されます"),
+                                             description="指定しない場合は一覧が表示されます",
+                                             autocomplete=discord.utils.basic_autocomplete(voice_choices, filter=vc_choice_filter)),
                 speed: discord.Option(required=False, input_type=int, description="速度"),
                 pitch: discord.Option(required=False, input_type=int, description="ピッチ")):
     await ctx.defer()
@@ -1283,15 +1295,21 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=int,
 
     is_premium = str(ctx.author.id) in premium_user_list
 
+    voiceid = voiceid
+
     if voiceid.isdecimal() is False:
-        embed = discord.Embed(
-            title="**Error**",
-            description=f"idは数字なのだ",
-            color=discord.Colour.brand_red(),
-        )
-        print(f"**errorid**")
-        await ctx.send_followup(embed=embed)
-        return
+        m = re.search(r"\bid\s*:\s*(.+)$", voiceid)
+        if not m or not m.group(1).isdecimal():
+            embed = discord.Embed(
+                title="**Error**",
+                description=f"idは数字なのだ",
+                color=discord.Colour.brand_red(),
+            )
+            print(f"**errorid**")
+            await ctx.send_followup(embed=embed)
+            return
+        voiceid = m.group(1)
+
 
 
     elif 2000 > int(voiceid) >= 1000 and is_premium is False:
@@ -1331,7 +1349,7 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=int,
     if 4000 > int(voiceid) >= 3000:
         embed.description = f"**{name}** id:{voiceid}に変更したのだ\n**A.I.VOICEは録音・配信での利用はできません**"
     elif int(voiceid) not in free_voice_list and is_premium is not True:
-        embed.description = f"**{name}** id:{voiceid}に変更したのだ\n(この音声は混雑時、ずんだもんに切り替わります)"
+        embed.description = f"**{name}** id:{voiceid}に変更したのだ\n(この音声は無料プランでは混雑時、ずんだもんに切り替わります)"
     #print(f"**{name}**")
     if speed is not None:
         if speed.isdecimal() is False:
@@ -2439,7 +2457,8 @@ async def on_voice_state_update(member, before, after):
 
             try:
                 # 時間開けないと２重接続？
-                await asyncio.sleep(1)
+                #await asyncio.sleep(1)
+                print(f"{member.id} {after.channel.id}")
                 # Check again if the bot is already connected to a voice channel
                 if after.channel is None or after.channel.guild is None:
                     logger.error("Channel or guild is None, skipping connection attempt")
