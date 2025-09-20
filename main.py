@@ -2457,8 +2457,7 @@ async def on_voice_state_update(member, before, after):
 
             try:
                 # 時間開けないと２重接続？
-                #await asyncio.sleep(1)
-                print(f"{member.id} {after.channel.id}")
+                await asyncio.sleep(1)
                 # Check again if the bot is already connected to a voice channel
                 if after.channel is None or after.channel.guild is None:
                     logger.error("Channel or guild is None, skipping connection attempt")
