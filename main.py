@@ -1488,6 +1488,10 @@ async def auto_join():
                     await voice_channel.connect(cls=LavalinkVoiceClient)
                     vclist[guild.id] = server_json["text_ch_id"]
                 else:
+                    if len(voice_channel.members) < 1:
+                        logger.error(
+                            f"no user voice channel in guild {guild.id}, using existing connection")
+                        continue
                     await voice_channel.connect(cls=LavalinkVoiceClient)
                     vclist[guild.id] = server_json["text_ch_id"]
 
