@@ -1572,11 +1572,11 @@ async def auto_join():
                 premium_server_list.append(guild.id)
                 premium_guild_dict[server_json["guild"]] = server_json["premium_value"]
 
-            for voice_channel in voice_channlel_list:
-                if len(voice_channel.members) <= 1:
-                    await voice_channel.guild.voice_client.disconnect()
-                    del vclist[voice_channel.guild.id]
-                    logger.error(f"Auto Join No Player Disconnected from {voice_channel.guild.id}")
+        for voice_channel in voice_channlel_list:
+            if len(voice_channel.members) <= 1:
+                await voice_channel.guild.voice_client.disconnect()
+                del vclist[voice_channel.guild.id]
+                logger.error(f"Auto Join No Player Disconnected from {voice_channel.guild.id}")
 
 
 @bot.slash_command(description="辞書に単語を追加するのだ(全サーバー)", guild_ids=ManagerGuilds)
