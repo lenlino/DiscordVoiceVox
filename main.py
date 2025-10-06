@@ -987,7 +987,17 @@ async def get_server_set_value(ctx: discord.AutocompleteContext):
     elif setting_type == "lang":
         return ["ja", "ko"]
     elif setting_type == "mute-voice":
-        return ["show", "off"]
+        # 提案: show/off に加えてボイス候補を /setvc と同様に表示（最大25件）
+        query = str(ctx.value or "").lower()
+        try:
+            candidates = [c for c in voice_choices if query in str(c).lower()] if query else voice_choices
+        except NameError:
+            candidates = []
+        # 先頭に show/off を配置し、Discord のオートコンプリート上限に収める
+        base = ["show", "off"]
+        limit = 25
+        remain = max(0, limit - len(base))
+        return base + candidates[:remain]
     else:
         return ["off"]
 
@@ -1277,10 +1287,16 @@ async def server_set(ctx, key: discord.Option(str, choices=[
             embed.description = "ミュートボイスの設定をクリアしました。"
             await ctx.send_followup(embed=embed)
             return
-        # 追加: 数値のvoice id を追加
-        try:
-            voice_int = int(str(value).strip())
-        except ValueError:
+        # 追加: 候補のラベル（... id:123 を含む）や数値のどちらでも許可
+        voice_str = str(value).strip()
+        voice_int = None
+        if voice_str.isdecimal():
+            voice_int = int(voice_str)
+        else:
+            m = re.search(r"\bid\s*:\s*(\d+)", voice_str)
+            if m:
+                voice_int = int(m.group(1))
+        if voice_int is None:
             embed.title = "Error"
             embed.color = discord.Colour.brand_red()
             embed.description = "value には voiceid（数値）、off、または show を指定してください。"
