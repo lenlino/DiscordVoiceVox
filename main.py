@@ -1563,6 +1563,9 @@ async def auto_join():
                     await voice_channel.connect(cls=LavalinkVoiceClient)
                     vclist[guild.id] = server_json["text_ch_id"]
                 else:
+                    if len(voice_channel.members) == 0:
+                        logger.info(f"No member voicechannel in {voice_channel.guild.id}")
+                        continue
                     await voice_channel.connect(cls=LavalinkVoiceClient)
                     vclist[guild.id] = server_json["text_ch_id"]
 
@@ -1577,12 +1580,6 @@ async def auto_join():
             if server_json["is_premium"] is True and "premium_value" in server_json:
                 premium_server_list.append(guild.id)
                 premium_guild_dict[server_json["guild"]] = server_json["premium_value"]
-
-            for voice_channel in voice_channlel_list:
-                if len(voice_channel.members) <= 1:
-                    await voice_channel.guild.voice_client.disconnect()
-                    del vclist[voice_channel.guild.id]
-                    logger.info(f"Auto Join No Player Disconnected from {voice_channel.guild.id}")
 
 
 @bot.slash_command(description="辞書に単語を追加するのだ(全サーバー)", guild_ids=ManagerGuilds)
