@@ -408,6 +408,7 @@ async def initdatabase():
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS premium_user char(20);')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS lang char(2);')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS mute_list bigint[];')
+        await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS mute_voice bigint[];')
 
 
 async def init_voice_list():
@@ -985,6 +986,8 @@ async def get_server_set_value(ctx: discord.AutocompleteContext):
         return ["off", "on"]
     elif setting_type == "lang":
         return ["ja", "ko"]
+    elif setting_type == "mute-voice":
+        return ["show", "off"]
     else:
         return ["off"]
 
@@ -1003,7 +1006,8 @@ async def server_set(ctx, key: discord.Option(str, choices=[
     discord.OptionChoice(name="参加退出表示(joinnotice)", value="joinnotice"),
     discord.OptionChoice(name="緊急地震速報通知(eew)", value="eew"),
     discord.OptionChoice(name="翻訳(translate)", value="translate"),
-    discord.OptionChoice(name="メンションの読み上げ(readmention)", value="readmention")], description="設定項目"),
+    discord.OptionChoice(name="メンションの読み上げ(readmention)", value="readmention"),
+    discord.OptionChoice(name="ボイスミュート(mutevoice)", value="mute-voice")], description="設定項目"),
                      value: discord.Option(str, description="設定値", required=False,
                                            autocomplete=get_server_set_value), ):
     await ctx.defer()
@@ -1248,6 +1252,57 @@ async def server_set(ctx, key: discord.Option(str, choices=[
             embed.title = "Error"
             embed.description = "on/offをvalueに指定してください。"
             embed.color = discord.Colour.brand_red()
+        await ctx.send_followup(embed=embed)
+    elif key == "mute-voice":
+        # サーバー内で使用禁止にするボイスIDの設定
+        embed = discord.Embed(
+            title="Changed mute-voice",
+            color=discord.Colour.brand_green()
+        )
+        # 現在の設定を取得（リスト）
+        mute_list = await getdatabase(ctx.guild.id, "mute_voice", [], "guild")
+        if mute_list is None:
+            mute_list = []
+        # show: 一覧表示
+        if value is None or value == "show":
+            if len(mute_list) == 0:
+                embed.description = "登録されているミュートボイスはありません。"
+            else:
+                embed.description = "ミュート中のボイスID一覧: " + ", ".join([str(v) for v in mute_list])
+            await ctx.send_followup(embed=embed)
+            return
+        # off: クリア
+        if value == "off":
+            await setdatabase(ctx.guild.id, "mute_voice", [], "guild")
+            embed.description = "ミュートボイスの設定をクリアしました。"
+            await ctx.send_followup(embed=embed)
+            return
+        # 追加: 数値のvoice id を追加
+        try:
+            voice_int = int(str(value).strip())
+        except ValueError:
+            embed.title = "Error"
+            embed.color = discord.Colour.brand_red()
+            embed.description = "value には voiceid（数値）、off、または show を指定してください。"
+            await ctx.send_followup(embed=embed)
+            return
+        if voice_int not in mute_list:
+            mute_list.append(voice_int)
+            await setdatabase(ctx.guild.id, "mute_voice", mute_list, "guild")
+        # 名前解決（任意）
+        name = None
+        try:
+            for speaker in voice_id_list:
+                for style in speaker.get("styles", []):
+                    if int(style.get("id")) == voice_int:
+                        name = f"{speaker.get('name')}({style.get('name')})"
+                        raise StopIteration
+        except StopIteration:
+            pass
+        if name:
+            embed.description = f"ボイス {name} (id:{voice_int}) をミュートに追加しました。"
+        else:
+            embed.description = f"ボイス id:{voice_int} をミュートに追加しました。"
         await ctx.send_followup(embed=embed)
     elif key == "readmention":
         embed = discord.Embed(
@@ -2068,6 +2123,17 @@ async def yomiage(member, guild, text: str, no_read_name=False):
 
         if voice_id is None:
             voice_id = await getdatabase(member.id, "voiceid", 0)
+        # サーバー設定でミュートされているボイスIDの場合は、ずんだもん(id:3)に切り替え
+        try:
+            current_voice_int = int(voice_id)
+        except Exception:
+            try:
+                current_voice_int = int(str(voice_id))
+            except Exception:
+                current_voice_int = 3
+        mute_voices = await getdatabase(guild.id, "mute_voice", [], "guild")
+        if mute_voices and current_voice_int in mute_voices:
+            voice_id = 3
 
         if lang == "ko":
             output = re.sub(pattern, "유알엘생략", output)
