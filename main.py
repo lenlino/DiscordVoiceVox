@@ -553,6 +553,9 @@ class VoiceSelectView2(discord.ui.Select):
                 description=f"この音声はプレミアムプラン限定です",
                 color=discord.Colour.brand_red(),
             )
+            await interaction.response.send_message(embed=embed)
+            await interaction.message.delete()
+            return
         else:
             await setdatabase(interaction.user.id, "voiceid", str(id))
         if 4000 > int(id) >= 3000:
@@ -1312,7 +1315,7 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=int,
 
 
 
-    elif 2000 > int(voiceid) >= 1000 and is_premium is False:
+    if 2000 > int(voiceid) >= 1000 and is_premium is False:
         embed = discord.Embed(
             title="**Error**",
             description=f"この音声はプレミアムプラン限定です。",
