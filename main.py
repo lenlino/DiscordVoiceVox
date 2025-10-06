@@ -1564,9 +1564,6 @@ async def auto_join():
                     vclist[guild.id] = server_json["text_ch_id"]
 
                 voice_channlel_list.append(voice_channel)
-
-                # No need to get the channel again, we already have it
-                await text_channel.send(embed=embed)
             except Exception as e:
                 logging.warning(f"Error: {e}")
                 pass
