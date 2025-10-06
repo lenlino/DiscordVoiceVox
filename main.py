@@ -1554,9 +1554,6 @@ async def auto_join():
                     logger.error(f"Could not find voice channel with ID {server_json['voice_ch_id']} in guild {guild.id}")
                     continue
 
-                if len(voice_channel.voice_states) == 0:
-                    continue
-
                 # Check if already connected to a voice channel
                 if guild.voice_client is not None:
                     logger.error(f"Already connected to a voice channel in guild {guild.id}, using existing connection")
