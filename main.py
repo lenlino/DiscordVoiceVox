@@ -1534,6 +1534,7 @@ async def auto_join():
     with open(os.path.dirname(os.path.abspath(__file__)) + "/" + "bot_stop.json", encoding='utf-8') as f:
         json_list = json.load(f)
         print(json_list)
+        voice_channlel_list = []
         for server_json in json_list:
             try:
                 guild = bot.get_guild(server_json["guild"])
@@ -1562,12 +1563,10 @@ async def auto_join():
                     await voice_channel.connect(cls=LavalinkVoiceClient)
                     vclist[guild.id] = server_json["text_ch_id"]
                 else:
-                    if len(voice_channel.members) < 1:
-                        logger.error(
-                            f"no user voice channel in guild {guild.id}, using existing connection")
-                        continue
                     await voice_channel.connect(cls=LavalinkVoiceClient)
                     vclist[guild.id] = server_json["text_ch_id"]
+
+                voice_channlel_list.append(voice_channel)
 
                 # No need to get the channel again, we already have it
                 await text_channel.send(embed=embed)
@@ -1579,6 +1578,11 @@ async def auto_join():
                 premium_server_list.append(guild.id)
                 premium_guild_dict[server_json["guild"]] = server_json["premium_value"]
 
+            for voice_channel in voice_channlel_list:
+                if len(voice_channel.members) <= 1:
+                    await voice_channel.guild.voice_client.disconnect()
+                    del vclist[voice_channel.guild.id]
+                    logger.info(f"Auto Join No Player Disconnected from {voice_channel.guild.id}")
 
 
 @bot.slash_command(description="辞書に単語を追加するのだ(全サーバー)", guild_ids=ManagerGuilds)
