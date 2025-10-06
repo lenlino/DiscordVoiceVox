@@ -1576,7 +1576,7 @@ async def auto_join():
                 if len(voice_channel.members) <= 1:
                     await voice_channel.guild.voice_client.disconnect()
                     del vclist[voice_channel.guild.id]
-                    logger.info(f"Auto Join No Player Disconnected from {voice_channel.guild.id}")
+                    logger.error(f"Auto Join No Player Disconnected from {voice_channel.guild.id}")
 
 
 @bot.slash_command(description="辞書に単語を追加するのだ(全サーバー)", guild_ids=ManagerGuilds)
