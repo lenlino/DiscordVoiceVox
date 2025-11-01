@@ -345,6 +345,72 @@ async def _ll_on_node_disconnected(event):
         code = getattr(event, 'code', None)
         reason = getattr(event, 'reason', None)
         logger.warning(f'Lavalink node disconnected: {name} code={code} reason={reason}')
+
+        # Try to migrate players that were using this node to another healthy node
+        from typing import Optional
+        def pick_healthy_node(exclude=None) -> Optional[object]:
+            try:
+                nodes = list(bot.lavalink.nodes)
+                healthy = [n for n in nodes if getattr(n, 'available', False) and n is not exclude]
+                if healthy:
+                    return healthy[0]
+                # Fallback to any node that isn't the excluded one
+                for n in nodes:
+                    if n is not exclude:
+                        return n
+            except Exception:
+                pass
+            return None
+
+        if node is None:
+            return
+
+        # Collect players bound to the disconnected node
+        players = list(getattr(bot.lavalink.player_manager, 'players', {}).values())
+        affected = [p for p in players if getattr(p, 'node', None) is node]
+        if not affected:
+            return
+
+        target_node = pick_healthy_node(exclude=node)
+        if target_node is None:
+            logger.error('No healthy Lavalink node available for failover. Players will be paused until a node is back.')
+            return
+
+        for p in affected:
+            try:
+                # Snapshot playback state
+                current = getattr(p, 'current', None)
+                position = getattr(p, 'position', 0) or 0
+                paused = getattr(p, 'paused', False)
+                volume = getattr(p, 'volume', 100)
+                filters = getattr(p, 'filters', None)
+
+                # Switch player to target node
+                await p.change_node(target_node)
+
+                # Reapply filters and volume where possible
+                try:
+                    if filters is not None:
+                        await p._apply_filters()
+                except Exception:
+                    pass
+                try:
+                    if volume is not None:
+                        await p.set_volume(volume)
+                except Exception:
+                    pass
+
+                # Resume playback if there was a track
+                if current is not None:
+                    # Start slightly earlier to avoid cut at boundaries
+                    start_ms = max(0, int(position) - 250)
+                    await p.play(current, start=start_ms)
+                    if paused:
+                        await p.set_pause(True)
+
+                logger.info(f'Migrated guild {p.guild_id} player to node {getattr(target_node, "name", "unknown")} from {name}')
+            except Exception as migrate_err:
+                logger.error(f'Failed to migrate player for guild {getattr(p, "guild_id", "?")}: {migrate_err}')
     except Exception as e:
         logger.error(f'Lavalink node disconnect hook error: {e}')
 
@@ -1572,11 +1638,11 @@ async def auto_join():
                 premium_server_list.append(guild.id)
                 premium_guild_dict[server_json["guild"]] = server_json["premium_value"]
 
-            for voice_channel in voice_channlel_list:
-                if len(voice_channel.members) <= 1:
-                    await voice_channel.guild.voice_client.disconnect()
-                    del vclist[voice_channel.guild.id]
-                    logger.error(f"Auto Join No Player Disconnected from {voice_channel.guild.id}")
+        for voice_channel in voice_channlel_list:
+            if len(voice_channel.members) <= 1:
+                await voice_channel.guild.voice_client.disconnect()
+                del vclist[voice_channel.guild.id]
+                logger.error(f"Auto Join No Player Disconnected from {voice_channel.guild.id}")
 
 
 @bot.slash_command(description="辞書に単語を追加するのだ(全サーバー)", guild_ids=ManagerGuilds)

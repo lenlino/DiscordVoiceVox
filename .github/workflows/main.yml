@@ -23,4 +23,8 @@ jobs:
             git pull
             cd /home/len/DiscordVoiceVox-e
             git pull
+            cd /home/len/DiscordVoiceVox-z
+            git pull
+            cd /home/len/DiscordVoiceVox-h
+            git pull
 
