@@ -1890,7 +1890,8 @@ async def generate_wav(text, speaker=1, filepath=None, target_host='localhost', 
         # COEIROINKAPI用に対応
         if coeiroink_host == target_host or sharevox_host == target_host:
             # return await synthesis_coeiroink(target_host, conn, text, speed, pitch, speaker, filepath)
-            return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, volume=0.8)
+            return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, volume=0.8,
+                                   query_host=target_host, is_self_upload=is_self_upload)
         elif aivoice_host == target_host:
             return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath)
         elif aivis_host == target_host:
