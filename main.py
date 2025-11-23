@@ -1048,7 +1048,7 @@ async def set(ctx, key: discord.Option(str, choices=[
 async def get_server_set_value(ctx: discord.AutocompleteContext):
     setting_type = ctx.options["key"]
     bool_settings = ["reademoji", "readname", "readurl", "readjoinleave", "readsan", "joinnotice", "eew", "translate",
-                     "autojoin", "readmention"]
+                     "autojoin", "readmention", "show-info"]
     if setting_type in bool_settings:
         return ["off", "on"]
     elif setting_type == "lang":
@@ -1087,7 +1087,8 @@ async def server_set(ctx, key: discord.Option(str, choices=[
     discord.OptionChoice(name="翻訳(translate)", value="translate"),
     discord.OptionChoice(name="メンションの読み上げ(readmention)", value="readmention"),
     discord.OptionChoice(name="ボイスミュート(mutevoice)", value="mute-voice"),
-    discord.OptionChoice(name="読み上げ文字数上限(text_limit)", value="text_limit")], description="設定項目"),
+    discord.OptionChoice(name="読み上げ文字数上限(text_limit)", value="text_limit"),
+    discord.OptionChoice(name="サーバー情報(show-info)", value="show-info")], description="設定項目"),
                      value: discord.Option(str, description="設定値", required=False,
                                            autocomplete=get_server_set_value), ):
     await ctx.defer()
@@ -1420,6 +1421,31 @@ async def server_set(ctx, key: discord.Option(str, choices=[
 
         await setdatabase(ctx.guild.id, "text_limit", value, "guild")
         embed.description = f"読み上げ文字数上限を {value} 文字に設定しました。\n(プランの上限を超える場合は、プランの上限が優先されます)"
+        await ctx.send_followup(embed=embed)
+    elif key == "show-info":
+        embed = discord.Embed(
+            title="Server Info",
+            color=discord.Colour.brand_green()
+        )
+        plan = "無料"
+        if await is_premium_check(ctx.guild.id, 1000):
+            plan = "Premium (1000)"
+        elif await is_premium_check(ctx.guild.id, 500):
+            plan = "Premium (500)"
+        elif await is_premium_check(ctx.guild.id, 300):
+            plan = "Premium (300)"
+        elif await is_premium_check(ctx.guild.id, 100):
+            plan = "Premium (100)"
+        embed.add_field(name="Plan", value=plan)
+        premium_user_id = await getdatabase(ctx.guild.id, "premium_user", "0", "guild")
+        if premium_user_id != "0":
+            try:
+                user = await bot.fetch_user(int(premium_user_id))
+                embed.add_field(name="Premium User", value=user.mention)
+            except (discord.NotFound, ValueError):
+                embed.add_field(name="Premium User", value="Unknown User")
+        else:
+            embed.add_field(name="Premium User", value="None")
         await ctx.send_followup(embed=embed)
 
 
