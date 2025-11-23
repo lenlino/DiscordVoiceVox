@@ -475,6 +475,7 @@ async def initdatabase():
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS lang char(2);')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS mute_list bigint[];')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS mute_voice bigint[];')
+        await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS text_limit char(4);')
 
 
 async def init_voice_list():
@@ -1064,6 +1065,8 @@ async def get_server_set_value(ctx: discord.AutocompleteContext):
         limit = 25
         remain = max(0, limit - len(base))
         return base + candidates[:remain]
+    elif setting_type == "text_limit":
+        return []
     else:
         return ["off"]
 
@@ -1083,7 +1086,8 @@ async def server_set(ctx, key: discord.Option(str, choices=[
     discord.OptionChoice(name="緊急地震速報通知(eew)", value="eew"),
     discord.OptionChoice(name="翻訳(translate)", value="translate"),
     discord.OptionChoice(name="メンションの読み上げ(readmention)", value="readmention"),
-    discord.OptionChoice(name="ボイスミュート(mutevoice)", value="mute-voice")], description="設定項目"),
+    discord.OptionChoice(name="ボイスミュート(mutevoice)", value="mute-voice"),
+    discord.OptionChoice(name="読み上げ文字数上限(text_limit)", value="text_limit")], description="設定項目"),
                      value: discord.Option(str, description="設定値", required=False,
                                            autocomplete=get_server_set_value), ):
     await ctx.defer()
@@ -1405,6 +1409,17 @@ async def server_set(ctx, key: discord.Option(str, choices=[
             embed.title = "Error"
             embed.description = "on/offをvalueに指定してください。"
             embed.color = discord.Colour.brand_red()
+        await ctx.send_followup(embed=embed)
+    elif key == "text_limit":
+        embed = discord.Embed(
+            title="Changed Text Limit",
+            color=discord.Colour.brand_green()
+        )
+        if value is None or not value.isdecimal():
+            value = 100
+
+        await setdatabase(ctx.guild.id, "text_limit", value, "guild")
+        embed.description = f"読み上げ文字数上限を {value} 文字に設定しました。\n(プランの上限を超える場合は、プランの上限が優先されます)"
         await ctx.send_followup(embed=embed)
 
 
@@ -2167,18 +2182,20 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             else:
                 output = member.display_name + " " + output
 
+        true_max_limit = text_limit
         if is_premium:
-            '''if len(output) > text_limit_300 and guild.id in premium_server_list_300:
-                output = output[:(text_limit_300 + 50)]
-            elif len(output) > text_limit_500 and guild.id in premium_server_list_500:
-                output = output[:(text_limit_500 + 50)]
-            elif len(output) > text_limit_1000 and guild.id in premium_server_list_1000:
-                output = output[:(text_limit_1000 + 50)]
-            else:
-                output = output[:(text_limit_100 + 50)]'''
-            output = output[:(text_limit_100 + 50)]
-        else:
-            output = output[:100]
+            true_max_limit = text_limit_100
+
+        user_limit_str = await getdatabase(guild.id, "text_limit", str(true_max_limit), "guild")
+        try:
+            user_limit = int(user_limit_str)
+        except (ValueError, TypeError):
+            user_limit = true_max_limit
+
+        actual_limit = min(user_limit, true_max_limit)
+
+        if len(output) > actual_limit:
+            output = output[:actual_limit + 50]
 
         lang = await getdatabase(guild.id, "lang", "ja", "guild")
 
@@ -2531,20 +2548,20 @@ async def honyaku_and_ikaryaku(lang, output, voice_id, member_id, guild_id, is_p
         if re.search("[^w]", output) is None:
             output = "ワラ"
 
-
+        true_max_limit = text_limit
         if is_premium:
-            '''if len(output) > text_limit_300 and guild.id in premium_server_list_300:
-                output = output[:(text_limit_300)] + "以下略"
-            elif len(output) > text_limit_500 and guild.id in premium_server_list_500:
-                output = output[:(text_limit_500)] + "以下略"
-            elif len(output) > text_limit_1000 and guild.id in premium_server_list_1000:
-                output = output[:(text_limit_1000)] + "以下略"
-            elif len(output) > text_limit_1000 and guild.id in premium_server_list:'''
-            if len(output) > text_limit_100:
-                output = output[:(text_limit_100)] + "以下略"
-        else:
-            if len(output) > 50:
-                output = output[:50] + "以下略"
+            true_max_limit = text_limit_100
+
+        user_limit_str = await getdatabase(guild_id, "text_limit", str(true_max_limit), "guild")
+        try:
+            user_limit = int(user_limit_str)
+        except (ValueError, TypeError):
+            user_limit = true_max_limit
+
+        actual_limit = min(user_limit, true_max_limit)
+
+        if len(output) > actual_limit:
+            output = output[:actual_limit] + "以下略"
 
     if 4000 > int(voice_id) >= 3000:
         output = remove_symbols_except_last(output)
