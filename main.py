@@ -481,7 +481,7 @@ asyncio.get_event_loop().set_exception_handler(asyncio_exception_handler)
 
 
 async def initdatabase():
-    async with pool.acquire() as conn:
+    async with bot.pool.acquire() as conn:
         await conn.set_type_codec("jsonb", schema="pg_catalog", encoder=json.dumps, decoder=json.loads)
         await conn.execute('CREATE TABLE IF NOT EXISTS voice(id char(20), voiceid char(4));')
         await conn.execute('ALTER TABLE voice ADD COLUMN IF NOT EXISTS readname char(15);')
@@ -583,17 +583,16 @@ async def init_voice_list():
         except:
             print("SHAREVOX接続なし")
 
-    global voice_id_list
-    voice_id_list = json
-    global voice_choices
-    for voice_info in voice_id_list:
+    bot.voice_id_list = json
+    bot.voice_choices.clear()  # 既存の選択肢をクリア
+    for voice_info in bot.voice_id_list:
         for style_info in voice_info["styles"]:
-            voice_choices.append(f"{voice_info['name']}({style_info['name']}) id:{style_info['id']}")
+            bot.voice_choices.append(f"{voice_info['name']}({style_info['name']}) id:{style_info['id']}")
 
-    print(f"ボイス数: {len(voice_choices)}")
+    print(f"ボイス数: {len(bot.voice_choices)}")
     print(json)
     print(type(json))
-    print([discord.SelectOption(label=e) for e in [d["name"] for d in voice_id_list]])
+    print([discord.SelectOption(label=e) for e in [d["name"] for d in bot.voice_id_list]])
     print(discord.SelectOption(label=e) for e in ())
 
 
@@ -1929,6 +1928,7 @@ async def auto_join():
 
         for voice_channel in voice_channlel_list:
             if len(voice_channel.members) <= 1:
+
                 await voice_channel.guild.voice_client.disconnect()
                 del vclist[voice_channel.guild.id]
                 logger.error(f"Auto Join No Player Disconnected from {voice_channel.guild.id}")
@@ -2060,11 +2060,10 @@ async def get_connection():
 
 
 async def getdatabase(userid, id, default=None, table="voice"):
-    global pool
-    if pool is None:
+    if bot.pool is None:
         logger.error("pool is None/get database")
-        pool = await get_connection()
-    async with pool.acquire() as conn:
+        bot.pool = await get_connection()
+    async with bot.pool.acquire() as conn:
         rows = await conn.fetchrow(f'SELECT {id} from {table} where "id" = $1;', (str(userid)))
         if rows is None:
             if table == "voice":
@@ -2080,8 +2079,7 @@ async def getdatabase(userid, id, default=None, table="voice"):
 
 
 async def setdatabase(userid, id, value, table="voice"):
-    global pool
-    async with pool.acquire() as conn:
+    async with bot.pool.acquire() as conn:
         rows = await conn.fetchrow(f'SELECT {id} from {table} where "id" = $1;', (str(userid)))
         if rows is None:
             await conn.execute(f'INSERT INTO {table} (id) VALUES ($1);', (str(userid)))
@@ -2107,13 +2105,12 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0", guil
         voiceid -= 1000
     else:
         target_port = 50021
-        global voiceapi_counter
 
-        target_host = premium_host_list[voiceapi_counter]
-        if voiceapi_counter + 1 >= len(premium_host_list):
-            voiceapi_counter = 0
+        target_host = premium_host_list[bot.voiceapi_counter]
+        if bot.voiceapi_counter + 1 >= len(premium_host_list):
+            bot.voiceapi_counter = 0
         else:
-            voiceapi_counter += 1
+            bot.voiceapi_counter += 1
 
     filename = None
     '''if voice_cache_dict.get(voiceid, {}).get(text):
@@ -2149,8 +2146,6 @@ async def generate_wav(text, speaker=1, filepath=None, target_host='localhost', 
     if int(speed) < 80:
         speed = 100
 
-    global is_use_gpu_server
-    global vclist_len
     use_gpu_server = False
     if is_use_gpu_server and speaker in free_voice_list:
         use_gpu_server = True
