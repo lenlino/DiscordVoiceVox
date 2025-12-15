@@ -70,27 +70,13 @@ intents.voice_states = True
 intents.guild_messages = True
 is_use_gpu_server_time = False
 
-vclist = {}
-voice_select_dict = {}
-premium_user_list = []
-premium_server_list = []
-premium_server_list_300 = []
-premium_server_list_500 = []
-premium_server_list_1000 = []
-premium_guild_dict = {}
-voice_cache_dict = {}
-voice_cache_counter_dict = {}
-generating_guild_set = set()
-voice_generate_time_list = []
-voice_generate_time_list_p = []
-generating_guilds = set()
+# グローバル変数の初期化は init_bot_state() で行われ、bot.* 属性として保存される
+# 後方互換性のため、以下でエイリアスを作成（botインスタンス作成後に設定）
 text_limit = 50
 text_limit_100 = 100
 text_limit_300 = 300
 text_limit_500 = 500
 text_limit_1000 = 1000
-counter = 0
-voiceapi_counter = 0
 DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
 DB_PORT = os.getenv("DB_PORT", 5432)
 DB_NAME = os.getenv("DB_NAME", "postgres")
@@ -117,11 +103,7 @@ USAGE_LIMIT_PRICE: int = int(os.getenv("USAGE_LIMIT_PRICE", 0))
 GLOBAL_DICT_CHECK: bool = bool(os.getenv("GLOBAL_DICT_CHECK", "True") == "True")
 BOT_NICKNAME = os.getenv("BOT_NICKNAME", "ずんだもんβ")
 EEW_WEBHOOK_URL = os.getenv("EEW_WEBHOOK_URL", None)
-voice_id_list = []
-non_premium_user = []
-voice_choices = []
-generating_guilds = {}
-pool = None
+# voice_id_list, non_premium_user, voice_choices, generating_guilds, pool は bot.* として init_bot_state() で初期化
 
 logger = logging.getLogger('discord')
 stream_handler = logging.StreamHandler()
@@ -133,12 +115,9 @@ handler = logging.FileHandler(filename=os.path.dirname(os.path.abspath(__file__)
 handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
 logging.basicConfig(handlers=[stream_handler, handler])
 
-default_conn = None
-default_gpu_conn = None
-premium_conn = None
+# default_conn, default_gpu_conn, premium_conn, is_use_gpu_server は bot.* として init_bot_state() で初期化
 
 is_use_gpu_server_enabled: bool = bool(os.getenv("IS_GPU", "False") == "True")
-is_use_gpu_server = False
 gpu_start_time = datetime.datetime.strptime(os.getenv("START_TIME", "21:00"), "%H:%M").time()
 gpu_end_time = datetime.datetime.strptime(os.getenv("END_TIME", "02:00"), "%H:%M").time()
 
@@ -152,6 +131,59 @@ aiohttp_client_session = asyncio.get_event_loop().run_until_complete(create_sess
 
 bot = discord.AutoShardedBot(intents=intents, chunk_guilds_at_startup=False, member_cache_flags=member_cache_flags,
                              connector=aiohttp_client_session)
+
+# グローバル変数をbotインスタンスに保存（コグリロード時も永続化）
+def init_bot_state():
+    """Initialize bot state variables that persist across cog reloads"""
+    if not hasattr(bot, 'vclist'):
+        bot.vclist = {}
+        bot.voice_select_dict = {}
+        bot.premium_user_list = []
+        bot.premium_server_list = []
+        bot.premium_server_list_300 = []
+        bot.premium_server_list_500 = []
+        bot.premium_server_list_1000 = []
+        bot.premium_guild_dict = {}
+        bot.voice_cache_dict = {}
+        bot.voice_cache_counter_dict = {}
+        bot.generating_guild_set = set()
+        bot.voice_generate_time_list = []
+        bot.voice_generate_time_list_p = []
+        bot.generating_guilds = {}
+        bot.counter = 0
+        bot.voiceapi_counter = 0
+        bot.voice_id_list = []
+        bot.non_premium_user = []
+        bot.voice_choices = []
+        bot.pool = None
+        bot.default_conn = None
+        bot.default_gpu_conn = None
+        bot.premium_conn = None
+        bot.is_use_gpu_server = False
+        bot.yomiage_queue = {}
+
+init_bot_state()
+
+# 後方互換性のため、グローバル変数としてbot属性への参照を作成
+# コグではbot.変数名を使用し、main.pyの既存コードではグローバル変数名をそのまま使用可能
+vclist = bot.vclist
+voice_select_dict = bot.voice_select_dict
+premium_user_list = bot.premium_user_list
+premium_server_list = bot.premium_server_list
+premium_server_list_300 = bot.premium_server_list_300
+premium_server_list_500 = bot.premium_server_list_500
+premium_server_list_1000 = bot.premium_server_list_1000
+premium_guild_dict = bot.premium_guild_dict
+voice_cache_dict = bot.voice_cache_dict
+voice_cache_counter_dict = bot.voice_cache_counter_dict
+generating_guild_set = bot.generating_guild_set
+voice_generate_time_list = bot.voice_generate_time_list
+voice_generate_time_list_p = bot.voice_generate_time_list_p
+generating_guilds = bot.generating_guilds
+voice_id_list = bot.voice_id_list
+non_premium_user = bot.non_premium_user
+voice_choices = bot.voice_choices
+yomiage_queue = bot.yomiage_queue
 
 class LavalinkVoiceClient(discord.VoiceProtocol):
     """
@@ -1600,6 +1632,78 @@ async def stop_bot(ctx, message: discord.Option(input_type=str, description="カ
     await bot.close()
 
 
+@bot.slash_command(description="コグをリロードするのだ(modonly)", guild_ids=ManagerGuilds, name="reload")
+async def reload_cog(ctx, cog_name: discord.Option(input_type=str, description="リロードするコグ名（例: commands.MainCog）", default="all")):
+    await ctx.defer()
+
+    if cog_name == "all":
+        # すべてのコグをリロード
+        reloaded = []
+        failed = []
+        for ext in list(bot.extensions.keys()):
+            try:
+                bot.reload_extension(ext)
+                reloaded.append(ext)
+            except Exception as e:
+                failed.append(f"{ext}: {str(e)}")
+
+        embed = discord.Embed(
+            title="コグリロード完了",
+            description=f"リロード成功: {len(reloaded)}個\nリロード失敗: {len(failed)}個",
+            color=discord.Colour.green() if not failed else discord.Colour.orange(),
+        )
+        if reloaded:
+            embed.add_field(name="成功", value="\n".join(reloaded), inline=False)
+        if failed:
+            embed.add_field(name="失敗", value="\n".join(failed), inline=False)
+    else:
+        # 特定のコグをリロード
+        try:
+            bot.reload_extension(cog_name)
+            embed = discord.Embed(
+                title="コグリロード完了",
+                description=f"{cog_name} をリロードしました",
+                color=discord.Colour.green(),
+            )
+        except Exception as e:
+            embed = discord.Embed(
+                title="エラー",
+                description=f"{cog_name} のリロードに失敗しました: {str(e)}",
+                color=discord.Colour.red(),
+            )
+
+    await ctx.send_followup(embed=embed)
+
+
+@bot.slash_command(description="WebSocket接続を維持したまま再起動するのだ(modonly)", guild_ids=ManagerGuilds, name="restart")
+async def restart_bot(ctx, message: discord.Option(input_type=str, description="カスタムメッセージ",
+                                                default="ずんだもんの再起動を行います（WebSocket接続は維持）")):
+    await ctx.defer()
+    embed = discord.Embed(
+        title="再起動開始",
+        description="Discord WebSocket接続を維持したまま再起動します...",
+        color=discord.Colour.orange(),
+    )
+    await ctx.send_followup(embed=embed)
+
+    try:
+        await restart(message)
+        embed = discord.Embed(
+            title="再起動完了",
+            description="再起動が完了しました。すべてのシステムが再初期化されました。",
+            color=discord.Colour.green(),
+        )
+        await ctx.channel.send(embed=embed)
+    except Exception as e:
+        embed = discord.Embed(
+            title="エラー",
+            description=f"再起動中にエラーが発生しました: {str(e)}",
+            color=discord.Colour.red(),
+        )
+        await ctx.channel.send(embed=embed)
+        logger.error(f"再起動エラー: {e}", exc_info=True)
+
+
 async def stop(message="ずんだもんの再起動を行います。数分程度ご利用いただけません。"):
     embed = discord.Embed(
         title="Notice",
@@ -1618,6 +1722,150 @@ async def stop(message="ずんだもんの再起動を行います。数分程�
             pass
     await bot.close()
     sys.exit()
+
+
+async def restart(message="ずんだもんの再起動を行います（WebSocket接続は維持）"):
+    """Discord WebSocket接続を維持したまま、その他すべてを再初期化"""
+    embed = discord.Embed(
+        title="Notice",
+        description=message,
+        color=discord.Colour.orange(),
+    )
+    logger.warn(f"再起動中... {message}")
+
+    # 1. 参加リストを保存
+    await save_join_list()
+
+    # 2. すべてのサーバーに通知を送信
+    for server_id, text_ch_id in bot.vclist.copy().items():
+        guild = bot.get_guild(server_id)
+        if guild is None:
+            continue
+        try:
+            text_channel = guild.get_channel(text_ch_id)
+            if text_channel:
+                await text_channel.send(embed=embed)
+        except Exception as e:
+            logger.error(f"通知送信エラー: {e}")
+
+    # 3. すべてのボイスチャンネルから切断
+    for guild in bot.guilds:
+        if guild.voice_client:
+            try:
+                await guild.voice_client.disconnect(force=True)
+            except Exception as e:
+                logger.error(f"ボイス切断エラー: {e}")
+
+    # 4. タスクループを停止
+    try:
+        if status_update_loop.is_running():
+            status_update_loop.cancel()
+        if dict_and_cache_loop.is_running():
+            dict_and_cache_loop.cancel()
+        if save_join_list_task.is_running():
+            save_join_list_task.cancel()
+        if premium_user_check_loop.is_running():
+            premium_user_check_loop.cancel()
+        if auto_restart.is_running():
+            auto_restart.cancel()
+        logger.info("タスクループを停止しました")
+    except Exception as e:
+        logger.error(f"タスクループ停止エラー: {e}")
+
+    # 5. Lavalink接続を切断
+    try:
+        if hasattr(bot, 'lavalink'):
+            await bot.lavalink.disconnect()
+            logger.info("Lavalink接続を切断しました")
+    except Exception as e:
+        logger.error(f"Lavalink切断エラー: {e}")
+
+    # 6. HTTPコネクタを閉じる
+    try:
+        if bot.default_conn:
+            await bot.default_conn.close()
+        if bot.default_gpu_conn:
+            await bot.default_gpu_conn.close()
+        if bot.premium_conn:
+            await bot.premium_conn.close()
+        logger.info("HTTPコネクタを閉じました")
+    except Exception as e:
+        logger.error(f"HTTPコネクタクローズエラー: {e}")
+
+    # 7. データベース接続を閉じる
+    try:
+        if bot.pool:
+            await bot.pool.close()
+            logger.info("データベース接続を閉じました")
+    except Exception as e:
+        logger.error(f"データベースクローズエラー: {e}")
+
+    # 8. グローバル状態をクリア（一部のみ）
+    bot.vclist.clear()
+    bot.generating_guild_set.clear()
+    bot.generating_guilds.clear()
+    bot.yomiage_queue.clear()
+
+    logger.info("再初期化を開始します...")
+
+    # 9. init_loop()を再実行して再初期化
+    try:
+        # init_loop()の内容を直接実行（@tasks.loopデコレータを避けるため）
+        await reinitialize()
+    except Exception as e:
+        logger.error(f"再初期化エラー: {e}")
+        raise
+
+
+async def reinitialize():
+    """再初期化処理（init_loop()の内容を実行）"""
+    # HTTPコネクタ初期化
+    bot.default_conn = aiohttp.TCPConnector(limit=20, limit_per_host=5)
+    bot.default_gpu_conn = aiohttp.TCPConnector(limit=20, limit_per_host=5)
+    bot.premium_conn = aiohttp.TCPConnector(limit=20, limit_per_host=5)
+
+    # ボイスキャッシュ読み込み
+    try:
+        with open(os.path.dirname(os.path.abspath(__file__)) + "/cache/voice_cache.json", "r", encoding='utf-8') as f:
+            bot.voice_cache_dict = json.load(f)
+            logger.info("ボイスキャッシュを読み込みました")
+    except Exception as e:
+        logger.error(f"ボイスキャッシュ読み込みエラー: {e}")
+
+    # データベース接続
+    bot.pool = await get_connection()
+    await initdatabase()
+    await init_voice_list()
+
+    # タスクループを再開
+    if not status_update_loop.is_running():
+        status_update_loop.start()
+    if not dict_and_cache_loop.is_running():
+        dict_and_cache_loop.start()
+
+    # ビューとタスクを再登録
+    bot.add_view(ActivateButtonView())
+    bot.loop.create_task(connect_nodes())
+    bot.loop.create_task(connect_websocket())
+
+    # 辞書更新
+    await updatedict()
+
+    # プレミアムチェック
+    if not premium_user_check_loop.is_running():
+        premium_user_check_loop.start()
+
+    # 自動再接続
+    await auto_join()
+
+    # 保存タスク再開
+    if not save_join_list_task.is_running():
+        save_join_list_task.start()
+
+    # 注意: watch_cog_changes() と watch_main_changes() は既に実行中なので再開しない
+
+    logger.info("再初期化が完了しました")
+
 
 async def save_join_list():
     savelist = []
@@ -3002,23 +3250,63 @@ async def premium_user_check_loop():
     print(f"プレミアム数: {count}")
 
 
+async def watch_cog_changes():
+    """commandsディレクトリの変更を監視してコグを自動リロード"""
+    commands_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "commands")
+    logger.info(f"コグの自動リロードを開始: {commands_dir}")
+
+    async for changes in awatch(commands_dir):
+        for change_type, file_path in changes:
+            if file_path.endswith('.py') and not file_path.endswith('__pycache__'):
+                # 変更されたファイル名からモジュール名を取得
+                module_name = os.path.splitext(os.path.basename(file_path))[0]
+                extension_name = f"commands.{module_name}"
+
+                logger.info(f"ファイル変更検知: {file_path}")
+
+                # コグがロードされている場合はリロード、されていない場合はロード
+                try:
+                    if extension_name in bot.extensions:
+                        bot.reload_extension(extension_name)
+                        logger.info(f"コグをリロードしました: {extension_name}")
+                    else:
+                        bot.load_extension(extension_name)
+                        logger.info(f"コグをロードしました: {extension_name}")
+                except Exception as e:
+                    logger.error(f"コグのリロードに失敗: {extension_name}, エラー: {e}")
+
+        # 短い遅延を追加して、複数の変更を一度に処理
+        await asyncio.sleep(0.5)
+
+
+async def watch_main_changes():
+    """main.pyの変更を監視して再起動"""
+    main_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "main.py")
+    logger.info(f"main.pyの変更監視を開始: {main_file}")
+
+    async for changes in awatch(main_file):
+        logger.info(f"main.py変更検知: {changes}")
+        await stop("main.pyが更新されたため、ずんだもんの再起動を行います")
+        break
+
+    # 10分の倍数になるまで待機
+    while datetime.datetime.now().minute % 10 != 0:
+        await asyncio.sleep(0.1)
+
+
 @tasks.loop(minutes=1, count=1)
 async def init_loop():
-    global default_conn
-    global default_gpu_conn
-    global premium_conn
-    default_conn = aiohttp.TCPConnector(limit=20, limit_per_host=5)
-    default_gpu_conn = aiohttp.TCPConnector(limit=20, limit_per_host=5)
-    premium_conn = aiohttp.TCPConnector(limit=20, limit_per_host=5)
+    # bot属性を使用してグローバル状態を管理（コグリロード時も永続化）
+    bot.default_conn = aiohttp.TCPConnector(limit=20, limit_per_host=5)
+    bot.default_gpu_conn = aiohttp.TCPConnector(limit=20, limit_per_host=5)
+    bot.premium_conn = aiohttp.TCPConnector(limit=20, limit_per_host=5)
 
-    global voice_cache_dict
     with open(os.path.dirname(os.path.abspath(__file__)) + "/cache/voice_cache.json", "r", encoding='utf-8') as f:
-        voice_cache_dict = json.load(f)
+        bot.voice_cache_dict = json.load(f)
         print("起動")
-        print(voice_cache_dict)
+        print(bot.voice_cache_dict)
 
-    global pool
-    pool = await get_connection()
+    bot.pool = await get_connection()
 
     await initdatabase()
     await init_voice_list()
@@ -3035,13 +3323,9 @@ async def init_loop():
     await auto_join()
     save_join_list_task.start()
 
-    # ファイル変更検知・自動再起動
-    async for changes in awatch(os.path.dirname(os.path.abspath(__file__)) + "/main.py"):
-        print(changes)
-        await stop()
-        break
-    while datetime.datetime.now().minute % 10 != 0:
-        await asyncio.sleep(0.1)
+    # コグの自動リロードとmain.pyの変更監視を開始
+    bot.loop.create_task(watch_cog_changes())
+    bot.loop.create_task(watch_main_changes())
 
 
 async def save_customemoji(custom_emoji, kana):
