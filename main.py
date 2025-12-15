@@ -2166,12 +2166,12 @@ async def generate_wav(text, speaker=1, filepath=None, target_host='localhost', 
 
     len_limit = 80
     if is_premium:
-        conn = premium_conn
+        conn = bot.premium_conn
         len_limit = 160
     elif is_use_gpu_server:
-        conn = default_gpu_conn
+        conn = bot.default_gpu_conn
     else:
-        conn = default_conn
+        conn = bot.default_conn
 
     # Generate audio data directly
     try:
@@ -2748,7 +2748,7 @@ async def connect_waves(wave_list):
 
     try:
         headers = {'Content-Type': 'application/json', }
-        async with aiohttp.ClientSession(connector_owner=False, connector=premium_conn) as private_session:
+        async with aiohttp.ClientSession(connector_owner=False, connector=bot.premium_conn) as private_session:
             async with private_session.post(f'http://{host}/connect_waves',
                                             data=json.dumps(bytes_list), headers=headers,
                                             timeout=10) as response1:
