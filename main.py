@@ -3856,10 +3856,12 @@ async def connect_websocket():
             logger.error(e)
             continue
 
-@tasks.loop(time=datetime.time(hour=6, minute=0, second=0,
+@tasks.loop(time=datetime.time(hour=9, minute=0, second=0,
                                tzinfo=datetime.timezone(datetime.timedelta(hours=+9), 'JST')))
 async def auto_restart():
-    await restart("ずんだもんの定期再起動を行います。数分程度ご利用いただけません。")
+    # 水曜日（weekday=2）のみ実行
+    if datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=+9), 'JST')).weekday() == 2:
+        await restart("ずんだもんの定期再起動を行います（毎週水曜日9:00）")
 
 if __name__ == '__main__':
     bot.loop.create_task(init_loop())
