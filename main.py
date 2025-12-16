@@ -3822,7 +3822,7 @@ async def connect_websocket():
                     title="**緊急地震速報（警報）**",
                     description=f"{prefs_str}\n\n以上の地域で震度4以上の揺れが予測されます\n\n"
                                 f"[Yahoo地震情報](https://typhoon.yahoo.co.jp/weather/jp/earthquake/) | "
-                                f"[BSC24](https://www.youtube.com/watch?v=ZeZ049BUy8Q)",
+                                f"[Youtube地震情報配信](https://www.youtube.com/watch?v=ouknEz8s80s)",
                     color=discord.Colour.brand_red(),
                 )
                 embed.set_thumbnail(url="https://free-icons.net/wp-content/uploads/2020/09/symbol018.png")
@@ -3851,6 +3851,18 @@ async def connect_websocket():
                             logger.error(f"Error sending earthquake notification: {e}")
                             pass
                         await add_yomiage_queue(guild.me, guild, f"緊急地震速報　{prefs_str}")
+
+                # check_count_idがNoneの場合のみ、特定のチャンネルにも送信
+                if check_count_id is None:
+                    try:
+                        eew_channel = bot.get_channel(888053573051629630)
+                        if eew_channel:
+                            await eew_channel.send(embed=embed)
+                            logger.info(f"緊急地震速報を特定チャンネル(888053573051629630)に送信しました")
+                        else:
+                            logger.error(f"チャンネルID 888053573051629630 が見つかりません")
+                    except Exception as e:
+                        logger.error(f"特定チャンネルへの地震速報送信エラー: {e}")
 
         except websockets.ConnectionClosed as e:
             logger.error(e)
