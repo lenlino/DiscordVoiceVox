@@ -1624,7 +1624,7 @@ async def activate(ctx):
 
 @bot.slash_command(description="ユーザーをプレミアム登録するのだ(modonly)", guild_ids=ManagerGuilds, name="stop")
 async def stop_bot(ctx, message: discord.Option(input_type=str, description="カスタムメッセージ",
-                                                default="ずんだもんの再起動を行います。数分程度ご利用いただけません。")):
+                                                default=None)):
     await ctx.defer()
     await stop(message)
     await ctx.send_followup("送信しました。")
@@ -1676,7 +1676,7 @@ async def reload_cog(ctx, cog_name: discord.Option(input_type=str, description="
 
 @bot.slash_command(description="WebSocket接続を維持したまま再起動するのだ(modonly)", guild_ids=ManagerGuilds, name="restart")
 async def restart_bot(ctx, message: discord.Option(input_type=str, description="カスタムメッセージ",
-                                                default="ずんだもんの再起動を行います（WebSocket接続は維持）")):
+                                                default=None)):
     await ctx.defer()
     embed = discord.Embed(
         title="再起動開始",
@@ -1703,7 +1703,9 @@ async def restart_bot(ctx, message: discord.Option(input_type=str, description="
         logger.error(f"再起動エラー: {e}", exc_info=True)
 
 
-async def stop(message="ずんだもんの再起動を行います。数分程度ご利用いただけません。"):
+async def stop(message=None):
+    if message is None:
+        message = "ずんだもんの完全再起動を行います。数分程度ご利用いただけません。"
     embed = discord.Embed(
         title="Notice",
         description=message,
@@ -1723,8 +1725,10 @@ async def stop(message="ずんだもんの再起動を行います。数分程�
     sys.exit()
 
 
-async def restart(message="ずんだもんの再起動を行います（WebSocket接続は維持）"):
+async def restart(message=None):
     """Discord WebSocket接続を維持したまま、その他すべてを再初期化"""
+    if message is None:
+        message = "ずんだもんの再起動を行います。数分程度ご利用いただけません。"
     embed = discord.Embed(
         title="Notice",
         description=message,
@@ -1926,12 +1930,15 @@ async def auto_join():
                 premium_server_list.append(guild.id)
                 premium_guild_dict[server_json["guild"]] = server_json["premium_value"]
 
+        await asyncio.sleep(0.5)
+
         for voice_channel in voice_channlel_list:
             if len(voice_channel.members) <= 1:
-
                 await voice_channel.guild.voice_client.disconnect()
                 del vclist[voice_channel.guild.id]
                 logger.error(f"Auto Join No Player Disconnected from {voice_channel.guild.id}")
+        print("自動再接続完了")
+        print(vclist)
 
 
 @bot.slash_command(description="辞書に単語を追加するのだ(全サーバー)", guild_ids=ManagerGuilds)
@@ -3281,7 +3288,7 @@ async def watch_main_changes():
 
     async for changes in awatch(main_file):
         logger.info(f"main.py変更検知: {changes}")
-        await stop("main.pyが更新されたため、ずんだもんの再起動を行います")
+        await stop()
         break
 
     # 10分の倍数になるまで待機
@@ -3852,7 +3859,7 @@ async def connect_websocket():
 @tasks.loop(time=datetime.time(hour=6, minute=0, second=0,
                                tzinfo=datetime.timezone(datetime.timedelta(hours=+9), 'JST')))
 async def auto_restart():
-    await stop("ずんだもんの定期再起動を行います")
+    await restart("ずんだもんの定期再起動を行います。数分程度ご利用いただけません。")
 
 if __name__ == '__main__':
     bot.loop.create_task(init_loop())
