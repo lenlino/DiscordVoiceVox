@@ -1930,7 +1930,7 @@ async def auto_join():
                 premium_server_list.append(guild.id)
                 premium_guild_dict[server_json["guild"]] = server_json["premium_value"]
 
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(5)
 
         for voice_channel in voice_channlel_list:
             if len(voice_channel.members) <= 1:
