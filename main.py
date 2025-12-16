@@ -1933,7 +1933,8 @@ async def auto_join():
         await asyncio.sleep(5)
 
         for voice_channel in voice_channlel_list:
-            if len(voice_channel.members) <= 1:
+            vc_channel = await bot.fetch_channel(voice_channel.id)
+            if len(vc_channel.members) == 1:
                 await voice_channel.guild.voice_client.disconnect()
                 del vclist[voice_channel.guild.id]
                 logger.error(f"Auto Join No Player Disconnected from {voice_channel.guild.id}")
