@@ -1770,7 +1770,7 @@ async def restart(message=None):
         if premium_user_check_loop.is_running():
             premium_user_check_loop.cancel()
         if auto_restart.is_running():
-            auto_restart.cancel()
+            auto_restart.stop()
         logger.info("タスクループを停止しました")
     except Exception as e:
         logger.error(f"タスクループ停止エラー: {e}")
