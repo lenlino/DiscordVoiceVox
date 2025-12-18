@@ -583,6 +583,8 @@ async def init_voice_list():
         except:
             print("SHAREVOX接続なし")
 
+    global voice_id_list
+    global voice_choices
     voice_id_list = json
     voice_choices.clear()  # 既存の選択肢をクリア
     for voice_info in voice_id_list:
@@ -590,10 +592,7 @@ async def init_voice_list():
             voice_choices.append(f"{voice_info['name']}({style_info['name']}) id:{style_info['id']}")
 
     print(f"ボイス数: {len(voice_choices)}")
-    print(json)
-    print(type(json))
-    print([discord.SelectOption(label=e) for e in [d["name"] for d in voice_id_list]])
-    print(discord.SelectOption(label=e) for e in ())
+    print(voice_id_list)
 
 
 class VoiceSelectView(discord.ui.Select):
