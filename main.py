@@ -2690,7 +2690,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         yomiage_queue.get(guild.id, []).pop(0)
         if len(yomiage_queue.get(guild.id, [])) > 0:
             queue = yomiage_queue.get(guild.id, [])[0]
-            await yomiage(queue.member, queue.guild, queue.text, queue.no_read_name)
+            asyncio.create_task(yomiage(queue.member, queue.guild, queue.text, queue.no_read_name))
         else:
             del yomiage_queue[guild.id]
 
