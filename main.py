@@ -55,6 +55,7 @@ coeiroink_host = os.environ.get("COEIROINK_HOST", "127.0.0.1:50032")
 sharevox_host = os.environ.get("SHAREVOX_HOST", "127.0.0.1:50025")
 aivoice_host = os.environ.get("AIVOICE_HOST", "127.0.0.1:8001")
 aivis_host = os.environ.get("AIVIS_HOST", "127.0.0.1:8001")
+aques_host = os.environ.get("AQUES_HOST", "127.0.0.1:8001")
 lavalink_host_list = os.environ.get("LAVALINK_HOST", "http://127.0.0.1:2333").split(",")
 lavalink_uploader = os.environ.get("LAVALINK_UPLOADER", None)
 use_lavalink_upload: bool = bool(os.getenv("USE_LAVALINK_UPLOAD", "True") == "True")
@@ -541,6 +542,21 @@ async def init_voice_list():
             print("AIVOICE接続なし")
         try:
             async with session.get(
+                f'http://{aques_host}/speakers',
+                headers=headers,
+                timeout=10
+            ) as response3:
+                json2: list = await response3.json()
+                for voice_info in json2:
+                    voice_info["name"] = "AquesTalk:" + voice_info["name"]
+                    for style_info in voice_info["styles"]:
+                        style_info["id"] += 4000
+
+                json.extend(json2)
+        except:
+            print("AquesTalk接続なし")
+        try:
+            async with session.get(
                 f'http://{aivis_host}/speakers',
                 headers=headers,
                 timeout=10
@@ -548,6 +564,8 @@ async def init_voice_list():
                 json2: list = await response3.json()
                 for voice_info in json2:
                     voice_info["name"] = "Aivis:" + voice_info["name"]
+                    for style_info in voice_info["styles"]:
+                        style_info["id"] += 5000
 
                 json.extend(json2)
         except:
@@ -645,7 +663,7 @@ class VoiceSelectView2(discord.ui.Select):
             color=discord.Colour.brand_green(),
         )
         is_premium: bool = str(interaction.user.id) in premium_user_list
-        if 1000 <= id < 2000 and is_premium is not True:
+        if (1000 <= id < 2000 or 6000 > id >= 4000) and is_premium is not True:
             embed = discord.Embed(
                 title="**Error**",
                 description=f"この音声はプレミアムプラン限定です",
@@ -959,6 +977,14 @@ async def set(ctx, key: discord.Option(str, choices=[
             value = toLowerCase(value)
             is_premium: bool = str(ctx.author.id) in premium_user_list
             if value.isdecimal() is False:
+                if await register_aivis_voice(value):
+                    embed = discord.Embed(
+                        title="**Register**",
+                        description=f"該当のUUIDのAivis音声を登録しました。\n再度、/setvcを実行すると一覧に表示されます。",
+                        color=discord.Colour.brand_green(),
+                    )
+                    await ctx.send_followup(embed=embed)
+                    return
                 embed = discord.Embed(
                     title="**Error**",
                     description=f"valueは数字なのだ",
@@ -967,7 +993,7 @@ async def set(ctx, key: discord.Option(str, choices=[
                 print(f"**errorid**")
                 await ctx.send_followup(embed=embed)
                 return
-            elif 2000 > int(value) >= 1000 and is_premium is not True:
+            elif (2000 > int(value) >= 1000 or 6000 > int(value) >= 4000) and is_premium is not True:
                 embed = discord.Embed(
                     title="**Error**",
                     description=f"この音声はプレミアムプラン限定なのだ",
@@ -1485,7 +1511,7 @@ def vc_choice_filter(ctx: AutocompleteContext, item) -> bool:
 
 
 @bot.slash_command(description="自分の声を変更できるのだ")
-async def setvc(ctx, voiceid: discord.Option(required=False, input_type=int,
+async def setvc(ctx, voiceid: discord.Option(required=False, input_type=str,
                                              description="指定しない場合は一覧が表示されます",
                                              autocomplete=discord.utils.basic_autocomplete(voice_choices, filter=vc_choice_filter)),
                 speed: discord.Option(required=False, input_type=int, description="速度"),
@@ -1509,6 +1535,14 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=int,
     voiceid = voiceid
 
     if voiceid.isdecimal() is False:
+        if await register_aivis_voice(voiceid):
+            embed = discord.Embed(
+                title="**Register**",
+                description=f"該当のUUIDのAivis音声を登録しました。\n再度、/setvcを実行すると一覧に表示されます。",
+                color=discord.Colour.brand_green(),
+            )
+            await ctx.send_followup(embed=embed)
+            return
         m = re.search(r"\bid\s*:\s*(.+)$", voiceid)
         if not m or not m.group(1).isdecimal():
             embed = discord.Embed(
@@ -1597,8 +1631,25 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=int,
         embed.description += f"\n読み上げピッチを {pitch} に変更したのだ"
     await ctx.send_followup(embed=embed)
 
+async def register_aivis_voice(model_id: str):
+    if len(model_id) != 36:
+        return False
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f'http://{aivis_host}/register?model_uuid={model_id}',
+                timeout=10
+            ) as response:
+                if response.status != 200:
+                    return False
+                await init_voice_list()
+                return True
+    except Exception as e:
+        return False
 
-# @bot.slash_command(description="自分の名前の読み方を変更できるのだ", guild_ids=ManagerGuilds)
+
+
+            # @bot.slash_command(description="自分の名前の読み方を変更できるのだ", guild_ids=ManagerGuilds)
 async def setname(ctx, name: discord.Option(input_type=str, description="自分の名前の読み方")):
     if len(name) > 15:
         embed = discord.Embed(
@@ -2096,10 +2147,14 @@ async def setdatabase(userid, id, value, table="voice"):
 
 async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0", guild_id="0", is_self_upload=False):
 
-
-    if voiceid >= 4000:
+    if voiceid >= 6000:
         target_host = f"{coeiroink_host}"
-        voiceid -= 1000
+    elif voiceid >= 5000:
+        target_host = f"{aivis_host}"
+        voiceid -= 5000
+    elif voiceid >= 4000:
+        target_host = f"{aques_host}"
+        voiceid -= 4000
     elif voiceid >= 3000:
         target_host = f"{aivoice_host}"
         voiceid -= 3000
@@ -2186,6 +2241,8 @@ async def generate_wav(text, speaker=1, filepath=None, target_host='localhost', 
             return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath)
         elif aivis_host == target_host:
             return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, query_host=target_host)
+        elif aques_host == target_host:
+            return await synthesis(target_host, conn, params, speed, pitch, len_limit, speaker, filepath, query_host=query_host)
         else:
             if use_gpu_server is not True and vclist_len >= 1500:
                 use_gpu_server = True
