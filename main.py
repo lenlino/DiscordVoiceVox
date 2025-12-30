@@ -852,7 +852,7 @@ async def vc(ctx):
             try:
                 # Check if already connected to a voice channel
                 if ctx.guild.voice_client is not None:
-                    logger.info("Already connected to a voice channel, using existing connection")
+                    logger.error("Already connected to a voice channel, using existing connection")
                     vclist[ctx.guild.id] = ctx.channel.id
                 else:
                     await ctx.author.voice.channel.connect(cls=LavalinkVoiceClient)
