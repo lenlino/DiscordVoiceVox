@@ -853,6 +853,9 @@ async def vc(ctx):
                 # Check if already connected to a voice channel
                 if ctx.guild.voice_client is not None:
                     logger.error("Already connected to a voice channel, using existing connection")
+                    await ctx.guild.voice_client.disconnect()
+                    await asyncio.sleep(2)
+                    await ctx.author.voice.channel.connect(cls=LavalinkVoiceClient)
                     vclist[ctx.guild.id] = ctx.channel.id
                 else:
                     await ctx.author.voice.channel.connect(cls=LavalinkVoiceClient)
@@ -1029,7 +1032,9 @@ async def set(ctx, key: discord.Option(str, choices=[
             )
             if 4000 > int(value) >= 3000:
                 embed.description = f"**{name}** id:{value}に変更したのだ\n**A.I.VOICEは録音・配信での利用はできません**"
-            elif int(value) not in free_voice_list and is_premium is not True:
+            elif 5000 > int(value) >= 4000:
+                embed.description = f"**{name}** id:{value}に変更したのだ\n**AquesTalkは録音した音声を商用使用する場合、[使用ライセンス](https://store.a-quest.com/items/7413986)が必要です**"
+            elif int(value) not in free_voice_list and is_premium is not True and 1000 > int(value):
                 embed.description = f"**{name}** id:{value}に変更したのだ\n(この音声は無料プランでは混雑時、ずんだもんに切り替わります)"
             await ctx.send_followup(embed=embed)
     elif key == "speed":
@@ -1593,7 +1598,9 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=str,
     )
     if 4000 > int(voiceid) >= 3000:
         embed.description = f"**{name}** id:{voiceid}に変更したのだ\n**A.I.VOICEは録音・配信での利用はできません**"
-    elif int(voiceid) not in free_voice_list and is_premium is not True:
+    elif 5000 > int(voiceid) >= 4000:
+        embed.description = f"**{name}** id:{voiceid}に変更したのだ\n**AquesTalkは録音した音声を商用使用する場合、[使用ライセンス](https://store.a-quest.com/items/7413986)が必要です**"
+    elif int(voiceid) not in free_voice_list and is_premium is not True and 1000 > int(voiceid):
         embed.description = f"**{name}** id:{voiceid}に変更したのだ\n(この音声は無料プランでは混雑時、ずんだもんに切り替わります)"
     #print(f"**{name}**")
     if speed is not None:
