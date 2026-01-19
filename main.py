@@ -924,7 +924,7 @@ async def vc(ctx):
                 # Check if already connected to a voice channel
                 if ctx.guild.voice_client is not None:
                     logger.error("Already connected to a voice channel, using existing connection")
-                    await ctx.guild.voice_client.disconnect()
+                    await ctx.guild.voice_client.disconnect(force=True)
                     await asyncio.sleep(2)
                     await ctx.author.voice.channel.connect(cls=LavalinkVoiceClient)
                     vclist[ctx.guild.id] = ctx.channel.id
@@ -933,6 +933,7 @@ async def vc(ctx):
                     vclist[ctx.guild.id] = ctx.channel.id
             except Exception as e:
                 logger.error(e)
+                logger.error("接続エラー")
                 await ctx.send_followup("現在起動中です。")
                 return
         else:
