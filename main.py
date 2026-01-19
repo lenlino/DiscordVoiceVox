@@ -802,7 +802,7 @@ class ChangePitchModal(discord.ui.Modal):
     async def callback(self, interaction: discord.Interaction):
         try:
             pitch = int(self.children[0].value)
-            await setdatabase(interaction.user.id, "pitch", pitch)
+            await setdatabase(interaction.user.id, "pitch", str(pitch))
             embed = discord.Embed(
                 title="**Changed pitch**",
                 description=f"読み上げピッチを {pitch} に変更したのだ",
@@ -834,7 +834,7 @@ class ChangeSpeedModal(discord.ui.Modal):
                 )
                 await interaction.response.send_message(embed=embed, ephemeral=True)
                 return
-            await setdatabase(interaction.user.id, "speed", speed)
+            await setdatabase(interaction.user.id, "speed", str(speed))
             embed = discord.Embed(
                 title="**Changed speed**",
                 description=f"読み上げ速度を {speed} に変更したのだ",
@@ -1586,10 +1586,42 @@ def vc_choice_filter(ctx: AutocompleteContext, item) -> bool:
     return str(ctx.value or "").lower() in str(item).lower()
 
 
+async def voice_autocomplete(ctx: AutocompleteContext):
+    try:
+        current_voiceid = await getdatabase(ctx.interaction.user.id, "voiceid", "3")
+        current_name = ""
+        for speaker in voice_id_list:
+            if current_name != "":
+                break
+            for style in speaker["styles"]:
+                if str(style["id"]) == str(current_voiceid):
+                    current_name = f"{speaker['name']}({style['name']})"
+                    break
+
+        search_value = str(ctx.value or "").lower()
+        choices = []
+
+        if current_name and ctx.value is None:
+            choices.append(OptionChoice(name=f"現在の設定: {current_name}", value=f"id:{current_voiceid}"))
+
+        for choice in voice_choices:
+            choice_str = str(getattr(choice, "name", choice))
+            if search_value in choice_str.lower():
+                if len(choices) < 25:
+                    choices.append(choice)
+                else:
+                    break
+
+        return choices[:25]
+    except Exception as e:
+        print(f"Autocomplete error: {e}")
+        return [choice for choice in voice_choices if vc_choice_filter(ctx, choice)][:25]
+
+
 @bot.slash_command(description="自分の声を変更できるのだ")
 async def setvc(ctx, voiceid: discord.Option(required=False, input_type=str,
                                              description="指定しない場合は一覧が表示されます",
-                                             autocomplete=discord.utils.basic_autocomplete(voice_choices, filter=vc_choice_filter)),
+                                             autocomplete=voice_autocomplete),
                 speed: discord.Option(required=False, input_type=int, description="速度"),
                 pitch: discord.Option(required=False, input_type=int, description="ピッチ")):
     await ctx.defer()
