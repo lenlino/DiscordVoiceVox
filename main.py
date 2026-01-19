@@ -630,18 +630,33 @@ class VoiceSelectView(discord.ui.Select):
 
 
 class HogeList(discord.ui.View):
-    def __init__(self, name=None, start=0, end=0):
+    def __init__(self, name=None, start=0, end=0, user_id=None):
         super().__init__(disable_on_timeout=True)
         self.add_item(VoiceSelectView(default=name, id_list=voice_id_list[start:end], start=start, end=end))
         self.add_item(VoiceSelectView2(name=name, start=start))
+        if user_id is not None:
+            self.user_id = user_id
 
     async def on_timeout(self) -> None:
         """Override the default on_timeout to handle the case when the message has been deleted."""
         try:
             await super().on_timeout()
         except discord.errors.NotFound:
-            # Message was deleted before timeout, just ignore the error
             pass
+
+    @discord.ui.button(label="ピッチを変更", style=discord.ButtonStyle.secondary, row=2)
+    async def change_pitch_button(self, button: discord.ui.Button, interaction: discord.Interaction):
+        if hasattr(self, 'user_id') and interaction.user.id != self.user_id:
+            await interaction.response.send_message("このボタンは使用できません。", ephemeral=True)
+            return
+        await interaction.response.send_modal(ChangePitchModal(title="ピッチ変更"))
+
+    @discord.ui.button(label="速度を変更", style=discord.ButtonStyle.secondary, row=2)
+    async def change_speed_button(self, button: discord.ui.Button, interaction: discord.Interaction):
+        if hasattr(self, 'user_id') and interaction.user.id != self.user_id:
+            await interaction.response.send_message("このボタンは使用できません。", ephemeral=True)
+            return
+        await interaction.response.send_modal(ChangeSpeedModal(title="速度変更"))
 
 
 class VoiceSelectView2(discord.ui.Select):
@@ -777,6 +792,62 @@ class ActivateModal(discord.ui.Modal):
         elif amount == 1000:
             await interaction.user.add_roles(discord.Object(1057789043540242523))
         await interaction.followup.send(embeds=[embed], ephemeral=True)
+
+
+class ChangePitchModal(discord.ui.Modal):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.add_item(discord.ui.InputText(label="ピッチ (-100〜100)", placeholder="0"))
+
+    async def callback(self, interaction: discord.Interaction):
+        try:
+            pitch = int(self.children[0].value)
+            await setdatabase(interaction.user.id, "pitch", pitch)
+            embed = discord.Embed(
+                title="**Changed pitch**",
+                description=f"読み上げピッチを {pitch} に変更したのだ",
+                color=discord.Colour.brand_green(),
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        except ValueError:
+            embed = discord.Embed(
+                title="**Error**",
+                description="ピッチは数字なのだ",
+                color=discord.Colour.brand_red(),
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+class ChangeSpeedModal(discord.ui.Modal):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.add_item(discord.ui.InputText(label="速度 (50以上)", placeholder="100"))
+
+    async def callback(self, interaction: discord.Interaction):
+        try:
+            speed = int(self.children[0].value)
+            if speed < 50:
+                embed = discord.Embed(
+                    title="**Error**",
+                    description="speedは50以上の数字で設定できるのだ",
+                    color=discord.Colour.brand_red(),
+                )
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                return
+            await setdatabase(interaction.user.id, "speed", speed)
+            embed = discord.Embed(
+                title="**Changed speed**",
+                description=f"読み上げ速度を {speed} に変更したのだ",
+                color=discord.Colour.brand_green(),
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        except ValueError:
+            embed = discord.Embed(
+                title="**Error**",
+                description="速度は数字なのだ",
+                color=discord.Colour.brand_red(),
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 def add_premium_user(user_id, amount):
@@ -1523,17 +1594,31 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=str,
                 pitch: discord.Option(required=False, input_type=int, description="ピッチ")):
     await ctx.defer()
     if (voiceid is None):
-        test_pages = []
-        for i in range(-(-len(voice_id_list) // 25)):
-            if i == 0:
-                name = "VOICEVOX:ずんだもん"
-            else:
-                name = voice_id_list[i * 25]["name"]
-            test_pages.append(pages.Page(content="ボイス・スタイルを選択してください。",
-                                         custom_view=HogeList(name=name, start=i * 25, end=((i + 1) * 25))))
-        paginator = pages.Paginator(pages=test_pages)
-        await paginator.respond(ctx.interaction)
-        return
+        if speed is None and pitch is None:
+            current_voiceid = await getdatabase(ctx.author.id, "voiceid", "3")
+            current_speed = await getdatabase(ctx.author.id, "speed", "100")
+            current_pitch = await getdatabase(ctx.author.id, "pitch", "0")
+            current_name = ""
+            for speaker in voice_id_list:
+                if current_name != "":
+                    break
+                for style in speaker["styles"]:
+                    if str(style["id"]) == str(current_voiceid):
+                        current_name = f"{speaker['name']}({style['name']})"
+                        break
+            test_pages = []
+            for i in range(-(-len(voice_id_list) // 25)):
+                if i == 0:
+                    name = "VOICEVOX:ずんだもん"
+                else:
+                    name = voice_id_list[i * 25]["name"]
+                test_pages.append(pages.Page(content=f"**現在の設定:**\nボイス: {current_name} (ID: {current_voiceid})\n速度: {current_speed} / ピッチ: {current_pitch}\n\nボイス・スタイルを選択してください。",
+                                             custom_view=HogeList(name=name, start=i * 25, end=((i + 1) * 25), user_id=ctx.author.id)))
+            paginator = pages.Paginator(pages=test_pages)
+            await paginator.respond(ctx.interaction)
+            return
+        else:
+            voiceid = await getdatabase(ctx.author.id, "voiceid", "3")
 
     is_premium = str(ctx.author.id) in premium_user_list
 
