@@ -297,7 +297,8 @@ class LavalinkVoiceClient(discord.VoiceProtocol):
             await self._destroy()
             return
 
-        self.channel = self.client.get_channel(int(channel_id))
+        guild = self.client.get_guild(self.guild_id)
+        self.channel = guild.get_channel(int(channel_id)) if guild else self.channel
 
         # the data needs to be transformed before being handed down to
         # voice_update_handler
