@@ -39,6 +39,7 @@ from lavalink.filters import Timescale
 import emoji
 import romajitable
 import unicodedata
+from cachetools import TTLCache
 
 from LavalinkClient import LavalinkWavelink, LavalinkPlayer
 
@@ -73,6 +74,9 @@ is_use_gpu_server_time = False
 
 # グローバル変数の初期化は init_bot_state() で行われ、bot.* 属性として保存される
 # 後方互換性のため、以下でエイリアスを作成（botインスタンス作成後に設定）
+_db_cache: TTLCache = TTLCache(maxsize=10000, ttl=30)
+_private_dict_cache = {}
+
 text_limit = 50
 text_limit_100 = 100
 text_limit_300 = 300
@@ -955,7 +959,7 @@ async def vc(ctx):
         elif str(
             int(guild_premium_user_id)) in premium_user_list:
             premium_server_list.append(ctx.guild.id)
-            embed.set_author(name=f"Premium {await add_premium_guild_dict(ctx.guild.id, ctx.guild.id)}")
+            embed.set_author(name=f"Premium {await add_premium_guild_dict(str(guild_premium_user_id), ctx.guild.id)}")
         if await getdatabase(ctx.guild.id, "is_joinnotice", True, "guild"):
             await ctx.send_followup(embed=embed)
         else:
@@ -2243,6 +2247,9 @@ async def get_connection():
 
 
 async def getdatabase(userid, id, default=None, table="voice"):
+    cache_key = (table, str(userid), id)
+    if cache_key in _db_cache:
+        return _db_cache[cache_key]
     if bot.pool is None:
         logger.error("pool is None/get database")
         bot.pool = await get_connection()
@@ -2255,13 +2262,13 @@ async def getdatabase(userid, id, default=None, table="voice"):
             elif table == "guild":
                 await conn.execute(f'INSERT INTO {table} (id) VALUES ($1);', (str(userid)))
                 rows = await conn.fetchrow(f'SELECT {id} from {table} where "id" = $1;', (str(userid)))
-        if rows[0] is None:
-            return default
-        else:
-            return rows[0]
+        result = default if rows[0] is None else rows[0]
+    _db_cache[cache_key] = result
+    return result
 
 
 async def setdatabase(userid, id, value, table="voice"):
+    _db_cache.pop((table, str(userid), id), None)
     async with bot.pool.acquire() as conn:
         rows = await conn.fetchrow(f'SELECT {id} from {table} where "id" = $1;', (str(userid)))
         if rows is None:
@@ -2562,6 +2569,10 @@ async def synthesis(target_host, conn, params, speed, pitch, len_limit, speaker,
 @bot.event
 async def on_ready():
     print("起動しました")
+
+@bot.event
+async def on_guild_remove(guild):
+    _private_dict_cache.pop(guild.id, None)
 
 
 @bot.event
@@ -3814,12 +3825,14 @@ def is_valid_regex(pattern: str) -> bool:
         return False
 
 async def henkan_private_dict(server_id, source, is_premium=False):
-    try:
-        with open(user_dict_loc + "/" + f"{server_id}.json", "r",
-                  encoding='utf-8') as f:
-            json_data = json.load(f)
-    except:
-        json_data = {}
+    if server_id not in _private_dict_cache:
+        try:
+            with open(user_dict_loc + "/" + f"{server_id}.json", "r",
+                      encoding='utf-8') as f:
+                _private_dict_cache[server_id] = json.load(f)
+        except:
+            _private_dict_cache[server_id] = {}
+    json_data = _private_dict_cache[server_id]
     source = toLowerCase(source)
     dict_data = sorted(json_data.keys(), key=len)
     dict_data.reverse()
@@ -3871,6 +3884,7 @@ async def henkan_private_dict(server_id, source, is_premium=False):
 
 
 async def update_private_dict(server_id, source, kana):
+    _private_dict_cache.pop(server_id, None)
     try:
         with open(user_dict_loc + "/" + f"{server_id}.json", "r",
                   encoding='utf-8') as f:
