@@ -118,7 +118,26 @@ handler = logging.FileHandler(filename=os.path.dirname(os.path.abspath(__file__)
                                        + f'discord-{"{:%Y-%m-%d-%H-%M}".format(datetime.datetime.now())}.log',
                               encoding='utf-8', mode='w')
 handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
+BEHIND_NOTIFY_CHANNEL_ID = 888053573051629630
+_last_behind_notify = 0
+
+class BehindDetectHandler(logging.Handler):
+    def emit(self, record):
+        global _last_behind_notify
+        if "websocket is" in record.getMessage() and "behind" in record.getMessage():
+            now = time.time()
+            if now - _last_behind_notify < 300:
+                return
+            _last_behind_notify = now
+            try:
+                ch = bot.get_channel(BEHIND_NOTIFY_CHANNEL_ID)
+                if ch:
+                    asyncio.ensure_future(ch.send(f"⚠️ WebSocket遅延検知: {record.getMessage()}"))
+            except Exception:
+                pass
+
 logging.basicConfig(handlers=[stream_handler, handler])
+logging.getLogger('discord.gateway').addHandler(BehindDetectHandler(level=logging.WARNING))
 
 # default_conn, default_gpu_conn, premium_conn, is_use_gpu_server は bot.* として init_bot_state() で初期化
 
