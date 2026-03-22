@@ -75,6 +75,7 @@ is_use_gpu_server_time = False
 # グローバル変数の初期化は init_bot_state() で行われ、bot.* 属性として保存される
 # 後方互換性のため、以下でエイリアスを作成（botインスタンス作成後に設定）
 _db_cache: TTLCache = TTLCache(maxsize=10000, ttl=30)
+_db_row_cache: TTLCache = TTLCache(maxsize=5000, ttl=60)
 _private_dict_cache = {}
 
 text_limit = 50
@@ -2258,36 +2259,53 @@ async def alart(ctx, time: discord.Option(input_type=str, description="時刻 �
     pass'''
 
 
+async def _pool_init(conn):
+    await conn.execute("SET statement_timeout = '10s'")
+
+
 async def get_connection():
     return await asyncpg.create_pool('postgresql://{user}:{password}@{host}:{port}/{dbname}'
     .format(
         user=DB_USER, password=DB_PASS, host=DB_HOST, port=DB_PORT, dbname=DB_NAME
-    ))
+    ), min_size=5, max_size=20, command_timeout=10,
+    setup=_pool_init)
+
+
+async def _fetch_row_all(userid, table):
+    row_key = (table, str(userid))
+    if row_key in _db_row_cache:
+        return _db_row_cache[row_key]
+    if bot.pool is None:
+        logger.error("pool is None/get database")
+        bot.pool = await get_connection()
+    async with bot.pool.acquire() as conn:
+        row = await conn.fetchrow(f'SELECT * from {table} where "id" = $1;', str(userid))
+        if row is None:
+            if table == "voice":
+                await conn.execute(f'INSERT INTO {table} (id, voiceid) VALUES ($1, 3);', str(userid))
+            elif table == "guild":
+                await conn.execute(f'INSERT INTO {table} (id) VALUES ($1);', str(userid))
+            row = await conn.fetchrow(f'SELECT * from {table} where "id" = $1;', str(userid))
+    _db_row_cache[row_key] = row
+    return row
 
 
 async def getdatabase(userid, id, default=None, table="voice"):
     cache_key = (table, str(userid), id)
     if cache_key in _db_cache:
         return _db_cache[cache_key]
-    if bot.pool is None:
-        logger.error("pool is None/get database")
-        bot.pool = await get_connection()
-    async with bot.pool.acquire() as conn:
-        rows = await conn.fetchrow(f'SELECT {id} from {table} where "id" = $1;', (str(userid)))
-        if rows is None:
-            if table == "voice":
-                await conn.execute(f'INSERT INTO {table} (id, voiceid) VALUES ($1, 3);', (str(userid)))
-                rows = await conn.fetchrow(f'SELECT {id} from {table} where "id" = $1;', (str(userid)))
-            elif table == "guild":
-                await conn.execute(f'INSERT INTO {table} (id) VALUES ($1);', (str(userid)))
-                rows = await conn.fetchrow(f'SELECT {id} from {table} where "id" = $1;', (str(userid)))
-        result = default if rows[0] is None else rows[0]
+    row = await _fetch_row_all(userid, table)
+    if row is not None and id in row:
+        result = default if row[id] is None else row[id]
+    else:
+        result = default
     _db_cache[cache_key] = result
     return result
 
 
 async def setdatabase(userid, id, value, table="voice"):
     _db_cache.pop((table, str(userid), id), None)
+    _db_row_cache.pop((table, str(userid)), None)
     async with bot.pool.acquire() as conn:
         rows = await conn.fetchrow(f'SELECT {id} from {table} where "id" = $1;', (str(userid)))
         if rows is None:
