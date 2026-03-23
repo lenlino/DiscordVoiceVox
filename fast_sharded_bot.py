@@ -33,15 +33,19 @@ class FastShardedBot(discord.AutoShardedBot):
             gateway = await self.http.get_gateway()
 
         self._connection.shard_count = self.shard_count
-        shard_ids = self.shard_ids or range(self.shard_count)
+        shard_ids = list(self.shard_ids or range(self.shard_count))
         self._connection.shard_ids = shard_ids
 
-        async def _launch(sid, is_initial):
-            await self.launch_shard(gateway, sid, initial=is_initial)
+        sem = await self._get_max_concurrency()
+        mc = sem._value
 
-        tasks = []
-        for i, shard_id in enumerate(shard_ids):
-            tasks.append(_launch(shard_id, i == 0))
-        await asyncio.gather(*tasks)
+        for batch_start in range(0, len(shard_ids), mc):
+            batch = shard_ids[batch_start:batch_start + mc]
+            await asyncio.gather(*(
+                self.launch_shard(gateway, sid, initial=(batch_start == 0 and i == 0))
+                for i, sid in enumerate(batch)
+            ))
+            if batch_start + mc < len(shard_ids):
+                await asyncio.sleep(5.0)
 
         self._connection.shards_launched.set()
