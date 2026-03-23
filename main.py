@@ -42,6 +42,7 @@ import unicodedata
 from cachetools import TTLCache
 
 from LavalinkClient import LavalinkWavelink, LavalinkPlayer
+from fast_sharded_bot import FastShardedBot
 
 load_dotenv()
 
@@ -154,8 +155,8 @@ async def create_session():
 
 aiohttp_client_session = asyncio.get_event_loop().run_until_complete(create_session())
 
-bot = discord.AutoShardedBot(intents=intents, chunk_guilds_at_startup=False, member_cache_flags=member_cache_flags,
-                             connector=aiohttp_client_session)
+bot = FastShardedBot(intents=intents, chunk_guilds_at_startup=False, member_cache_flags=member_cache_flags,
+                     connector=aiohttp_client_session)
 
 # グローバル変数をbotインスタンスに保存（コグリロード時も永続化）
 def init_bot_state():
