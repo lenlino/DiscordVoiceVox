@@ -34,6 +34,7 @@ class FastShardedBot(discord.AutoShardedBot):
 
         self._connection.shard_count = self.shard_count
         shard_ids = self.shard_ids or range(self.shard_count)
+        self._connection.shard_ids = shard_ids
 
         async def _launch(sid, is_initial):
             await self.launch_shard(gateway, sid, initial=is_initial)
@@ -42,3 +43,5 @@ class FastShardedBot(discord.AutoShardedBot):
         for i, shard_id in enumerate(shard_ids):
             tasks.append(_launch(shard_id, i == 0))
         await asyncio.gather(*tasks)
+
+        self._connection.shards_launched.set()
