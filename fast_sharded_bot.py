@@ -22,9 +22,7 @@ class FastShardedBot(discord.AutoShardedBot):
             return self._identify_semaphore
 
     async def before_identify_hook(self, shard_id, *, initial=False):
-        sem = await self._get_max_concurrency()
-        async with sem:
-            await asyncio.sleep(5.0)
+        pass
 
     async def launch_shards(self):
         if self.shard_count is None:
