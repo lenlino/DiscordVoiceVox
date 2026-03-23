@@ -1904,6 +1904,17 @@ async def restart_bot(ctx, message: discord.Option(input_type=str, description="
         logger.error(f"再起動エラー: {e}", exc_info=True)
 
 
+async def broadcast(channels, embed, concurrency=50):
+    sem = asyncio.Semaphore(concurrency)
+    async def _send(ch):
+        async with sem:
+            try:
+                await ch.send(embed=embed)
+            except:
+                pass
+    await asyncio.gather(*[_send(ch) for ch in channels])
+
+
 async def stop(message=None):
     if message is None:
         message = "ずんだもんの完全再起動を行います。数分程度ご利用いただけません。"
@@ -1914,14 +1925,15 @@ async def stop(message=None):
     )
     logger.warn(f"停止中... {message}")
     await save_join_list()
+    channels = []
     for server_id, text_ch_id in vclist.copy().items():
         guild = bot.get_guild(server_id)
-        if guild.voice_client is None:
+        if guild is None or guild.voice_client is None:
             continue
-        try:
-            await guild.get_channel(text_ch_id).send(embed=embed)
-        except:
-            pass
+        ch = guild.get_channel(text_ch_id)
+        if ch:
+            channels.append(ch)
+    await broadcast(channels, embed)
     await bot.close()
     sys.exit()
 
@@ -1940,17 +1952,16 @@ async def restart(message=None):
     # 1. 参加リストを保存
     await save_join_list()
 
-    # 2. すべてのサーバーに通知を送信
+    # 2. すべてのサーバーに通知を並行送信
+    channels = []
     for server_id, text_ch_id in bot.vclist.copy().items():
         guild = bot.get_guild(server_id)
         if guild is None:
             continue
-        try:
-            text_channel = guild.get_channel(text_ch_id)
-            if text_channel:
-                await text_channel.send(embed=embed)
-        except Exception as e:
-            logger.error(f"通知送信エラー: {e}")
+        text_channel = guild.get_channel(text_ch_id)
+        if text_channel:
+            channels.append(text_channel)
+    await broadcast(channels, embed)
 
     # 3. すべてのボイスチャンネルから切断
     for guild in bot.guilds:
