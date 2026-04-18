@@ -530,6 +530,7 @@ async def initdatabase():
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_eew boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_translate boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readmention boolean;')
+        await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_skip_repeat_name boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS premium_user char(20);')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS lang char(2);')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS mute_list bigint[];')
@@ -1207,7 +1208,7 @@ async def set(ctx, key: discord.Option(str, choices=[
 async def get_server_set_value(ctx: discord.AutocompleteContext):
     setting_type = ctx.options["key"]
     bool_settings = ["reademoji", "readname", "readurl", "readjoinleave", "readsan", "joinnotice", "eew", "translate",
-                     "autojoin", "readmention", "show-info"]
+                     "autojoin", "readmention", "show-info", "skip_repeat_name"]
     if setting_type in bool_settings:
         return ["off", "on"]
     elif setting_type == "lang":
@@ -1237,6 +1238,7 @@ async def server_set(ctx, key: discord.Option(str, choices=[
     discord.OptionChoice(name="自動接続(autojoin)", value="autojoin"),
     discord.OptionChoice(name="絵文字の読み上げ(reademoji)", value="reademoji"),
     discord.OptionChoice(name="名前の読み上げ(readname)", value="readname"),
+    discord.OptionChoice(name="連投時の名前読み上げスキップ(skip_repeat_name)", value="skip_repeat_name"),
     discord.OptionChoice(name="URLの読み上げ(readurl)", value="readurl"),
     discord.OptionChoice(name="入退室の読み上げ(readjoinleave)", value="readjoinleave"),
     discord.OptionChoice(name="言語(lang)", value="lang"),
@@ -1348,6 +1350,26 @@ async def server_set(ctx, key: discord.Option(str, choices=[
         elif value == "on":
             embed.description = "名前の読み上げをオンにしました。"
             await setdatabase(ctx.guild.id, "is_readname", True, "guild")
+        else:
+            embed.title = "Error"
+            embed.description = "on/offをvalueに指定してください。"
+            embed.color = discord.Colour.brand_red()
+        await ctx.send_followup(embed=embed)
+    elif key == "skip_repeat_name":
+        embed = discord.Embed(
+            title="Changed SkipRepeatName",
+            description="連投時の名前スキップ",
+            color=discord.Colour.brand_green()
+        )
+        if value is None:
+            embed.description = "連投時の名前読み上げスキップをオンにしました（デフォルト）"
+            await setdatabase(ctx.guild.id, "is_skip_repeat_name", True, "guild")
+        elif value == "off":
+            embed.description = "連投時の名前読み上げスキップをオフにしました。"
+            await setdatabase(ctx.guild.id, "is_skip_repeat_name", False, "guild")
+        elif value == "on":
+            embed.description = "連投時の名前読み上げスキップをオンにしました。"
+            await setdatabase(ctx.guild.id, "is_skip_repeat_name", True, "guild")
         else:
             embed.title = "Error"
             embed.description = "on/offをvalueに指定してください。"
@@ -2658,6 +2680,7 @@ class YomiageQueue:
 
 
 yomiage_queue = {}
+last_reader_by_guild = {}
 
 async def add_yomiage_queue(member, guild, text: str, no_read_name=False):
     yomiage_queue.setdefault(guild.id, []).append(YomiageQueue(member, guild, text, no_read_name))
@@ -2696,10 +2719,15 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             return
 
         if await getdatabase(guild.id, "is_readname", False, "guild") and not no_read_name:
-            if await getdatabase(member.guild.id, "is_readsan", False, "guild"):
-                output = member.display_name + "さん " + output
-            else:
-                output = member.display_name + " " + output
+            skip_repeat = await getdatabase(guild.id, "is_skip_repeat_name", True, "guild")
+            is_repeat = skip_repeat and last_reader_by_guild.get(guild.id) == member.id
+            if not is_repeat:
+                if await getdatabase(member.guild.id, "is_readsan", False, "guild"):
+                    output = member.display_name + "さん " + output
+                else:
+                    output = member.display_name + " " + output
+        if not no_read_name:
+            last_reader_by_guild[guild.id] = member.id
 
         true_max_limit = text_limit
         if is_premium:
@@ -3571,6 +3599,7 @@ async def init_loop():
     # コグの自動リロードとmain.pyの変更監視を開始
     bot.loop.create_task(watch_cog_changes())
     bot.loop.create_task(watch_main_changes())
+    logger.info("watch_cog_changes, watch_main_changes を開始しました")
 
 
 async def save_customemoji(custom_emoji, kana):
