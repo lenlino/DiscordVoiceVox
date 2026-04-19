@@ -2700,8 +2700,13 @@ class YomiageQueue:
 
 yomiage_queue = {}
 last_reader_by_guild = {}
+last_texts_by_guild = {}
 
 async def add_yomiage_queue(member, guild, text: str, no_read_name=False):
+    recent = last_texts_by_guild.get(guild.id, [])
+    if len(recent) >= 2 and recent[0] == text and recent[1] == text:
+        return
+    last_texts_by_guild[guild.id] = (recent + [text])[-2:]
     yomiage_queue.setdefault(guild.id, []).append(YomiageQueue(member, guild, text, no_read_name))
     if len(yomiage_queue.get(guild.id, [])) == 1:
         queue = yomiage_queue.get(guild.id, [])[0]
@@ -3015,6 +3020,8 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             asyncio.create_task(yomiage(queue.member, queue.guild, queue.text, queue.no_read_name))
         else:
             del yomiage_queue[guild.id]
+            last_texts_by_guild.pop(guild.id, None)
+            last_reader_by_guild.pop(guild.id, None)
 
 
 async def replace_mentions_with_names(text, guild):
