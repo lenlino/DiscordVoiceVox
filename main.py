@@ -2747,12 +2747,28 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         lang = await getdatabase(guild.id, "lang", "ja", "guild")
 
         pattern_voice = "\.v[0-9]*"
+        pattern_pitch = r"\.p-?[0-9]+"
+        pattern_speed = r"\.s[0-9]+"
+        pitch_override = None
+        speed_override = None
         if guild.id in premium_server_list:
 
             if re.search(pattern_voice, text) is not None:
                 cmd = re.search(pattern_voice, text).group()
                 if re.search("[0-9]", cmd) is not None:
                     voice_id = re.sub(r"\D", "", cmd)
+            m_pitch = re.search(pattern_pitch, text)
+            if m_pitch is not None:
+                try:
+                    pitch_override = max(-100, min(100, int(m_pitch.group()[2:])))
+                except ValueError:
+                    pitch_override = None
+            m_speed = re.search(pattern_speed, text)
+            if m_speed is not None:
+                try:
+                    speed_override = max(50, int(m_speed.group()[2:]))
+                except ValueError:
+                    speed_override = None
             '''if re.search(pattern, text) is not None and await getdatabase(guild.id, "is_readurl", True,
                                                                           "guild"):
                 url = re.search(pattern, text).group()
@@ -2794,6 +2810,8 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         output = re.sub(pattern_emoji, "", output)
         output = re.sub(pattern_aniemoji, "", output)
         output = re.sub(pattern_voice, "", output)
+        output = re.sub(pattern_pitch, "", output)
+        output = re.sub(pattern_speed, "", output)
         output = re.sub(pattern_spoiler, "", output)
         output = re.sub(pattern_codeblock, "コードブロック省略", output)
 
@@ -2842,6 +2860,10 @@ async def yomiage(member, guild, text: str, no_read_name=False):
 
         speed = await getdatabase(member.id, "speed", 100)
         pitch = await getdatabase(member.id, "pitch", 0)
+        if speed_override is not None:
+            speed = speed_override
+        if pitch_override is not None:
+            pitch = pitch_override
 
         wav_list = []
         is_self_gen = len(output_list) > 1
