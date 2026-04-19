@@ -539,6 +539,7 @@ async def initdatabase():
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readmention boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_skip_repeat_name boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_queue_speedup boolean;')
+        await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS member_voices jsonb;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS premium_user char(20);')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS lang char(2);')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS mute_list bigint[];')
@@ -1848,6 +1849,57 @@ async def register_aivis_voice(model_id: str):
 
 
 
+@bot.slash_command(description="サーバー内の特定メンバーのボイスを上書きするのだ(manage_messages権限のみ)",
+                   name="member-voice",
+                   default_member_permissions=discord.Permissions(manage_messages=True))
+@discord.commands.default_permissions(manage_messages=True)
+async def member_voice(ctx,
+                       user: discord.Option(discord.Member, description="対象メンバー", required=True),
+                       voice: discord.Option(str, description="ボイスID（offで解除）", required=True,
+                                             autocomplete=voice_autocomplete)):
+    await ctx.defer()
+    current = await getdatabase(ctx.guild.id, "member_voices", {}, "guild") or {}
+    if not isinstance(current, dict):
+        current = {}
+    voice_val = str(voice).strip()
+    if voice_val.startswith("id:"):
+        voice_val = voice_val[3:]
+    if voice_val.lower() == "off":
+        current.pop(str(user.id), None)
+        await setdatabase(ctx.guild.id, "member_voices", current, "guild")
+        embed = discord.Embed(title="Cleared Member Voice",
+                              description=f"{user.display_name} のサーバー個別ボイス設定を解除したのだ",
+                              color=discord.Colour.brand_green())
+        await ctx.send_followup(embed=embed)
+        return
+    if not voice_val.isdecimal():
+        embed = discord.Embed(title="Error",
+                              description="voiceは数字で指定してください（解除はoff）",
+                              color=discord.Colour.brand_red())
+        await ctx.send_followup(embed=embed)
+        return
+    name = ""
+    for speaker in voice_id_list:
+        if name:
+            break
+        for style in speaker["styles"]:
+            if str(style["id"]) == voice_val:
+                name = f"{speaker['name']}({style['name']})"
+                break
+    if not name:
+        embed = discord.Embed(title="Error",
+                              description="存在しないボイスidです",
+                              color=discord.Colour.brand_red())
+        await ctx.send_followup(embed=embed)
+        return
+    current[str(user.id)] = voice_val
+    await setdatabase(ctx.guild.id, "member_voices", current, "guild")
+    embed = discord.Embed(title="Changed Member Voice",
+                          description=f"{user.display_name} のサーバー内ボイスを {name} (id: {voice_val}) に設定したのだ",
+                          color=discord.Colour.brand_green())
+    await ctx.send_followup(embed=embed)
+
+
             # @bot.slash_command(description="自分の名前の読み方を変更できるのだ", guild_ids=ManagerGuilds)
 async def setname(ctx, name: discord.Option(input_type=str, description="自分の名前の読み方")):
     if len(name) > 15:
@@ -2821,7 +2873,12 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                                 output = re.sub(pattern, "ユーアールエル画像省略", output)'''
 
         if voice_id is None:
-            voice_id = await getdatabase(member.id, "voiceid", 0)
+            member_voices = await getdatabase(guild.id, "member_voices", {}, "guild") or {}
+            guild_override = member_voices.get(str(member.id))
+            if guild_override is not None:
+                voice_id = guild_override
+            else:
+                voice_id = await getdatabase(member.id, "voiceid", 0)
         # サーバー設定でミュートされているボイスIDの場合は、ずんだもん(id:3)に切り替え
         try:
             current_voice_int = int(voice_id)
