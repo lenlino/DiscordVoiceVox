@@ -156,7 +156,7 @@ async def create_session():
 aiohttp_client_session = asyncio.get_event_loop().run_until_complete(create_session())
 
 bot = FastShardedBot(intents=intents, chunk_guilds_at_startup=False, member_cache_flags=member_cache_flags,
-                     connector=aiohttp_client_session)
+                     connector=aiohttp_client_session, max_messages=None)
 
 # グローバル変数をbotインスタンスに保存（コグリロード時も永続化）
 def init_bot_state():
@@ -313,7 +313,14 @@ class LavalinkVoiceClient(discord.VoiceProtocol):
             't': 'VOICE_SERVER_UPDATE',
             'd': data
         }
-        await self.lavalink.voice_update_handler(lavalink_data)
+        try:
+            await self.lavalink.voice_update_handler(lavalink_data)
+        except lavalink.errors.RequestError as e:
+            logger.warning(f"Lavalink voice update failed (guild={self.guild_id}): {e}. Destroying stale player.")
+            try:
+                await self._destroy()
+            except Exception:
+                pass
 
     async def on_voice_state_update(self, data):
         channel_id = data['channel_id']
@@ -2905,8 +2912,9 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                 continue
             if gen_text.endswith(".wav"):
                 if gen_text.startswith("global_"):
+                    actual_name = gen_text[len("global_"):]
                     filename = (f"{user_dict_loc}/audio_data"
-                                f"/9686/{gen_text}")
+                                f"/9686/{actual_name}")
                 else:
                     filename = (f"{user_dict_loc}/audio_data"
                                 f"/{guild.id}/{gen_text}")
@@ -3065,16 +3073,13 @@ async def replace_mentions_with_names(text, guild):
 
 
 async def connect_waves(wave_list):
-    bytes_list = []
     if use_lavalink_upload:
-        for wave_dir in wave_list:
-            bytes_list.append(base64.b64encode(wave_dir).decode('utf-8'))
-
+        bytes_list = [base64.b64encode(w).decode('utf-8') for w in wave_list]
     else:
-        for wave_dir in wave_list:
-            async with aiofiles.open(wave_dir,
-                                 mode='rb') as f:
-                bytes_list.append(base64.b64encode(await f.read()).decode('utf-8'))
+        async def _read_b64(path):
+            async with aiofiles.open(path, mode='rb') as f:
+                return base64.b64encode(await f.read()).decode('utf-8')
+        bytes_list = await asyncio.gather(*(_read_b64(p) for p in wave_list))
 
     try:
         headers = {'Content-Type': 'application/json', }
