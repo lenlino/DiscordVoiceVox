@@ -2709,6 +2709,13 @@ yomiage_queue = {}
 last_reader_by_guild = {}
 last_texts_by_guild = {}
 
+
+async def _delayed_queue_cleanup(guild_id, delay=10):
+    await asyncio.sleep(delay)
+    if guild_id not in yomiage_queue:
+        last_reader_by_guild.pop(guild_id, None)
+        last_texts_by_guild.pop(guild_id, None)
+
 async def add_yomiage_queue(member, guild, text: str, no_read_name=False):
     recent = last_texts_by_guild.get(guild.id, [])
     if len(recent) >= 2 and recent[0] == text and recent[1] == text:
@@ -3028,8 +3035,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             asyncio.create_task(yomiage(queue.member, queue.guild, queue.text, queue.no_read_name))
         else:
             del yomiage_queue[guild.id]
-            last_texts_by_guild.pop(guild.id, None)
-            last_reader_by_guild.pop(guild.id, None)
+            asyncio.create_task(_delayed_queue_cleanup(guild.id))
 
 
 async def replace_mentions_with_names(text, guild):
