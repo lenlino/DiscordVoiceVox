@@ -531,6 +531,7 @@ async def initdatabase():
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_translate boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readmention boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_skip_repeat_name boolean;')
+        await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_queue_speedup boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS premium_user char(20);')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS lang char(2);')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS mute_list bigint[];')
@@ -1208,7 +1209,7 @@ async def set(ctx, key: discord.Option(str, choices=[
 async def get_server_set_value(ctx: discord.AutocompleteContext):
     setting_type = ctx.options["key"]
     bool_settings = ["reademoji", "readname", "readurl", "readjoinleave", "readsan", "joinnotice", "eew", "translate",
-                     "autojoin", "readmention", "show-info", "skip_repeat_name"]
+                     "autojoin", "readmention", "show-info", "skip_repeat_name", "queue_speedup"]
     if setting_type in bool_settings:
         return ["off", "on"]
     elif setting_type == "lang":
@@ -1239,6 +1240,7 @@ async def server_set(ctx, key: discord.Option(str, choices=[
     discord.OptionChoice(name="絵文字の読み上げ(reademoji)", value="reademoji"),
     discord.OptionChoice(name="名前の読み上げ(readname)", value="readname"),
     discord.OptionChoice(name="連投時の名前読み上げスキップ(skip_repeat_name)", value="skip_repeat_name"),
+    discord.OptionChoice(name="キュー連動速度アップ(queue_speedup)", value="queue_speedup"),
     discord.OptionChoice(name="URLの読み上げ(readurl)", value="readurl"),
     discord.OptionChoice(name="入退室の読み上げ(readjoinleave)", value="readjoinleave"),
     discord.OptionChoice(name="言語(lang)", value="lang"),
@@ -1370,6 +1372,23 @@ async def server_set(ctx, key: discord.Option(str, choices=[
         elif value == "on":
             embed.description = "連投時の名前読み上げスキップをオンにしました。"
             await setdatabase(ctx.guild.id, "is_skip_repeat_name", True, "guild")
+        else:
+            embed.title = "Error"
+            embed.description = "on/offをvalueに指定してください。"
+            embed.color = discord.Colour.brand_red()
+        await ctx.send_followup(embed=embed)
+    elif key == "queue_speedup":
+        embed = discord.Embed(
+            title="Changed QueueSpeedup",
+            description="キュー連動速度アップ",
+            color=discord.Colour.brand_green()
+        )
+        if value is None or value == "on":
+            embed.description = "キューが5件以上溜まった際の読み上げ速度アップをオンにしました（デフォルト、最大300）"
+            await setdatabase(ctx.guild.id, "is_queue_speedup", True, "guild")
+        elif value == "off":
+            embed.description = "キュー連動速度アップをオフにしました。"
+            await setdatabase(ctx.guild.id, "is_queue_speedup", False, "guild")
         else:
             embed.title = "Error"
             embed.description = "on/offをvalueに指定してください。"
@@ -2864,6 +2883,15 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             speed = speed_override
         if pitch_override is not None:
             pitch = pitch_override
+
+        if await getdatabase(guild.id, "is_queue_speedup", True, "guild"):
+            queue_len = len(yomiage_queue.get(guild.id, []))
+            if queue_len >= 5:
+                try:
+                    base_speed = int(speed)
+                except (ValueError, TypeError):
+                    base_speed = 100
+                speed = min(300, max(base_speed, base_speed + (queue_len - 4) * 20))
 
         wav_list = []
         is_self_gen = len(output_list) > 1
