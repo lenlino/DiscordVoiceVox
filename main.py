@@ -1694,7 +1694,7 @@ async def voice_autocomplete(ctx: AutocompleteContext):
         return [choice for choice in voice_choices if vc_choice_filter(ctx, choice)][:25]
 
 
-@bot.slash_command(description="自分の声を変更できるのだ")
+@bot.slash_command(description="声を変更できるのだ")
 async def setvc(ctx, voiceid: discord.Option(required=False, input_type=str,
                                              description="指定しない場合は一覧が表示されます",
                                              autocomplete=voice_autocomplete),
@@ -1756,6 +1756,13 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=str,
                         break
             if not name:
                 embed = discord.Embed(title="**Error**", description="存在しないボイスidです",
+                                      color=discord.Colour.brand_red())
+                await ctx.send_followup(embed=embed)
+                return
+            target_is_premium = str(target_user.id) in premium_user_list
+            if (2000 > int(voice_val) >= 1000 or 6000 > int(voice_val) >= 4000) and target_is_premium is False:
+                embed = discord.Embed(title="**Error**",
+                                      description="この音声は対象メンバーがプレミアムプランの場合のみ設定できます。",
                                       color=discord.Colour.brand_red())
                 await ctx.send_followup(embed=embed)
                 return
