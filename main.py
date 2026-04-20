@@ -1834,7 +1834,7 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=str,
 
 
 
-    if 2000 > int(voiceid) >= 1000 and is_premium is False:
+    if (2000 > int(voiceid) >= 1000 or 6000 > int(voiceid) >= 4000) and is_premium is False:
         embed = discord.Embed(
             title="**Error**",
             description=f"この音声はプレミアムプラン限定です。",
@@ -4290,7 +4290,7 @@ async def connect_websocket():
                     title="**緊急地震速報（警報）**",
                     description=f"{prefs_str}\n\n以上の地域で震度4以上の揺れが予測されます\n\n"
                                 f"[Yahoo地震情報](https://typhoon.yahoo.co.jp/weather/jp/earthquake/) | "
-                                f"[Youtube地震情報配信](https://www.youtube.com/watch?v=ouknEz8s80s)",
+                                f"[Youtube地震情報配信](https://www.youtube.com/watch?v=HXGANE2pRrA)",
                     color=discord.Colour.brand_red(),
                 )
                 embed.set_thumbnail(url="https://free-icons.net/wp-content/uploads/2020/09/symbol018.png")
