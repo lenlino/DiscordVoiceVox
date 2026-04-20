@@ -1694,7 +1694,7 @@ async def voice_autocomplete(ctx: AutocompleteContext):
         return [choice for choice in voice_choices if vc_choice_filter(ctx, choice)][:25]
 
 
-@bot.slash_command(description="声を変更できるのだ")
+@bot.slash_command(description="自分の声を変更できるのだ")
 async def setvc(ctx, voiceid: discord.Option(required=False, input_type=str,
                                              description="指定しない場合は一覧が表示されます",
                                              autocomplete=voice_autocomplete),
