@@ -714,7 +714,7 @@ class VoiceSelectView2(discord.ui.Select):
             color=discord.Colour.brand_green(),
         )
         is_premium: bool = str(interaction.user.id) in premium_user_list
-        if (1000 <= id < 2000 or 6000 > id >= 4000) and is_premium is not True:
+        if (1000 <= id < 2000 or id >= 4000) and is_premium is not True:
             embed = discord.Embed(
                 title="**Error**",
                 description=f"この音声はプレミアムプラン限定です",
@@ -1104,7 +1104,7 @@ async def set(ctx, key: discord.Option(str, choices=[
                 print(f"**errorid**")
                 await ctx.send_followup(embed=embed)
                 return
-            elif (2000 > int(value) >= 1000 or 6000 > int(value) >= 4000) and is_premium is not True:
+            elif (2000 > int(value) >= 1000 or int(value) >= 4000) and is_premium is not True:
                 embed = discord.Embed(
                     title="**Error**",
                     description=f"この音声はプレミアムプラン限定なのだ",
@@ -1760,7 +1760,7 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=str,
                 await ctx.send_followup(embed=embed)
                 return
             target_is_premium = str(target_user.id) in premium_user_list
-            if (2000 > int(voice_val) >= 1000 or 6000 > int(voice_val) >= 4000) and target_is_premium is False:
+            if (2000 > int(voice_val) >= 1000 or int(voice_val) >= 4000) and target_is_premium is False:
                 embed = discord.Embed(title="**Error**",
                                       description="この音声は対象メンバーがプレミアムプランの場合のみ設定できます。",
                                       color=discord.Colour.brand_red())
@@ -1841,7 +1841,7 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=str,
 
 
 
-    if (2000 > int(voiceid) >= 1000 or 6000 > int(voiceid) >= 4000) and is_premium is False:
+    if (2000 > int(voiceid) >= 1000 or int(voiceid) >= 4000) and is_premium is False:
         embed = discord.Embed(
             title="**Error**",
             description=f"この音声はプレミアムプラン限定です。",
