@@ -156,7 +156,7 @@ async def create_session():
 aiohttp_client_session = asyncio.get_event_loop().run_until_complete(create_session())
 
 bot = FastShardedBot(intents=intents, chunk_guilds_at_startup=False, member_cache_flags=member_cache_flags,
-                     connector=aiohttp_client_session)
+                     connector=aiohttp_client_session, max_messages=None)
 
 # グローバル変数をbotインスタンスに保存（コグリロード時も永続化）
 def init_bot_state():
@@ -313,7 +313,14 @@ class LavalinkVoiceClient(discord.VoiceProtocol):
             't': 'VOICE_SERVER_UPDATE',
             'd': data
         }
-        await self.lavalink.voice_update_handler(lavalink_data)
+        try:
+            await self.lavalink.voice_update_handler(lavalink_data)
+        except lavalink.errors.RequestError as e:
+            logger.warning(f"Lavalink voice update failed (guild={self.guild_id}): {e}. Destroying stale player.")
+            try:
+                await self._destroy()
+            except Exception:
+                pass
 
     async def on_voice_state_update(self, data):
         channel_id = data['channel_id']
@@ -530,6 +537,9 @@ async def initdatabase():
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_eew boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_translate boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readmention boolean;')
+        await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_skip_repeat_name boolean;')
+        await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_queue_speedup boolean;')
+        await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS member_voices jsonb;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS premium_user char(20);')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS lang char(2);')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS mute_list bigint[];')
@@ -704,7 +714,7 @@ class VoiceSelectView2(discord.ui.Select):
             color=discord.Colour.brand_green(),
         )
         is_premium: bool = str(interaction.user.id) in premium_user_list
-        if (1000 <= id < 2000 or 6000 > id >= 4000) and is_premium is not True:
+        if (1000 <= id < 2000 or id >= 4000) and is_premium is not True:
             embed = discord.Embed(
                 title="**Error**",
                 description=f"この音声はプレミアムプラン限定です",
@@ -1094,7 +1104,7 @@ async def set(ctx, key: discord.Option(str, choices=[
                 print(f"**errorid**")
                 await ctx.send_followup(embed=embed)
                 return
-            elif (2000 > int(value) >= 1000 or 6000 > int(value) >= 4000) and is_premium is not True:
+            elif (2000 > int(value) >= 1000 or int(value) >= 4000) and is_premium is not True:
                 embed = discord.Embed(
                     title="**Error**",
                     description=f"この音声はプレミアムプラン限定なのだ",
@@ -1207,7 +1217,7 @@ async def set(ctx, key: discord.Option(str, choices=[
 async def get_server_set_value(ctx: discord.AutocompleteContext):
     setting_type = ctx.options["key"]
     bool_settings = ["reademoji", "readname", "readurl", "readjoinleave", "readsan", "joinnotice", "eew", "translate",
-                     "autojoin", "readmention", "show-info"]
+                     "autojoin", "readmention", "show-info", "skip_repeat_name", "queue_speedup"]
     if setting_type in bool_settings:
         return ["off", "on"]
     elif setting_type == "lang":
@@ -1237,6 +1247,8 @@ async def server_set(ctx, key: discord.Option(str, choices=[
     discord.OptionChoice(name="自動接続(autojoin)", value="autojoin"),
     discord.OptionChoice(name="絵文字の読み上げ(reademoji)", value="reademoji"),
     discord.OptionChoice(name="名前の読み上げ(readname)", value="readname"),
+    discord.OptionChoice(name="連投時の名前読み上げスキップ(skip_repeat_name)", value="skip_repeat_name"),
+    discord.OptionChoice(name="キュー連動速度アップ(queue_speedup)", value="queue_speedup"),
     discord.OptionChoice(name="URLの読み上げ(readurl)", value="readurl"),
     discord.OptionChoice(name="入退室の読み上げ(readjoinleave)", value="readjoinleave"),
     discord.OptionChoice(name="言語(lang)", value="lang"),
@@ -1348,6 +1360,43 @@ async def server_set(ctx, key: discord.Option(str, choices=[
         elif value == "on":
             embed.description = "名前の読み上げをオンにしました。"
             await setdatabase(ctx.guild.id, "is_readname", True, "guild")
+        else:
+            embed.title = "Error"
+            embed.description = "on/offをvalueに指定してください。"
+            embed.color = discord.Colour.brand_red()
+        await ctx.send_followup(embed=embed)
+    elif key == "skip_repeat_name":
+        embed = discord.Embed(
+            title="Changed SkipRepeatName",
+            description="連投時の名前スキップ",
+            color=discord.Colour.brand_green()
+        )
+        if value is None:
+            embed.description = "連投時の名前読み上げスキップをオンにしました（デフォルト）"
+            await setdatabase(ctx.guild.id, "is_skip_repeat_name", True, "guild")
+        elif value == "off":
+            embed.description = "連投時の名前読み上げスキップをオフにしました。"
+            await setdatabase(ctx.guild.id, "is_skip_repeat_name", False, "guild")
+        elif value == "on":
+            embed.description = "連投時の名前読み上げスキップをオンにしました。"
+            await setdatabase(ctx.guild.id, "is_skip_repeat_name", True, "guild")
+        else:
+            embed.title = "Error"
+            embed.description = "on/offをvalueに指定してください。"
+            embed.color = discord.Colour.brand_red()
+        await ctx.send_followup(embed=embed)
+    elif key == "queue_speedup":
+        embed = discord.Embed(
+            title="Changed QueueSpeedup",
+            description="キュー連動速度アップ",
+            color=discord.Colour.brand_green()
+        )
+        if value is None or value == "on":
+            embed.description = "キューが5件以上溜まった際の読み上げ速度アップをオンにしました（デフォルト、最大300）"
+            await setdatabase(ctx.guild.id, "is_queue_speedup", True, "guild")
+        elif value == "off":
+            embed.description = "キュー連動速度アップをオフにしました。"
+            await setdatabase(ctx.guild.id, "is_queue_speedup", False, "guild")
         else:
             embed.title = "Error"
             embed.description = "on/offをvalueに指定してください。"
@@ -1650,8 +1699,94 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=str,
                                              description="指定しない場合は一覧が表示されます",
                                              autocomplete=voice_autocomplete),
                 speed: discord.Option(required=False, input_type=int, description="速度"),
-                pitch: discord.Option(required=False, input_type=int, description="ピッチ")):
+                pitch: discord.Option(required=False, input_type=int, description="ピッチ"),
+                target_user: discord.Option(discord.Member, required=False,
+                                            description="対象メンバー(指定時はこのサーバー内限定で上書き)")):
     await ctx.defer()
+    if target_user is not None:
+        if not ctx.author.guild_permissions.manage_messages:
+            embed = discord.Embed(title="**Error**",
+                                  description="target_userを指定するにはmanage_messages権限が必要です。",
+                                  color=discord.Colour.brand_red())
+            await ctx.send_followup(embed=embed)
+            return
+        current = await getdatabase(ctx.guild.id, "member_voices", {}, "guild") or {}
+        if not isinstance(current, dict):
+            current = {}
+        voice_val = str(voiceid or "").strip() if voiceid is not None else None
+        if voice_val is not None and voice_val.lower() == "off":
+            current.pop(str(target_user.id), None)
+            await setdatabase(ctx.guild.id, "member_voices", current, "guild")
+            embed = discord.Embed(title="Cleared Member Override",
+                                  description=f"{target_user.display_name} のサーバー個別設定を解除したのだ",
+                                  color=discord.Colour.brand_green())
+            await ctx.send_followup(embed=embed)
+            return
+        if voiceid is None and speed is None and pitch is None:
+            embed = discord.Embed(title="**Error**",
+                                  description="voiceid / speed / pitch のいずれかを指定してください(解除はvoiceid=off)",
+                                  color=discord.Colour.brand_red())
+            await ctx.send_followup(embed=embed)
+            return
+        existing = current.get(str(target_user.id))
+        if isinstance(existing, str):
+            entry = {"voice": existing}
+        elif isinstance(existing, dict):
+            entry = dict(existing)
+        else:
+            entry = {}
+        desc_lines = []
+        if voice_val is not None and voice_val != "":
+            m = re.search(r"\bid\s*:\s*(.+)$", voice_val)
+            if m and m.group(1).isdecimal():
+                voice_val = m.group(1)
+            if not voice_val.isdecimal():
+                embed = discord.Embed(title="**Error**",
+                                      description="voiceidは数字で指定してください(解除はoff)",
+                                      color=discord.Colour.brand_red())
+                await ctx.send_followup(embed=embed)
+                return
+            name = ""
+            for speaker in voice_id_list:
+                if name:
+                    break
+                for style in speaker["styles"]:
+                    if str(style["id"]) == voice_val:
+                        name = f"{speaker['name']}({style['name']})"
+                        break
+            if not name:
+                embed = discord.Embed(title="**Error**", description="存在しないボイスidです",
+                                      color=discord.Colour.brand_red())
+                await ctx.send_followup(embed=embed)
+                return
+            target_is_premium = str(target_user.id) in premium_user_list
+            if (2000 > int(voice_val) >= 1000 or int(voice_val) >= 4000) and target_is_premium is False:
+                embed = discord.Embed(title="**Error**",
+                                      description="この音声は対象メンバーがプレミアムプランの場合のみ設定できます。",
+                                      color=discord.Colour.brand_red())
+                await ctx.send_followup(embed=embed)
+                return
+            entry["voice"] = voice_val
+            desc_lines.append(f"ボイス: {name} (id: {voice_val})")
+        if speed is not None:
+            if int(speed) < 50:
+                embed = discord.Embed(title="**Error**",
+                                      description="speedは50以上の数字で指定してください",
+                                      color=discord.Colour.brand_red())
+                await ctx.send_followup(embed=embed)
+                return
+            entry["speed"] = int(speed)
+            desc_lines.append(f"速度: {int(speed)}")
+        if pitch is not None:
+            entry["pitch"] = max(-100, min(100, int(pitch)))
+            desc_lines.append(f"ピッチ: {entry['pitch']}")
+        current[str(target_user.id)] = entry
+        await setdatabase(ctx.guild.id, "member_voices", current, "guild")
+        embed = discord.Embed(title="Change Member Override Voice",
+                              description=f"{target_user.display_name} のサーバー内設定を変更したのだ\n" + "\n".join(desc_lines),
+                              color=discord.Colour.brand_green())
+        await ctx.send_followup(embed=embed)
+        return
     if (voiceid is None):
         if speed is None and pitch is None:
             current_voiceid = await getdatabase(ctx.author.id, "voiceid", "3")
@@ -1706,7 +1841,7 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=str,
 
 
 
-    if 2000 > int(voiceid) >= 1000 and is_premium is False:
+    if (2000 > int(voiceid) >= 1000 or int(voiceid) >= 4000) and is_premium is False:
         embed = discord.Embed(
             title="**Error**",
             description=f"この音声はプレミアムプラン限定です。",
@@ -1745,7 +1880,7 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=str,
     elif 5000 > int(voiceid) >= 4000:
         embed.description = f"**{name}** id:{voiceid}に変更したのだ\n**AquesTalkは録音した音声を商用使用する場合、[使用ライセンス](https://store.a-quest.com/items/7413986)が必要です**"
     elif int(voiceid) not in free_voice_list and is_premium is not True and 1000 > int(voiceid):
-        embed.description = f"**{name}** id:{voiceid}に変更したのだ\n(この音声は無料プランでは混雑時、ずんだもんに切り替わります)"
+        embed.description = f"**{name}** id:{voiceid}に変更したのだ\n(この音声は無料プランでは混雑時、ずんだもんに切り替わります．[プレミアムプラン](https://lenlino.com/?page_id=2510))"
     #print(f"**{name}**")
     if speed is not None:
         if speed.isdecimal() is False:
@@ -2658,8 +2793,21 @@ class YomiageQueue:
 
 
 yomiage_queue = {}
+last_reader_by_guild = {}
+last_texts_by_guild = {}
+
+
+async def _delayed_queue_cleanup(guild_id, delay=10):
+    await asyncio.sleep(delay)
+    if guild_id not in yomiage_queue:
+        last_reader_by_guild.pop(guild_id, None)
+        last_texts_by_guild.pop(guild_id, None)
 
 async def add_yomiage_queue(member, guild, text: str, no_read_name=False):
+    recent = last_texts_by_guild.get(guild.id, [])
+    if len(recent) >= 2 and recent[0] == text and recent[1] == text:
+        return
+    last_texts_by_guild[guild.id] = (recent + [text])[-2:]
     yomiage_queue.setdefault(guild.id, []).append(YomiageQueue(member, guild, text, no_read_name))
     if len(yomiage_queue.get(guild.id, [])) == 1:
         queue = yomiage_queue.get(guild.id, [])[0]
@@ -2696,10 +2844,15 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             return
 
         if await getdatabase(guild.id, "is_readname", False, "guild") and not no_read_name:
-            if await getdatabase(member.guild.id, "is_readsan", False, "guild"):
-                output = member.display_name + "さん " + output
-            else:
-                output = member.display_name + " " + output
+            skip_repeat = await getdatabase(guild.id, "is_skip_repeat_name", True, "guild")
+            is_repeat = skip_repeat and last_reader_by_guild.get(guild.id) == member.id
+            if not is_repeat:
+                if await getdatabase(member.guild.id, "is_readsan", False, "guild"):
+                    output = member.display_name + "さん " + output
+                else:
+                    output = member.display_name + " " + output
+        if not no_read_name:
+            last_reader_by_guild[guild.id] = member.id
 
         true_max_limit = text_limit
         if is_premium:
@@ -2719,12 +2872,28 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         lang = await getdatabase(guild.id, "lang", "ja", "guild")
 
         pattern_voice = "\.v[0-9]*"
+        pattern_pitch = r"\.p-?[0-9]+"
+        pattern_speed = r"\.s[0-9]+"
+        pitch_override = None
+        speed_override = None
         if guild.id in premium_server_list:
 
             if re.search(pattern_voice, text) is not None:
                 cmd = re.search(pattern_voice, text).group()
                 if re.search("[0-9]", cmd) is not None:
                     voice_id = re.sub(r"\D", "", cmd)
+            m_pitch = re.search(pattern_pitch, text)
+            if m_pitch is not None:
+                try:
+                    pitch_override = max(-100, min(100, int(m_pitch.group()[2:])))
+                except ValueError:
+                    pitch_override = None
+            m_speed = re.search(pattern_speed, text)
+            if m_speed is not None:
+                try:
+                    speed_override = max(50, int(m_speed.group()[2:]))
+                except ValueError:
+                    speed_override = None
             '''if re.search(pattern, text) is not None and await getdatabase(guild.id, "is_readurl", True,
                                                                           "guild"):
                 url = re.search(pattern, text).group()
@@ -2738,8 +2907,17 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                             else:
                                 output = re.sub(pattern, "ユーアールエル画像省略", output)'''
 
+        member_voices = await getdatabase(guild.id, "member_voices", {}, "guild") or {}
+        guild_entry = member_voices.get(str(member.id)) if isinstance(member_voices, dict) else None
+        if isinstance(guild_entry, str):
+            guild_entry = {"voice": guild_entry}
+        elif not isinstance(guild_entry, dict):
+            guild_entry = {}
         if voice_id is None:
-            voice_id = await getdatabase(member.id, "voiceid", 0)
+            if guild_entry.get("voice") is not None:
+                voice_id = guild_entry["voice"]
+            else:
+                voice_id = await getdatabase(member.id, "voiceid", 0)
         # サーバー設定でミュートされているボイスIDの場合は、ずんだもん(id:3)に切り替え
         try:
             current_voice_int = int(voice_id)
@@ -2766,6 +2944,8 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         output = re.sub(pattern_emoji, "", output)
         output = re.sub(pattern_aniemoji, "", output)
         output = re.sub(pattern_voice, "", output)
+        output = re.sub(pattern_pitch, "", output)
+        output = re.sub(pattern_speed, "", output)
         output = re.sub(pattern_spoiler, "", output)
         output = re.sub(pattern_codeblock, "コードブロック省略", output)
 
@@ -2814,6 +2994,23 @@ async def yomiage(member, guild, text: str, no_read_name=False):
 
         speed = await getdatabase(member.id, "speed", 100)
         pitch = await getdatabase(member.id, "pitch", 0)
+        if guild_entry.get("speed") is not None:
+            speed = guild_entry["speed"]
+        if guild_entry.get("pitch") is not None:
+            pitch = guild_entry["pitch"]
+        if speed_override is not None:
+            speed = speed_override
+        if pitch_override is not None:
+            pitch = pitch_override
+
+        if await getdatabase(guild.id, "is_queue_speedup", True, "guild"):
+            queue_len = len(yomiage_queue.get(guild.id, []))
+            if queue_len >= 5:
+                try:
+                    base_speed = int(speed)
+                except (ValueError, TypeError):
+                    base_speed = 100
+                speed = min(300, max(base_speed, base_speed + (queue_len - 4) * 20))
 
         wav_list = []
         is_self_gen = len(output_list) > 1
@@ -2822,8 +3019,9 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                 continue
             if gen_text.endswith(".wav"):
                 if gen_text.startswith("global_"):
+                    actual_name = gen_text[len("global_"):]
                     filename = (f"{user_dict_loc}/audio_data"
-                                f"/9686/{gen_text}")
+                                f"/9686/{actual_name}")
                 else:
                     filename = (f"{user_dict_loc}/audio_data"
                                 f"/{guild.id}/{gen_text}")
@@ -2937,6 +3135,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             asyncio.create_task(yomiage(queue.member, queue.guild, queue.text, queue.no_read_name))
         else:
             del yomiage_queue[guild.id]
+            asyncio.create_task(_delayed_queue_cleanup(guild.id))
 
 
 async def replace_mentions_with_names(text, guild):
@@ -2980,16 +3179,13 @@ async def replace_mentions_with_names(text, guild):
 
 
 async def connect_waves(wave_list):
-    bytes_list = []
     if use_lavalink_upload:
-        for wave_dir in wave_list:
-            bytes_list.append(base64.b64encode(wave_dir).decode('utf-8'))
-
+        bytes_list = [base64.b64encode(w).decode('utf-8') for w in wave_list]
     else:
-        for wave_dir in wave_list:
-            async with aiofiles.open(wave_dir,
-                                 mode='rb') as f:
-                bytes_list.append(base64.b64encode(await f.read()).decode('utf-8'))
+        async def _read_b64(path):
+            async with aiofiles.open(path, mode='rb') as f:
+                return base64.b64encode(await f.read()).decode('utf-8')
+        bytes_list = await asyncio.gather(*(_read_b64(p) for p in wave_list))
 
     try:
         headers = {'Content-Type': 'application/json', }
@@ -3571,6 +3767,7 @@ async def init_loop():
     # コグの自動リロードとmain.pyの変更監視を開始
     bot.loop.create_task(watch_cog_changes())
     bot.loop.create_task(watch_main_changes())
+    logger.info("watch_cog_changes, watch_main_changes を開始しました")
 
 
 async def save_customemoji(custom_emoji, kana):
@@ -3605,11 +3802,27 @@ async def updatedict():
                 print(response1)
 
 
-@bot.slash_command(description="辞書に単語を追加するのだ(サーバー個別)", name="adddict")
-async def adddict_local(ctx, surface: discord.Option(input_type=str, description="辞書に登録する単語", required=False),
-                        pronunciation: discord.Option(input_type=str, description="カタカナでの読み方", required=False),
-                        audio_file: discord.Option(discord.Attachment, description="ボイス辞書用音声ファイル(wav, mp3)", required=False),
-                        dict_file: discord.Option(discord.Attachment, description="インポート用辞書ファイル(json)", required=False)):
+@bot.slash_command(name="dict", description="辞書の追加/削除/表示をするのだ(サーバー個別)")
+async def dict_cmd_entry(ctx,
+                         action: discord.Option(str, description="操作", choices=[
+                             discord.OptionChoice(name="追加(add)", value="add"),
+                             discord.OptionChoice(name="削除(remove)", value="remove"),
+                             discord.OptionChoice(name="表示(show)", value="show"),
+                         ]),
+                         surface: discord.Option(input_type=str, description="対象の単語(add/remove時)", required=False),
+                         pronunciation: discord.Option(input_type=str, description="カタカナでの読み方(add時)", required=False),
+                         audio_file: discord.Option(discord.Attachment, description="ボイス辞書用音声ファイル(add時)", required=False),
+                         dict_file: discord.Option(discord.Attachment, description="インポート用辞書ファイル(add時)", required=False)):
+    if action == "remove":
+        await deletedict_local(ctx, surface)
+        return
+    if action == "show":
+        await showdict_local(ctx)
+        return
+    await adddict_local(ctx, surface, pronunciation, audio_file, dict_file)
+
+
+async def adddict_local(ctx, surface, pronunciation, audio_file, dict_file):
     print(surface)
     if dict_file is not None:
         print(dict_file.content_type)
@@ -3764,8 +3977,7 @@ async def adddict_local(ctx, surface: discord.Option(input_type=str, description
     await ctx.respond(embed=embed)
 
 
-@bot.slash_command(description="辞書から単語を削除するのだ(サーバー個別)", name="deletedict")
-async def deletedict_local(ctx, surface: discord.Option(input_type=str, description="辞書から削除する単語")):
+async def deletedict_local(ctx, surface):
     print(surface)
     await delete_private_dict(ctx.guild.id, surface)
     embed = discord.Embed(
@@ -3778,8 +3990,7 @@ async def deletedict_local(ctx, surface: discord.Option(input_type=str, descript
     await ctx.respond(embed=embed)
 
 
-@bot.slash_command(description="辞書の単語を表示するのだ(サーバー個別)", name="showdict")
-async def showdict_local(ctx, ):
+async def showdict_local(ctx):
     embed = discord.Embed(
         title="**Show Dict**",
         description=f"辞書の内容を表示します。",
@@ -3795,9 +4006,31 @@ async def showdict_local(ctx, ):
     await ctx.respond(embed=embed, file=json_file)
 
 
-@bot.slash_command(description="ミュートを設定するのだ", default_member_permissions=discord.Permissions.manage_guild)
+@bot.slash_command(name="mute", description="読み上げミュートの設定/解除/一覧(manage_messages権限のみ)",
+                   default_member_permissions=discord.Permissions(manage_messages=True))
 @discord.commands.default_permissions(manage_messages=True)
-async def mute(ctx, target: discord.Option(discord.Member)):
+async def mute_cmd_entry(ctx,
+                         action: discord.Option(str, description="操作", choices=[
+                             discord.OptionChoice(name="ミュート(add)", value="add"),
+                             discord.OptionChoice(name="解除(remove)", value="remove"),
+                             discord.OptionChoice(name="一覧(list)", value="list"),
+                         ]),
+                         target: discord.Option(discord.Member, description="対象メンバー(add/remove時)", required=False)):
+    if action == "list":
+        await showmute(ctx)
+        return
+    if target is None:
+        embed = discord.Embed(title="Error", description="targetを指定してください。",
+                              color=discord.Colour.brand_red())
+        await ctx.respond(embed=embed)
+        return
+    if action == "remove":
+        await unmute(ctx, target)
+        return
+    await mute(ctx, target)
+
+
+async def mute(ctx, target):
     mute_list = await getdatabase(ctx.guild.id, "mute_list", [], "guild")
     if target.id in mute_list:
         embed = discord.Embed(
@@ -3825,9 +4058,7 @@ async def mute(ctx, target: discord.Option(discord.Member)):
     await ctx.respond(embed=embed)
 
 
-@bot.slash_command(description="ミュートを解除するのだ", default_member_permissions=discord.Permissions.manage_guild)
-@discord.commands.default_permissions(manage_messages=True)
-async def unmute(ctx, target: discord.Option(discord.Member)):
+async def unmute(ctx, target):
     mute_list = await getdatabase(ctx.guild.id, "mute_list", [], "guild")
     if target.id not in mute_list:
         embed = discord.Embed(
@@ -3847,8 +4078,6 @@ async def unmute(ctx, target: discord.Option(discord.Member)):
     await ctx.respond(embed=embed)
 
 
-@bot.command(description="ミュート一覧を表示するのだ", default_member_permissions=discord.Permissions.manage_guild)
-@discord.commands.default_permissions(manage_messages=True)
 async def showmute(ctx):
     mute_list = await getdatabase(ctx.guild.id, "mute_list", [], "guild")
     list_text = ""
@@ -4068,7 +4297,7 @@ async def connect_websocket():
                     title="**緊急地震速報（警報）**",
                     description=f"{prefs_str}\n\n以上の地域で震度4以上の揺れが予測されます\n\n"
                                 f"[Yahoo地震情報](https://typhoon.yahoo.co.jp/weather/jp/earthquake/) | "
-                                f"[Youtube地震情報配信](https://www.youtube.com/watch?v=ouknEz8s80s)",
+                                f"[Youtube地震情報配信](https://www.youtube.com/watch?v=HXGANE2pRrA)",
                     color=discord.Colour.brand_red(),
                 )
                 embed.set_thumbnail(url="https://free-icons.net/wp-content/uploads/2020/09/symbol018.png")
