@@ -3610,7 +3610,7 @@ async def status_update_loop():
                 remove_premium_guild_dict(str(guild.id))
                 continue
 
-            if guild.id not in premium_server_list:
+            if await is_premium_check(guild.id, 100) is False:
                 continue
             _ts = time.perf_counter()
             setting_json = await get_guild_setting(guild.id)
