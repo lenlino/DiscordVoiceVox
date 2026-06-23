@@ -4467,12 +4467,13 @@ async def is_premium_check(id, value):
         is_check = premium_guild_dict[id] >= value
 
     if is_check is False and id not in non_premium_user:
-        non_premium_user.append(id)
         guild_premium_user_id = int(await getdatabase(id, "premium_user", 0, "guild"))
         if guild_premium_user_id != 0:
             is_check = await is_premium_check(guild_premium_user_id, value)
             if is_check is True:
                 add_premium_user(id, value)
+        else:
+            non_premium_user.append(id)
 
     if is_check is False and id in premium_guild_dict:
         if premium_guild_dict.get(id) >= value:
@@ -4569,6 +4570,7 @@ async def auto_restart():
         await stop("ずんだもんの定期再起動を行います（毎週水曜日9:00）")
 
 if __name__ == '__main__':
+    sys.modules['main'] = sys.modules['__main__']
     bot.loop.create_task(init_loop())
     bot.load_extension('commands.SetAlarmCommand')
     bot.run(token)
