@@ -19,6 +19,7 @@ import uuid
 import io
 import wave
 from dataclasses import dataclass
+from collections import OrderedDict
 
 import aiofiles as aiofiles
 import aiohttp
@@ -75,7 +76,8 @@ is_use_gpu_server_time = False
 
 # グローバル変数の初期化は init_bot_state() で行われ、bot.* 属性として保存される
 # 後方互換性のため、以下でエイリアスを作成（botインスタンス作成後に設定）
-_private_dict_cache = {}
+_private_dict_cache = OrderedDict()
+_PRIVATE_DICT_CACHE_MAX = 10000
 
 text_limit = 50
 text_limit_100 = 100
@@ -197,8 +199,6 @@ def init_bot_state():
         bot.premium_server_list_500 = []
         bot.premium_server_list_1000 = []
         bot.premium_guild_dict = {}
-        bot.voice_cache_dict = {}
-        bot.voice_cache_counter_dict = {}
         bot.generating_guild_set = set()
         bot.voice_generate_time_list = []
         bot.voice_generate_time_list_p = []
@@ -227,8 +227,6 @@ premium_server_list_300 = bot.premium_server_list_300
 premium_server_list_500 = bot.premium_server_list_500
 premium_server_list_1000 = bot.premium_server_list_1000
 premium_guild_dict = bot.premium_guild_dict
-voice_cache_dict = bot.voice_cache_dict
-voice_cache_counter_dict = bot.voice_cache_counter_dict
 generating_guild_set = bot.generating_guild_set
 voice_generate_time_list = bot.voice_generate_time_list
 voice_generate_time_list_p = bot.voice_generate_time_list_p
@@ -2213,14 +2211,6 @@ async def reinitialize():
     bot.default_gpu_conn = aiohttp.TCPConnector(limit=20, limit_per_host=5)
     bot.premium_conn = aiohttp.TCPConnector(limit=20, limit_per_host=5)
 
-    # ボイスキャッシュ読み込み
-    try:
-        with open(os.path.dirname(os.path.abspath(__file__)) + f"/cache/voice_cache{_CLUSTER_SUFFIX}.json", "r", encoding='utf-8') as f:
-            bot.voice_cache_dict = json.load(f)
-            logger.info("ボイスキャッシュを読み込みました")
-    except Exception as e:
-        logger.error(f"ボイスキャッシュ読み込みエラー: {e}")
-
     # データベース接続
     bot.pool = await get_connection()
     await initdatabase()
@@ -2584,23 +2574,6 @@ async def text2wav(text, voiceid, is_premium: bool, speed="100", pitch="0", guil
             bot.voiceapi_counter += 1
 
     filename = None
-    '''if voice_cache_dict.get(voiceid, {}).get(text):
-        path = os.path.dirname(os.path.abspath(__file__)) + "/" + voice_cache_dict.get(voiceid).get(text)
-        if use_lavalink_upload:
-            async with aiofiles.open(path,
-                                     mode='rb') as f:
-                return await f.read()
-        else:
-            return path
-    if voice_cache_counter_dict.get(voiceid, None) is None:
-        voice_cache_counter_dict[voiceid] = {}
-        voice_cache_dict[voiceid] = {}
-    voice_cache_counter_dict[voiceid][text] = voice_cache_counter_dict.get(voiceid, {}).get(text, 0) + 1
-
-    if voice_cache_counter_dict[voiceid][text] > 50:
-        filename = f"cache/{text}-{voiceid}.wav"
-        voice_cache_dict[voiceid][text] = filename
-        is_self_upload = True'''
     return await generate_wav(text, voiceid, filename, target_host=target_host,
                               is_premium=is_premium, speed=speed, pitch=pitch, guild_id=guild_id, is_self_upload=is_self_upload)
 
@@ -3781,11 +3754,6 @@ async def add_premium_lopp(user_id, amount):
 
 @tasks.loop(hours=24)
 async def dict_and_cache_loop():
-    print(voice_cache_dict)
-    with open(os.path.dirname(os.path.abspath(__file__)) + "/cache/" + f"voice_cache{_CLUSTER_SUFFIX}.json", 'wt',
-              encoding='utf-8') as f:
-        json.dump(voice_cache_dict, f, ensure_ascii=False)
-    voice_cache_counter_dict.clear()
     await bot.wait_until_ready()
     global GLOBAL_DICT_CHECK
     if GLOBAL_DICT_CHECK is True:
@@ -3945,11 +3913,6 @@ async def init_loop():
     bot.default_gpu_conn = aiohttp.TCPConnector(limit=20, limit_per_host=5)
     bot.premium_conn = aiohttp.TCPConnector(limit=20, limit_per_host=5)
 
-    try:
-        with open(os.path.dirname(os.path.abspath(__file__)) + f"/cache/voice_cache{_CLUSTER_SUFFIX}.json", "r", encoding='utf-8') as f:
-            bot.voice_cache_dict = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        bot.voice_cache_dict = {}
     print("起動")
 
     bot.pool = await get_connection()
@@ -4317,6 +4280,10 @@ async def henkan_private_dict(server_id, source, is_premium=False):
                 _private_dict_cache[server_id] = json.load(f)
         except:
             _private_dict_cache[server_id] = {}
+        if len(_private_dict_cache) > _PRIVATE_DICT_CACHE_MAX:
+            _private_dict_cache.popitem(last=False)
+    else:
+        _private_dict_cache.move_to_end(server_id)
     json_data = _private_dict_cache[server_id]
     source = toLowerCase(source)
     dict_data = sorted(json_data.keys(), key=len)
@@ -4389,6 +4356,7 @@ async def update_private_dict(server_id, source, kana):
 
 
 async def delete_private_dict(server_id, source):
+    _private_dict_cache.pop(server_id, None)
     try:
         with open(user_dict_loc + "/" + f"{server_id}.json", "r",
                   encoding='utf-8') as f:
