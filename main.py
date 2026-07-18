@@ -2452,12 +2452,20 @@ async def _pool_init(conn):
     await conn.execute("SET statement_timeout = '10s'")
 
 
-async def get_connection():
-    return await asyncpg.create_pool('postgresql://{user}:{password}@{host}:{port}/{dbname}'
-    .format(
+async def get_connection(retries=6):
+    dsn = 'postgresql://{user}:{password}@{host}:{port}/{dbname}'.format(
         user=DB_USER, password=DB_PASS, host=DB_HOST, port=DB_PORT, dbname=DB_NAME
-    ), min_size=5, max_size=20, command_timeout=10,
-    setup=_pool_init)
+    )
+    for attempt in range(retries):
+        try:
+            return await asyncpg.create_pool(
+                dsn, min_size=0, max_size=20, command_timeout=10, setup=_pool_init
+            )
+        except (asyncpg.TooManyConnectionsError, ConnectionError, OSError, asyncio.TimeoutError) as e:
+            wait = min(2 ** attempt, 30) + random.uniform(0, 1.5)
+            logger.warning(f"pool作成失敗 ({attempt + 1}/{retries}): {e} — {wait:.1f}秒後に再試行")
+            await asyncio.sleep(wait)
+    raise RuntimeError("DBプール作成に失敗しました")
 
 
 _JSONB_COLUMNS = {"auto_join", "member_voices"}
