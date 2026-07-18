@@ -560,6 +560,7 @@ async def initdatabase():
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readsan boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_joinnotice boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_eew boolean;')
+        await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readforward boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_translate boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readmention boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_skip_repeat_name boolean;')
@@ -1292,6 +1293,7 @@ async def server_set(ctx, key: discord.Option(str, choices=[
     discord.OptionChoice(name="さん付け(readsan)", value="readsan"),
     discord.OptionChoice(name="参加退出表示(joinnotice)", value="joinnotice"),
     discord.OptionChoice(name="緊急地震速報通知(eew)", value="eew"),
+    discord.OptionChoice(name="転送メッセージの読み上げ(readforward)", value="readforward"),
     discord.OptionChoice(name="翻訳(translate)", value="translate"),
     discord.OptionChoice(name="メンションの読み上げ(readmention)", value="readmention"),
     discord.OptionChoice(name="ボイスミュート(mutevoice)", value="mute-voice"),
@@ -1574,6 +1576,25 @@ async def server_set(ctx, key: discord.Option(str, choices=[
         elif value == "on":
             embed.description = "緊急地震速報通知をオンにしました"
             await setdatabase(ctx.guild.id, "is_eew", True, "guild")
+        else:
+            embed.title = "Error"
+            embed.description = "on/offをvalueに指定してください。"
+            embed.color = discord.Colour.brand_red()
+        await ctx.send_followup(embed=embed)
+    elif key == "readforward":
+        embed = discord.Embed(
+            title="Changed readforward",
+            color=discord.Colour.brand_green()
+        )
+        if value is None:
+            embed.description = "転送メッセージの読み上げをオンにしました（デフォルト）"
+            await setdatabase(ctx.guild.id, "is_readforward", True, "guild")
+        elif value == "off":
+            embed.description = "転送メッセージの読み上げをオフにしました"
+            await setdatabase(ctx.guild.id, "is_readforward", False, "guild")
+        elif value == "on":
+            embed.description = "転送メッセージの読み上げをオンにしました"
+            await setdatabase(ctx.guild.id, "is_readforward", True, "guild")
         else:
             embed.title = "Error"
             embed.description = "on/offをvalueに指定してください。"
@@ -2842,6 +2863,17 @@ async def on_message(message: discord.Message):
             output = "テンプファイル" + output
         if len(message.stickers) >= 1:
             output = output + " ".join(sticker.name for sticker in message.stickers)
+        if message.snapshots and await getdatabase(message.guild.id, "is_readforward", True, "guild"):
+            for snap in message.snapshots:
+                fwd = snap.message
+                if fwd is None:
+                    continue
+                part = fwd.content
+                if len(fwd.attachments) >= 1:
+                    part = "テンプファイル" + part
+                if len(fwd.stickers) >= 1:
+                    part = part + " ".join(sticker.name for sticker in fwd.stickers)
+                output = f"{output} テンソウ {part}".strip() if output else f"転送 {part}"
         await add_yomiage_queue(message.author, message.guild, output)
 
 @bot.event
