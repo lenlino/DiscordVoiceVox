@@ -4115,7 +4115,7 @@ async def adddict_local(ctx, surface, pronunciation, audio_file, dict_file):
 
     # 音声ファイル辞書登録
     if audio_file is not None:
-        if await is_premium_check(ctx.author.id, 100) is False:
+        if (await is_premium_check(ctx.author.id, 100) or await is_premium_check(ctx.guild.id, 100)) is False:
             embed = discord.Embed(
                 title="**Error**",
                 description=f"ボイス辞書はプレミアム限定機能です。",
