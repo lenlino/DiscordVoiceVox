@@ -561,6 +561,8 @@ async def initdatabase():
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_joinnotice boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_eew boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readforward boolean;')
+        await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS join_text text;')
+        await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS leave_text text;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_translate boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readmention boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_skip_repeat_name boolean;')
@@ -1294,6 +1296,8 @@ async def server_set(ctx, key: discord.Option(str, choices=[
     discord.OptionChoice(name="参加退出表示(joinnotice)", value="joinnotice"),
     discord.OptionChoice(name="緊急地震速報通知(eew)", value="eew"),
     discord.OptionChoice(name="転送メッセージの読み上げ(readforward)", value="readforward"),
+    discord.OptionChoice(name="入室読み上げ文(join_text)", value="join_text"),
+    discord.OptionChoice(name="退出読み上げ文(leave_text)", value="leave_text"),
     discord.OptionChoice(name="翻訳(translate)", value="translate"),
     discord.OptionChoice(name="メンションの読み上げ(readmention)", value="readmention"),
     discord.OptionChoice(name="ボイスミュート(mutevoice)", value="mute-voice"),
@@ -1599,6 +1603,23 @@ async def server_set(ctx, key: discord.Option(str, choices=[
             embed.title = "Error"
             embed.description = "on/offをvalueに指定してください。"
             embed.color = discord.Colour.brand_red()
+        await ctx.send_followup(embed=embed)
+    elif key in ("join_text", "leave_text"):
+        label = "入室" if key == "join_text" else "退出"
+        default_text = "&nameが入室したのだ、" if key == "join_text" else "&nameが退出したのだ、"
+        embed = discord.Embed(
+            title=f"Changed {key}",
+            color=discord.Colour.brand_green()
+        )
+        if value is None:
+            current = await getdatabase(ctx.guild.id, key, default_text, "guild")
+            embed.description = f"現在の{label}読み上げ文: 「{current}」\n\n変更するには value に文章を指定してください（名前は &name で差し込めます）。off でデフォルトに戻します。"
+        elif value == "off":
+            await setdatabase(ctx.guild.id, key, None, "guild")
+            embed.description = f"{label}読み上げ文をデフォルト（「{default_text}」）に戻しました。"
+        else:
+            await setdatabase(ctx.guild.id, key, value, "guild")
+            embed.description = f"{label}読み上げ文を「{value}」に設定しました。"
         await ctx.send_followup(embed=embed)
     elif key == "mute-voice":
         # サーバー内で使用禁止にするボイスIDの設定
@@ -3584,9 +3605,11 @@ async def on_voice_state_update(member, before, after):
         if await getdatabase(member.guild.id, "is_readsan", False, "guild"):
             name += "さん"
         if after.channel is not None and after.channel.id == voicestate.channel.id:
-            await add_yomiage_queue(member, member.guild, f"{name}が入室したのだ、", no_read_name=True)
+            tmpl = await getdatabase(member.guild.id, "join_text", "&nameが入室したのだ、", "guild")
+            await add_yomiage_queue(member, member.guild, tmpl.replace("&name", name), no_read_name=True)
         elif before.channel is not None and before.channel.id == voicestate.channel.id:
-            await add_yomiage_queue(member, member.guild, f"{name}が退出したのだ、", no_read_name=True)
+            tmpl = await getdatabase(member.guild.id, "leave_text", "&nameが退出したのだ、", "guild")
+            await add_yomiage_queue(member, member.guild, tmpl.replace("&name", name), no_read_name=True)
 
 
 # ボットのみか確認
