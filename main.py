@@ -560,6 +560,9 @@ async def initdatabase():
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readsan boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_joinnotice boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_eew boolean;')
+        await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readforward boolean;')
+        await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS join_text text;')
+        await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS leave_text text;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_translate boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_readmention boolean;')
         await conn.execute('ALTER TABLE guild ADD COLUMN IF NOT EXISTS is_skip_repeat_name boolean;')
@@ -1292,6 +1295,9 @@ async def server_set(ctx, key: discord.Option(str, choices=[
     discord.OptionChoice(name="さん付け(readsan)", value="readsan"),
     discord.OptionChoice(name="参加退出表示(joinnotice)", value="joinnotice"),
     discord.OptionChoice(name="緊急地震速報通知(eew)", value="eew"),
+    discord.OptionChoice(name="転送メッセージの読み上げ(readforward)", value="readforward"),
+    discord.OptionChoice(name="入室読み上げ文(join_text)", value="join_text"),
+    discord.OptionChoice(name="退出読み上げ文(leave_text)", value="leave_text"),
     discord.OptionChoice(name="翻訳(translate)", value="translate"),
     discord.OptionChoice(name="メンションの読み上げ(readmention)", value="readmention"),
     discord.OptionChoice(name="ボイスミュート(mutevoice)", value="mute-voice"),
@@ -1578,6 +1584,42 @@ async def server_set(ctx, key: discord.Option(str, choices=[
             embed.title = "Error"
             embed.description = "on/offをvalueに指定してください。"
             embed.color = discord.Colour.brand_red()
+        await ctx.send_followup(embed=embed)
+    elif key == "readforward":
+        embed = discord.Embed(
+            title="Changed readforward",
+            color=discord.Colour.brand_green()
+        )
+        if value is None:
+            embed.description = "転送メッセージの読み上げをオンにしました（デフォルト）"
+            await setdatabase(ctx.guild.id, "is_readforward", True, "guild")
+        elif value == "off":
+            embed.description = "転送メッセージの読み上げをオフにしました"
+            await setdatabase(ctx.guild.id, "is_readforward", False, "guild")
+        elif value == "on":
+            embed.description = "転送メッセージの読み上げをオンにしました"
+            await setdatabase(ctx.guild.id, "is_readforward", True, "guild")
+        else:
+            embed.title = "Error"
+            embed.description = "on/offをvalueに指定してください。"
+            embed.color = discord.Colour.brand_red()
+        await ctx.send_followup(embed=embed)
+    elif key in ("join_text", "leave_text"):
+        label = "入室" if key == "join_text" else "退出"
+        default_text = "&nameが入室したのだ、" if key == "join_text" else "&nameが退出したのだ、"
+        embed = discord.Embed(
+            title=f"Changed {key}",
+            color=discord.Colour.brand_green()
+        )
+        if value is None:
+            current = await getdatabase(ctx.guild.id, key, default_text, "guild")
+            embed.description = f"現在の{label}読み上げ文: 「{current}」\n\n変更するには value に文章を指定してください（名前は &name で差し込めます）。off でデフォルトに戻します。"
+        elif value == "off":
+            await setdatabase(ctx.guild.id, key, None, "guild")
+            embed.description = f"{label}読み上げ文をデフォルト（「{default_text}」）に戻しました。"
+        else:
+            await setdatabase(ctx.guild.id, key, value, "guild")
+            embed.description = f"{label}読み上げ文を「{value}」に設定しました。"
         await ctx.send_followup(embed=embed)
     elif key == "mute-voice":
         # サーバー内で使用禁止にするボイスIDの設定
@@ -2452,12 +2494,20 @@ async def _pool_init(conn):
     await conn.execute("SET statement_timeout = '10s'")
 
 
-async def get_connection():
-    return await asyncpg.create_pool('postgresql://{user}:{password}@{host}:{port}/{dbname}'
-    .format(
+async def get_connection(retries=6):
+    dsn = 'postgresql://{user}:{password}@{host}:{port}/{dbname}'.format(
         user=DB_USER, password=DB_PASS, host=DB_HOST, port=DB_PORT, dbname=DB_NAME
-    ), min_size=5, max_size=20, command_timeout=10,
-    setup=_pool_init)
+    )
+    for attempt in range(retries):
+        try:
+            return await asyncpg.create_pool(
+                dsn, min_size=0, max_size=20, command_timeout=10, setup=_pool_init
+            )
+        except (asyncpg.TooManyConnectionsError, ConnectionError, OSError, asyncio.TimeoutError) as e:
+            wait = min(2 ** attempt, 30) + random.uniform(0, 1.5)
+            logger.warning(f"pool作成失敗 ({attempt + 1}/{retries}): {e} — {wait:.1f}秒後に再試行")
+            await asyncio.sleep(wait)
+    raise RuntimeError("DBプール作成に失敗しました")
 
 
 _JSONB_COLUMNS = {"auto_join", "member_voices"}
@@ -2834,6 +2884,17 @@ async def on_message(message: discord.Message):
             output = "テンプファイル" + output
         if len(message.stickers) >= 1:
             output = output + " ".join(sticker.name for sticker in message.stickers)
+        if message.snapshots and await getdatabase(message.guild.id, "is_readforward", True, "guild"):
+            for snap in message.snapshots:
+                fwd = snap.message
+                if fwd is None:
+                    continue
+                part = fwd.content
+                if len(fwd.attachments) >= 1:
+                    part = "テンプファイル" + part
+                if len(fwd.stickers) >= 1:
+                    part = part + " ".join(sticker.name for sticker in fwd.stickers)
+                output = f"{output} テンソウ {part}".strip() if output else f"転送 {part}"
         await add_yomiage_queue(message.author, message.guild, output)
 
 @bot.event
@@ -3544,9 +3605,11 @@ async def on_voice_state_update(member, before, after):
         if await getdatabase(member.guild.id, "is_readsan", False, "guild"):
             name += "さん"
         if after.channel is not None and after.channel.id == voicestate.channel.id:
-            await add_yomiage_queue(member, member.guild, f"{name}が入室したのだ、", no_read_name=True)
+            tmpl = await getdatabase(member.guild.id, "join_text", "&nameが入室したのだ、", "guild")
+            await add_yomiage_queue(member, member.guild, tmpl.replace("&name", name), no_read_name=True)
         elif before.channel is not None and before.channel.id == voicestate.channel.id:
-            await add_yomiage_queue(member, member.guild, f"{name}が退出したのだ、", no_read_name=True)
+            tmpl = await getdatabase(member.guild.id, "leave_text", "&nameが退出したのだ、", "guild")
+            await add_yomiage_queue(member, member.guild, tmpl.replace("&name", name), no_read_name=True)
 
 
 # ボットのみか確認
@@ -4052,7 +4115,7 @@ async def adddict_local(ctx, surface, pronunciation, audio_file, dict_file):
 
     # 音声ファイル辞書登録
     if audio_file is not None:
-        if await is_premium_check(ctx.author.id, 100) is False:
+        if (await is_premium_check(ctx.author.id, 100) or await is_premium_check(ctx.guild.id, 100)) is False:
             embed = discord.Embed(
                 title="**Error**",
                 description=f"ボイス辞書はプレミアム限定機能です。",
