@@ -34,7 +34,6 @@ import websockets
 from aiohttp import FormData, ClientTimeout
 from lavalink import ClientError, NodeDisconnectedEvent, NodeReadyEvent
 from requests import ReadTimeout
-import ko_mecab_shim  # noqa: F401  ko2kana より先に読む必要がある
 from ko2kana import toKana
 from dotenv import load_dotenv
 import translators as ts
