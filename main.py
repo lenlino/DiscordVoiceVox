@@ -46,6 +46,7 @@ import romajitable
 import unicodedata
 from LavalinkClient import LavalinkWavelink, LavalinkPlayer
 from fast_sharded_bot import FastShardedBot
+import cluster_signal
 
 load_dotenv()
 
@@ -116,6 +117,8 @@ EEW_WEBHOOK_URL = os.getenv("EEW_WEBHOOK_URL", None)
 CLUSTER_ID = int(os.getenv("CLUSTER_ID", "0"))
 CLUSTER_COUNT = int(os.getenv("CLUSTER_COUNT", "1"))
 _CLUSTER_SUFFIX = f"-c{CLUSTER_ID}" if CLUSTER_COUNT > 1 else ""
+# 起動より前に発行された停止シグナルを無視するための基準時刻
+_PROCESS_STARTED_AT = time.time()
 
 # アップロード音声の最大サイズ。Discord無料枠と同じ 10MB(10 MiB)。
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024
@@ -2048,9 +2051,10 @@ async def activate(ctx):
 async def stop_bot(ctx, message: discord.Option(input_type=str, description="カスタムメッセージ",
                                                 default=None)):
     await ctx.defer()
-    await stop(message)
+    await request_cluster_stop(message)
     await ctx.send_followup("送信しました。")
-    await bot.close()
+    # stop() の中で bot.close() と sys.exit() まで行う。自クラスタは最後に落とす。
+    await stop(message)
 
 
 @bot.slash_command(description="コグをリロードするのだ(modonly)", guild_ids=ManagerGuilds, name="reload")
@@ -2157,6 +2161,19 @@ async def stop(message=None):
     await broadcast(channels, embed)
     await bot.close()
     sys.exit()
+
+
+async def request_cluster_stop(message=None):
+    """全クラスタに停止シグナルを書き込む。単一プロセス構成では何もしない。"""
+    if CLUSTER_COUNT <= 1:
+        return
+    path = cluster_signal.signal_path(os.path.dirname(os.path.abspath(__file__)))
+    try:
+        with open(path, "wt", encoding="utf-8") as f:
+            json.dump(cluster_signal.build_signal(message, CLUSTER_ID), f, ensure_ascii=False)
+        logger.warning(f"全クラスタへ停止シグナルを送信しました: {path}")
+    except OSError as e:
+        logger.error(f"停止シグナルの書き込みに失敗: {e}")
 
 
 async def restart(message=None):
@@ -3971,6 +3988,30 @@ async def watch_main_changes():
         await asyncio.sleep(0.1)
 
 
+async def watch_stop_signal():
+    """他クラスタからの停止シグナルを監視して自分も停止する"""
+    path = cluster_signal.signal_path(os.path.dirname(os.path.abspath(__file__)))
+    if not os.path.exists(path):
+        # awatch は監視対象が無いと開始できないので空で作る。
+        # issued_at を持たないため、これを検知した他クラスタが誤停止することはない。
+        with open(path, "wt", encoding="utf-8") as f:
+            json.dump({}, f)
+    logger.info(f"停止シグナルの監視を開始: {path}")
+
+    async for _ in awatch(path):
+        try:
+            with open(path, encoding="utf-8") as f:
+                payload = json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            logger.warning(f"停止シグナルの読み込みに失敗: {e}")
+            continue
+        if not cluster_signal.should_stop(payload, CLUSTER_ID, _PROCESS_STARTED_AT):
+            continue
+        logger.warning(f"停止シグナル受信 (発行元 cluster {payload.get('issued_by')})")
+        await stop(payload.get("message"))
+        break
+
+
 @tasks.loop(minutes=1, count=1)
 async def init_loop():
     # 遅いコールバック検出（イベントループブロックの犯人特定用）
@@ -4006,6 +4047,11 @@ async def init_loop():
     bot.loop.create_task(watch_cog_changes())
     bot.loop.create_task(watch_main_changes())
     logger.info("watch_cog_changes, watch_main_changes を開始しました")
+
+    # 複数クラスタ構成のときだけ、他クラスタからの停止シグナルを監視する
+    if CLUSTER_COUNT > 1:
+        bot.loop.create_task(watch_stop_signal())
+        logger.info("watch_stop_signal を開始しました")
 
 
 async def save_customemoji(custom_emoji, kana):
