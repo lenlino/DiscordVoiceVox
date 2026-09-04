@@ -25,6 +25,7 @@ import aiofiles as aiofiles
 import aiohttp
 import asyncpg as asyncpg
 import discord
+import discord.voice  # discord/__init__.py は voice を import しないので明示的に読む
 from discord import AutocompleteContext, OptionChoice, VoiceChannel
 from discord.ext import tasks, pages
 import lavalink
@@ -33,6 +34,7 @@ import websockets
 from aiohttp import FormData, ClientTimeout
 from lavalink import ClientError, NodeDisconnectedEvent, NodeReadyEvent
 from requests import ReadTimeout
+import ko_mecab_shim  # noqa: F401  ko2kana より先に読む必要がある
 from ko2kana import toKana
 from dotenv import load_dotenv
 import translators as ts
@@ -175,7 +177,12 @@ member_cache_flags = discord.MemberCacheFlags.from_intents(intents=intents)
 async def create_session():
     return aiohttp.TCPConnector(limit=0)
 
-aiohttp_client_session = asyncio.get_event_loop().run_until_complete(create_session())
+# Python 3.14 で asyncio.get_event_loop() の暗黙のループ生成が廃止されたため明示的に作る。
+# ここで set_event_loop しておくと py-cord の Client.__init__ が同じループを拾うので、
+# TCPConnector がバインドするループと bot.run() が回すループが一致する。
+_main_loop = asyncio.new_event_loop()
+asyncio.set_event_loop(_main_loop)
+aiohttp_client_session = _main_loop.run_until_complete(create_session())
 
 # TOTAL_SHARDS で全シャード数を固定(未設定なら従来通りDiscordから自動取得)。
 # クラスタ間で必ず同じ値にすること。テスト時は小さい値(例4)を指定可能。
@@ -236,7 +243,7 @@ non_premium_user = bot.non_premium_user
 voice_choices = bot.voice_choices
 yomiage_queue = bot.yomiage_queue
 
-class LavalinkVoiceClient(discord.VoiceProtocol):
+class LavalinkVoiceClient(discord.voice.VoiceProtocol):
     """
     This is the preferred way to handle external voice sending
     This client will be created via a cls in the connect method of the channel
@@ -536,7 +543,7 @@ async def connect_nodes():
         )
     print(f"Node count: {len(bot.lavalink.nodes)}")
 
-asyncio.get_event_loop().set_exception_handler(asyncio_exception_handler)
+_main_loop.set_exception_handler(asyncio_exception_handler)
 
 
 async def initdatabase():
@@ -2972,11 +2979,11 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         )
         if member.id in (row_get(g_row, "mute_list", []) or []):
             return
-        pattern = "https?://[\w/:%#\$&\?\(\)~\.=\+\-@]+"
-        pattern_emoji = "\<:.+?\>"
-        pattern_aniemoji = "\<a.+?\>"
-        pattern_mension = "\<@.+?\>"
-        pattern_spoiler = "\|\|.*?\|\|"
+        pattern = r"https?://[\w/:%#\$&\?\(\)~\.=\+\-@]+"
+        pattern_emoji = r"\<:.+?\>"
+        pattern_aniemoji = r"\<a.+?\>"
+        pattern_mension = r"\<@.+?\>"
+        pattern_spoiler = r"\|\|.*?\|\|"
         pattern_codeblock = "```.*?```"
         voice_id = None
         is_premium = guild.id in premium_server_list
@@ -3016,7 +3023,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
 
         lang = row_get(g_row, "lang", "ja")
 
-        pattern_voice = "\.v[0-9]*"
+        pattern_voice = r"\.v[0-9]*"
         pattern_pitch = r"\.p-?[0-9]+"
         pattern_speed = r"\.s[0-9]+"
         pitch_override = None
@@ -3596,7 +3603,7 @@ async def on_voice_state_update(member, before, after):
     if await getdatabase(member.guild.id, "is_readjoin", False, "guild"):
         if after.channel is not None and before.channel is not None and after.channel.id == before.channel.id:
             return
-        pattern_emoji = "\<.+?\>"
+        pattern_emoji = r"\<.+?\>"
         name = member.display_name
         name = await henkan_private_dict(member.guild.id, name)
         name = await henkan_private_dict(9686, name)
