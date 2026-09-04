@@ -47,6 +47,7 @@ import unicodedata
 from LavalinkClient import LavalinkWavelink, LavalinkPlayer
 from fast_sharded_bot import FastShardedBot
 import cluster_signal
+import server_set_meta
 
 load_dotenv()
 
@@ -1109,6 +1110,89 @@ def remove_premium_guild_dict(id: str):
     premium_guild_dict.pop(id, None)
 
 
+def _voice_name_by_id(voice_id):
+    """ボイスIDから "話者(スタイル)" を引く。見つからなければ空文字。"""
+    for speaker in voice_id_list:
+        for style in speaker["styles"]:
+            if str(style["id"]) == str(voice_id):
+                return f"{speaker['name']}({style['name']})"
+    return ""
+
+
+def _voice_id_from_choice(text):
+    """voice_choices の "話者(スタイル) id:3" から 3 を取り出す。"""
+    m = re.search(r"id\s*:\s*(\d+)\s*$", str(text))
+    return m.group(1) if m else None
+
+
+async def _get_user_setting(ctx: AutocompleteContext, column, default):
+    """/set はユーザー設定なので voice テーブルを引く。char(n) のパディングを除く。"""
+    raw = await getdatabase(ctx.interaction.user.id, column, default)
+    return str(raw if raw is not None else default).strip()
+
+
+async def _set_voice_choices(ctx: AutocompleteContext):
+    choices = []
+    current_id = None
+    if not ctx.value:
+        current_id = await _get_user_setting(ctx, "voiceid", "3")
+        name = _voice_name_by_id(current_id) or f"id:{current_id}"
+        choices.append(OptionChoice(name=f"現在の設定: {name}"[:100], value=current_id))
+    query = str(ctx.value or "").lower()
+    for choice in voice_choices:
+        text = str(choice)
+        if query and query not in text.lower():
+            continue
+        voice_id = _voice_id_from_choice(text)
+        if voice_id is None or voice_id == current_id:
+            continue
+        choices.append(OptionChoice(name=text[:100], value=voice_id))
+        if len(choices) >= 25:
+            break
+    return choices[:25]
+
+
+async def _set_number_choices(ctx: AutocompleteContext, key):
+    """speed / pitch は現在値と既定値だけ出す。"""
+    if ctx.value:
+        return []
+    default = "100" if key == "speed" else "0"
+    current = await _get_user_setting(ctx, key, default)
+    choices = [OptionChoice(name=f"現在の設定: {current}", value=current)]
+    if current != default:
+        choices.append(OptionChoice(name=f"既定値: {default}", value=default))
+    return choices
+
+
+async def _set_premium_guild_choices(ctx: AutocompleteContext, key):
+    delete_choice = OptionChoice(name="delete (このスロットのプレミアム設定を解除)", value="delete")
+    if ctx.value:
+        return [delete_choice] if "delete".startswith(str(ctx.value).lower()) else []
+    current = await _get_user_setting(ctx, key, "0")
+    if current in ("", "0"):
+        label = "未設定"
+    else:
+        # get_guild はこのクラスタ担当のサーバーしか返さない。引けなければIDのみ表示する
+        guild = bot.get_guild(int(current)) if current.isdecimal() else None
+        label = f"{guild.name} (id:{current})" if guild else f"id:{current}"
+    return [OptionChoice(name=f"現在の設定: {label}"[:100], value=current or "0"), delete_choice]
+
+
+async def set_value_autocomplete(ctx: AutocompleteContext):
+    """/set の value 候補。未入力のときは先頭に現在の設定を出す。"""
+    key = ctx.options.get("key")
+    try:
+        if key == "voice":
+            return await _set_voice_choices(ctx)
+        if key in ("speed", "pitch"):
+            return await _set_number_choices(ctx, key)
+        if key in ("premium_guild1", "premium_guild2", "premium_guild3"):
+            return await _set_premium_guild_choices(ctx, key)
+    except Exception as e:
+        logger.warning(f"/set の候補生成に失敗 ({key}): {e}")
+    return []
+
+
 @bot.slash_command(description="色々な設定なのだ")
 async def set(ctx, key: discord.Option(str, choices=[
     discord.OptionChoice(name="ボイス(voice)", value="voice"),
@@ -1118,7 +1202,8 @@ async def set(ctx, key: discord.Option(str, choices=[
     discord.OptionChoice(name="プレミアム利用サーバー2(premium_guild2)", value="premium_guild2"),
     discord.OptionChoice(name="プレミアム利用サーバー3(premium_guild3)", value="premium_guild3")],
                                        description="設定項目"),
-              value: discord.Option(str, description="設定値", required=False)):
+              value: discord.Option(str, description="設定値", required=False,
+                                    autocomplete=set_value_autocomplete)):
     await ctx.defer()
     if key == "voice":
         if value is None:
@@ -1252,7 +1337,31 @@ async def set(ctx, key: discord.Option(str, choices=[
             await ctx.send_followup(embed=embed)
             return
         before_guild_id = await getdatabase(ctx.author.id, key, "0")
-        if before_guild_id.replace(" ", "") != "0":
+        # premium_guild は char(20) なので空白でパディングされている
+        before_id = str(before_guild_id if before_guild_id is not None else "0").strip()
+        if str(value if value is not None else "").strip().lower() == "delete":
+            if before_id in ("", "0"):
+                embed = discord.Embed(
+                    title="**Error**",
+                    description=f"{key} には何も設定されていないのだ",
+                    color=discord.Colour.brand_red(),
+                )
+            else:
+                await setdatabase(before_id, "premium_user", "0", "guild")
+                await setdatabase(str(ctx.author.id), key, "0")
+                # プロセス内のプレミアム判定キャッシュからも消して即時反映させる(キーはint)
+                if before_id.isdecimal():
+                    remove_premium_guild_dict(int(before_id))
+                before_guild = bot.get_guild(int(before_id)) if before_id.isdecimal() else None
+                label = f"{before_guild.name} (id:{before_id})" if before_guild else f"id:{before_id}"
+                embed = discord.Embed(
+                    title="**Deleted Premium Guild**",
+                    description=f"{key} の {label} のプレミアム設定を解除したのだ",
+                    color=discord.Colour.brand_green(),
+                )
+            await ctx.send_followup(embed=embed)
+            return
+        if before_id != "0":
             await setdatabase(before_guild_id, "premium_user", "0", "guild")
         await setdatabase(str(ctx.author.id), key, str(ctx.guild.id))
         await setdatabase(str(ctx.guild.id), "premium_user", str(ctx.author.id), "guild")
@@ -1264,10 +1373,10 @@ async def set(ctx, key: discord.Option(str, choices=[
         await ctx.send_followup(embed=embed)
 
 
-async def get_server_set_value(ctx: discord.AutocompleteContext):
+async def _server_set_static_choices(ctx: discord.AutocompleteContext):
     setting_type = ctx.options["key"]
     bool_settings = ["reademoji", "readname", "readurl", "readjoinleave", "readsan", "joinnotice", "eew", "translate",
-                     "autojoin", "readmention", "show-info", "skip_repeat_name", "queue_speedup"]
+                     "autojoin", "readmention", "show-info", "skip_repeat_name", "queue_speedup", "readforward"]
     if setting_type in bool_settings:
         return ["off", "on"]
     elif setting_type == "lang":
@@ -1284,10 +1393,44 @@ async def get_server_set_value(ctx: discord.AutocompleteContext):
         limit = 25
         remain = max(0, limit - len(base))
         return base + candidates[:remain]
+    elif setting_type in ("join_text", "leave_text"):
+        # 自由入力の項目。既定文(&name が名前に置換される)と、既定に戻す off を候補に出す
+        default_text = "&nameが入室したのだ、" if setting_type == "join_text" else "&nameが退出したのだ、"
+        return [default_text, "off"]
     elif setting_type == "text_limit":
         return []
     else:
         return ["off"]
+
+
+async def _current_setting_choice(ctx: discord.AutocompleteContext):
+    """候補の先頭に出す「現在の設定」。対象外の key や取得失敗なら None。"""
+    entry = server_set_meta.SETTING_COLUMNS.get(ctx.options.get("key"))
+    guild_id = getattr(ctx.interaction, "guild_id", None)
+    if entry is None or guild_id is None:
+        return None
+    column, default = entry
+    try:
+        current = await getdatabase(guild_id, column, default, "guild")
+    except Exception as e:
+        logger.warning(f"server-set の現在値取得に失敗 ({column}): {e}")
+        return None
+    value = server_set_meta.format_setting_value(current)
+    # OptionChoice の value は100文字まで。切り詰めると別の値を設定してしまうので出さない
+    if len(value) > 100:
+        return None
+    return discord.OptionChoice(name=f"現在の設定: {value}"[:100], value=value)
+
+
+async def get_server_set_value(ctx: discord.AutocompleteContext):
+    choices = await _server_set_static_choices(ctx)
+    # 何か入力されている間は従来どおりの候補を返す
+    if ctx.value:
+        return choices
+    current = await _current_setting_choice(ctx)
+    if current is None:
+        return choices
+    return [current] + server_set_meta.drop_value(choices, current.value)
 
 
 @bot.slash_command(description="サーバーの色々な設定なのだ", name="server-set",
@@ -1753,20 +1896,15 @@ def vc_choice_filter(ctx: AutocompleteContext, item) -> bool:
 
 async def voice_autocomplete(ctx: AutocompleteContext):
     try:
-        current_voiceid = await getdatabase(ctx.interaction.user.id, "voiceid", "3")
-        current_name = ""
-        for speaker in voice_id_list:
-            if current_name != "":
-                break
-            for style in speaker["styles"]:
-                if str(style["id"]) == str(current_voiceid):
-                    current_name = f"{speaker['name']}({style['name']})"
-                    break
+        # voiceid は char(4) なので空白パディングを除いてから照合する
+        current_voiceid = await _get_user_setting(ctx, "voiceid", "3")
+        current_name = _voice_name_by_id(current_voiceid)
 
         search_value = str(ctx.value or "").lower()
         choices = []
 
-        if current_name and ctx.value is None:
+        # ctx.value は未入力でも空文字で来る。target_user 指定時は本人の設定と別物なので出さない
+        if current_name and not ctx.value and not ctx.options.get("target_user"):
             choices.append(OptionChoice(name=f"現在の設定: {current_name}", value=f"id:{current_voiceid}"))
 
         for choice in voice_choices:
@@ -1783,12 +1921,39 @@ async def voice_autocomplete(ctx: AutocompleteContext):
         return [choice for choice in voice_choices if vc_choice_filter(ctx, choice)][:25]
 
 
+async def _setvc_number_autocomplete(ctx: AutocompleteContext, column, default):
+    """/setvc の speed / pitch。未入力のときだけ現在値と既定値を出す。"""
+    if ctx.value not in (None, ""):
+        return []
+    # target_user 指定時はサーバー個別設定が対象で、本人の値とは別物なので出さない
+    if ctx.options.get("target_user"):
+        return []
+    try:
+        current = int(await _get_user_setting(ctx, column, default))
+    except (TypeError, ValueError):
+        return []
+    choices = [OptionChoice(name=f"現在の設定: {current}", value=current)]
+    if current != int(default):
+        choices.append(OptionChoice(name=f"既定値: {default}", value=int(default)))
+    return choices
+
+
+async def speed_autocomplete(ctx: AutocompleteContext):
+    return await _setvc_number_autocomplete(ctx, "speed", "100")
+
+
+async def pitch_autocomplete(ctx: AutocompleteContext):
+    return await _setvc_number_autocomplete(ctx, "pitch", "0")
+
+
 @bot.slash_command(description="自分の声を変更できるのだ")
 async def setvc(ctx, voiceid: discord.Option(required=False, input_type=str,
                                              description="指定しない場合は一覧が表示されます",
                                              autocomplete=voice_autocomplete),
-                speed: discord.Option(required=False, input_type=int, description="速度"),
-                pitch: discord.Option(required=False, input_type=int, description="ピッチ"),
+                speed: discord.Option(required=False, input_type=int, description="速度",
+                                      autocomplete=speed_autocomplete),
+                pitch: discord.Option(required=False, input_type=int, description="ピッチ",
+                                      autocomplete=pitch_autocomplete),
                 target_user: discord.Option(discord.Member, required=False,
                                             description="対象メンバー(指定時はこのサーバー内限定で上書き)")):
     await ctx.defer()
@@ -1878,17 +2043,11 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=str,
         return
     if (voiceid is None):
         if speed is None and pitch is None:
-            current_voiceid = await getdatabase(ctx.author.id, "voiceid", "3")
-            current_speed = await getdatabase(ctx.author.id, "speed", "100")
-            current_pitch = await getdatabase(ctx.author.id, "pitch", "0")
-            current_name = ""
-            for speaker in voice_id_list:
-                if current_name != "":
-                    break
-                for style in speaker["styles"]:
-                    if str(style["id"]) == str(current_voiceid):
-                        current_name = f"{speaker['name']}({style['name']})"
-                        break
+            # char(n) の空白パディングを除いてから表示・照合する
+            current_voiceid = str(await getdatabase(ctx.author.id, "voiceid", "3") or "3").strip()
+            current_speed = str(await getdatabase(ctx.author.id, "speed", "100") or "100").strip()
+            current_pitch = str(await getdatabase(ctx.author.id, "pitch", "0") or "0").strip()
+            current_name = _voice_name_by_id(current_voiceid)
             test_pages = []
             for i in range(-(-len(voice_id_list) // 25)):
                 if i == 0:
@@ -1901,7 +2060,7 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=str,
             await paginator.respond(ctx.interaction)
             return
         else:
-            voiceid = await getdatabase(ctx.author.id, "voiceid", "3")
+            voiceid = str(await getdatabase(ctx.author.id, "voiceid", "3") or "3").strip()
 
     is_premium = str(ctx.author.id) in premium_user_list
 
@@ -1972,7 +2131,10 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=str,
         embed.description = f"**{name}** id:{voiceid}に変更したのだ\n(この音声は無料プランでは混雑時、ずんだもんに切り替わります．[プレミアムプラン](https://lenlino.com/?page_id=2510))"
     #print(f"**{name}**")
     if speed is not None:
-        if speed.isdecimal() is False:
+        # input_type=int なので int で渡ってくる。文字列前提の判定はできない
+        try:
+            speed = int(speed)
+        except (TypeError, ValueError):
             embed = discord.Embed(
                 title="**Error**",
                 description=f"speedは数字なのだ",
@@ -1988,12 +2150,12 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=str,
             )
             await ctx.send_followup(embed=embed)
             return
-        await setdatabase(ctx.author.id, "speed", speed)
+        await setdatabase(ctx.author.id, "speed", str(speed))
         embed.description += f"\n読み上げ速度を {speed} に変更したのだ"
     if pitch is not None:
         try:
-            int(pitch)
-        except ValueError:
+            pitch = int(pitch)
+        except (TypeError, ValueError):
             embed = discord.Embed(
                 title="**Error**",
                 description=f"valueは数字なのだ",
@@ -2002,7 +2164,7 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=str,
             await ctx.send_followup(embed=embed)
             return
 
-        await setdatabase(ctx.author.id, "pitch", pitch)
+        await setdatabase(ctx.author.id, "pitch", str(pitch))
         embed.description += f"\n読み上げピッチを {pitch} に変更したのだ"
     await ctx.send_followup(embed=embed)
 
