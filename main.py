@@ -25,6 +25,7 @@ import aiofiles as aiofiles
 import aiohttp
 import asyncpg as asyncpg
 import discord
+import discord.voice  # discord/__init__.py は voice を import しないので明示的に読む
 from discord import AutocompleteContext, OptionChoice, VoiceChannel
 from discord.ext import tasks, pages
 import lavalink
@@ -44,6 +45,8 @@ import romajitable
 import unicodedata
 from LavalinkClient import LavalinkWavelink, LavalinkPlayer
 from fast_sharded_bot import FastShardedBot
+import cluster_signal
+import server_set_meta
 
 load_dotenv()
 
@@ -114,6 +117,8 @@ EEW_WEBHOOK_URL = os.getenv("EEW_WEBHOOK_URL", None)
 CLUSTER_ID = int(os.getenv("CLUSTER_ID", "0"))
 CLUSTER_COUNT = int(os.getenv("CLUSTER_COUNT", "1"))
 _CLUSTER_SUFFIX = f"-c{CLUSTER_ID}" if CLUSTER_COUNT > 1 else ""
+# 起動より前に発行された停止シグナルを無視するための基準時刻
+_PROCESS_STARTED_AT = time.time()
 
 # アップロード音声の最大サイズ。Discord無料枠と同じ 10MB(10 MiB)。
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024
@@ -175,7 +180,12 @@ member_cache_flags = discord.MemberCacheFlags.from_intents(intents=intents)
 async def create_session():
     return aiohttp.TCPConnector(limit=0)
 
-aiohttp_client_session = asyncio.get_event_loop().run_until_complete(create_session())
+# Python 3.14 で asyncio.get_event_loop() の暗黙のループ生成が廃止されたため明示的に作る。
+# ここで set_event_loop しておくと py-cord の Client.__init__ が同じループを拾うので、
+# TCPConnector がバインドするループと bot.run() が回すループが一致する。
+_main_loop = asyncio.new_event_loop()
+asyncio.set_event_loop(_main_loop)
+aiohttp_client_session = _main_loop.run_until_complete(create_session())
 
 # TOTAL_SHARDS で全シャード数を固定(未設定なら従来通りDiscordから自動取得)。
 # クラスタ間で必ず同じ値にすること。テスト時は小さい値(例4)を指定可能。
@@ -236,7 +246,7 @@ non_premium_user = bot.non_premium_user
 voice_choices = bot.voice_choices
 yomiage_queue = bot.yomiage_queue
 
-class LavalinkVoiceClient(discord.VoiceProtocol):
+class LavalinkVoiceClient(discord.voice.VoiceProtocol):
     """
     This is the preferred way to handle external voice sending
     This client will be created via a cls in the connect method of the channel
@@ -536,7 +546,7 @@ async def connect_nodes():
         )
     print(f"Node count: {len(bot.lavalink.nodes)}")
 
-asyncio.get_event_loop().set_exception_handler(asyncio_exception_handler)
+_main_loop.set_exception_handler(asyncio_exception_handler)
 
 
 async def initdatabase():
@@ -1099,6 +1109,89 @@ def remove_premium_guild_dict(id: str):
     premium_guild_dict.pop(id, None)
 
 
+def _voice_name_by_id(voice_id):
+    """ボイスIDから "話者(スタイル)" を引く。見つからなければ空文字。"""
+    for speaker in voice_id_list:
+        for style in speaker["styles"]:
+            if str(style["id"]) == str(voice_id):
+                return f"{speaker['name']}({style['name']})"
+    return ""
+
+
+def _voice_id_from_choice(text):
+    """voice_choices の "話者(スタイル) id:3" から 3 を取り出す。"""
+    m = re.search(r"id\s*:\s*(\d+)\s*$", str(text))
+    return m.group(1) if m else None
+
+
+async def _get_user_setting(ctx: AutocompleteContext, column, default):
+    """/set はユーザー設定なので voice テーブルを引く。char(n) のパディングを除く。"""
+    raw = await getdatabase(ctx.interaction.user.id, column, default)
+    return str(raw if raw is not None else default).strip()
+
+
+async def _set_voice_choices(ctx: AutocompleteContext):
+    choices = []
+    current_id = None
+    if not ctx.value:
+        current_id = await _get_user_setting(ctx, "voiceid", "3")
+        name = _voice_name_by_id(current_id) or f"id:{current_id}"
+        choices.append(OptionChoice(name=f"現在の設定: {name}"[:100], value=current_id))
+    query = str(ctx.value or "").lower()
+    for choice in voice_choices:
+        text = str(choice)
+        if query and query not in text.lower():
+            continue
+        voice_id = _voice_id_from_choice(text)
+        if voice_id is None or voice_id == current_id:
+            continue
+        choices.append(OptionChoice(name=text[:100], value=voice_id))
+        if len(choices) >= 25:
+            break
+    return choices[:25]
+
+
+async def _set_number_choices(ctx: AutocompleteContext, key):
+    """speed / pitch は現在値と既定値だけ出す。"""
+    if ctx.value:
+        return []
+    default = "100" if key == "speed" else "0"
+    current = await _get_user_setting(ctx, key, default)
+    choices = [OptionChoice(name=f"現在の設定: {current}", value=current)]
+    if current != default:
+        choices.append(OptionChoice(name=f"既定値: {default}", value=default))
+    return choices
+
+
+async def _set_premium_guild_choices(ctx: AutocompleteContext, key):
+    delete_choice = OptionChoice(name="delete (このスロットのプレミアム設定を解除)", value="delete")
+    if ctx.value:
+        return [delete_choice] if "delete".startswith(str(ctx.value).lower()) else []
+    current = await _get_user_setting(ctx, key, "0")
+    if current in ("", "0"):
+        label = "未設定"
+    else:
+        # get_guild はこのクラスタ担当のサーバーしか返さない。引けなければIDのみ表示する
+        guild = bot.get_guild(int(current)) if current.isdecimal() else None
+        label = f"{guild.name} (id:{current})" if guild else f"id:{current}"
+    return [OptionChoice(name=f"現在の設定: {label}"[:100], value=current or "0"), delete_choice]
+
+
+async def set_value_autocomplete(ctx: AutocompleteContext):
+    """/set の value 候補。未入力のときは先頭に現在の設定を出す。"""
+    key = ctx.options.get("key")
+    try:
+        if key == "voice":
+            return await _set_voice_choices(ctx)
+        if key in ("speed", "pitch"):
+            return await _set_number_choices(ctx, key)
+        if key in ("premium_guild1", "premium_guild2", "premium_guild3"):
+            return await _set_premium_guild_choices(ctx, key)
+    except Exception as e:
+        logger.warning(f"/set の候補生成に失敗 ({key}): {e}")
+    return []
+
+
 @bot.slash_command(description="色々な設定なのだ")
 async def set(ctx, key: discord.Option(str, choices=[
     discord.OptionChoice(name="ボイス(voice)", value="voice"),
@@ -1108,7 +1201,8 @@ async def set(ctx, key: discord.Option(str, choices=[
     discord.OptionChoice(name="プレミアム利用サーバー2(premium_guild2)", value="premium_guild2"),
     discord.OptionChoice(name="プレミアム利用サーバー3(premium_guild3)", value="premium_guild3")],
                                        description="設定項目"),
-              value: discord.Option(str, description="設定値", required=False)):
+              value: discord.Option(str, description="設定値", required=False,
+                                    autocomplete=set_value_autocomplete)):
     await ctx.defer()
     if key == "voice":
         if value is None:
@@ -1242,7 +1336,31 @@ async def set(ctx, key: discord.Option(str, choices=[
             await ctx.send_followup(embed=embed)
             return
         before_guild_id = await getdatabase(ctx.author.id, key, "0")
-        if before_guild_id.replace(" ", "") != "0":
+        # premium_guild は char(20) なので空白でパディングされている
+        before_id = str(before_guild_id if before_guild_id is not None else "0").strip()
+        if str(value if value is not None else "").strip().lower() == "delete":
+            if before_id in ("", "0"):
+                embed = discord.Embed(
+                    title="**Error**",
+                    description=f"{key} には何も設定されていないのだ",
+                    color=discord.Colour.brand_red(),
+                )
+            else:
+                await setdatabase(before_id, "premium_user", "0", "guild")
+                await setdatabase(str(ctx.author.id), key, "0")
+                # プロセス内のプレミアム判定キャッシュからも消して即時反映させる(キーはint)
+                if before_id.isdecimal():
+                    remove_premium_guild_dict(int(before_id))
+                before_guild = bot.get_guild(int(before_id)) if before_id.isdecimal() else None
+                label = f"{before_guild.name} (id:{before_id})" if before_guild else f"id:{before_id}"
+                embed = discord.Embed(
+                    title="**Deleted Premium Guild**",
+                    description=f"{key} の {label} のプレミアム設定を解除したのだ",
+                    color=discord.Colour.brand_green(),
+                )
+            await ctx.send_followup(embed=embed)
+            return
+        if before_id != "0":
             await setdatabase(before_guild_id, "premium_user", "0", "guild")
         await setdatabase(str(ctx.author.id), key, str(ctx.guild.id))
         await setdatabase(str(ctx.guild.id), "premium_user", str(ctx.author.id), "guild")
@@ -1254,10 +1372,10 @@ async def set(ctx, key: discord.Option(str, choices=[
         await ctx.send_followup(embed=embed)
 
 
-async def get_server_set_value(ctx: discord.AutocompleteContext):
+async def _server_set_static_choices(ctx: discord.AutocompleteContext):
     setting_type = ctx.options["key"]
     bool_settings = ["reademoji", "readname", "readurl", "readjoinleave", "readsan", "joinnotice", "eew", "translate",
-                     "autojoin", "readmention", "show-info", "skip_repeat_name", "queue_speedup"]
+                     "autojoin", "readmention", "show-info", "skip_repeat_name", "queue_speedup", "readforward"]
     if setting_type in bool_settings:
         return ["off", "on"]
     elif setting_type == "lang":
@@ -1274,10 +1392,44 @@ async def get_server_set_value(ctx: discord.AutocompleteContext):
         limit = 25
         remain = max(0, limit - len(base))
         return base + candidates[:remain]
+    elif setting_type in ("join_text", "leave_text"):
+        # 自由入力の項目。既定文(&name が名前に置換される)と、既定に戻す off を候補に出す
+        default_text = "&nameが入室したのだ、" if setting_type == "join_text" else "&nameが退出したのだ、"
+        return [default_text, "off"]
     elif setting_type == "text_limit":
         return []
     else:
         return ["off"]
+
+
+async def _current_setting_choice(ctx: discord.AutocompleteContext):
+    """候補の先頭に出す「現在の設定」。対象外の key や取得失敗なら None。"""
+    entry = server_set_meta.SETTING_COLUMNS.get(ctx.options.get("key"))
+    guild_id = getattr(ctx.interaction, "guild_id", None)
+    if entry is None or guild_id is None:
+        return None
+    column, default = entry
+    try:
+        current = await getdatabase(guild_id, column, default, "guild")
+    except Exception as e:
+        logger.warning(f"server-set の現在値取得に失敗 ({column}): {e}")
+        return None
+    value = server_set_meta.format_setting_value(current)
+    # OptionChoice の value は100文字まで。切り詰めると別の値を設定してしまうので出さない
+    if len(value) > 100:
+        return None
+    return discord.OptionChoice(name=f"現在の設定: {value}"[:100], value=value)
+
+
+async def get_server_set_value(ctx: discord.AutocompleteContext):
+    choices = await _server_set_static_choices(ctx)
+    # 何か入力されている間は従来どおりの候補を返す
+    if ctx.value:
+        return choices
+    current = await _current_setting_choice(ctx)
+    if current is None:
+        return choices
+    return [current] + server_set_meta.drop_value(choices, current.value)
 
 
 @bot.slash_command(description="サーバーの色々な設定なのだ", name="server-set",
@@ -1743,20 +1895,15 @@ def vc_choice_filter(ctx: AutocompleteContext, item) -> bool:
 
 async def voice_autocomplete(ctx: AutocompleteContext):
     try:
-        current_voiceid = await getdatabase(ctx.interaction.user.id, "voiceid", "3")
-        current_name = ""
-        for speaker in voice_id_list:
-            if current_name != "":
-                break
-            for style in speaker["styles"]:
-                if str(style["id"]) == str(current_voiceid):
-                    current_name = f"{speaker['name']}({style['name']})"
-                    break
+        # voiceid は char(4) なので空白パディングを除いてから照合する
+        current_voiceid = await _get_user_setting(ctx, "voiceid", "3")
+        current_name = _voice_name_by_id(current_voiceid)
 
         search_value = str(ctx.value or "").lower()
         choices = []
 
-        if current_name and ctx.value is None:
+        # ctx.value は未入力でも空文字で来る。target_user 指定時は本人の設定と別物なので出さない
+        if current_name and not ctx.value and not ctx.options.get("target_user"):
             choices.append(OptionChoice(name=f"現在の設定: {current_name}", value=f"id:{current_voiceid}"))
 
         for choice in voice_choices:
@@ -1773,12 +1920,39 @@ async def voice_autocomplete(ctx: AutocompleteContext):
         return [choice for choice in voice_choices if vc_choice_filter(ctx, choice)][:25]
 
 
+async def _setvc_number_autocomplete(ctx: AutocompleteContext, column, default):
+    """/setvc の speed / pitch。未入力のときだけ現在値と既定値を出す。"""
+    if ctx.value not in (None, ""):
+        return []
+    # target_user 指定時はサーバー個別設定が対象で、本人の値とは別物なので出さない
+    if ctx.options.get("target_user"):
+        return []
+    try:
+        current = int(await _get_user_setting(ctx, column, default))
+    except (TypeError, ValueError):
+        return []
+    choices = [OptionChoice(name=f"現在の設定: {current}", value=current)]
+    if current != int(default):
+        choices.append(OptionChoice(name=f"既定値: {default}", value=int(default)))
+    return choices
+
+
+async def speed_autocomplete(ctx: AutocompleteContext):
+    return await _setvc_number_autocomplete(ctx, "speed", "100")
+
+
+async def pitch_autocomplete(ctx: AutocompleteContext):
+    return await _setvc_number_autocomplete(ctx, "pitch", "0")
+
+
 @bot.slash_command(description="自分の声を変更できるのだ")
 async def setvc(ctx, voiceid: discord.Option(required=False, input_type=str,
                                              description="指定しない場合は一覧が表示されます",
                                              autocomplete=voice_autocomplete),
-                speed: discord.Option(required=False, input_type=int, description="速度"),
-                pitch: discord.Option(required=False, input_type=int, description="ピッチ"),
+                speed: discord.Option(required=False, input_type=int, description="速度",
+                                      autocomplete=speed_autocomplete),
+                pitch: discord.Option(required=False, input_type=int, description="ピッチ",
+                                      autocomplete=pitch_autocomplete),
                 target_user: discord.Option(discord.Member, required=False,
                                             description="対象メンバー(指定時はこのサーバー内限定で上書き)")):
     await ctx.defer()
@@ -1868,17 +2042,11 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=str,
         return
     if (voiceid is None):
         if speed is None and pitch is None:
-            current_voiceid = await getdatabase(ctx.author.id, "voiceid", "3")
-            current_speed = await getdatabase(ctx.author.id, "speed", "100")
-            current_pitch = await getdatabase(ctx.author.id, "pitch", "0")
-            current_name = ""
-            for speaker in voice_id_list:
-                if current_name != "":
-                    break
-                for style in speaker["styles"]:
-                    if str(style["id"]) == str(current_voiceid):
-                        current_name = f"{speaker['name']}({style['name']})"
-                        break
+            # char(n) の空白パディングを除いてから表示・照合する
+            current_voiceid = str(await getdatabase(ctx.author.id, "voiceid", "3") or "3").strip()
+            current_speed = str(await getdatabase(ctx.author.id, "speed", "100") or "100").strip()
+            current_pitch = str(await getdatabase(ctx.author.id, "pitch", "0") or "0").strip()
+            current_name = _voice_name_by_id(current_voiceid)
             test_pages = []
             for i in range(-(-len(voice_id_list) // 25)):
                 if i == 0:
@@ -1891,7 +2059,7 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=str,
             await paginator.respond(ctx.interaction)
             return
         else:
-            voiceid = await getdatabase(ctx.author.id, "voiceid", "3")
+            voiceid = str(await getdatabase(ctx.author.id, "voiceid", "3") or "3").strip()
 
     is_premium = str(ctx.author.id) in premium_user_list
 
@@ -1962,7 +2130,10 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=str,
         embed.description = f"**{name}** id:{voiceid}に変更したのだ\n(この音声は無料プランでは混雑時、ずんだもんに切り替わります．[プレミアムプラン](https://lenlino.com/?page_id=2510))"
     #print(f"**{name}**")
     if speed is not None:
-        if speed.isdecimal() is False:
+        # input_type=int なので int で渡ってくる。文字列前提の判定はできない
+        try:
+            speed = int(speed)
+        except (TypeError, ValueError):
             embed = discord.Embed(
                 title="**Error**",
                 description=f"speedは数字なのだ",
@@ -1978,12 +2149,12 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=str,
             )
             await ctx.send_followup(embed=embed)
             return
-        await setdatabase(ctx.author.id, "speed", speed)
+        await setdatabase(ctx.author.id, "speed", str(speed))
         embed.description += f"\n読み上げ速度を {speed} に変更したのだ"
     if pitch is not None:
         try:
-            int(pitch)
-        except ValueError:
+            pitch = int(pitch)
+        except (TypeError, ValueError):
             embed = discord.Embed(
                 title="**Error**",
                 description=f"valueは数字なのだ",
@@ -1992,7 +2163,7 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=str,
             await ctx.send_followup(embed=embed)
             return
 
-        await setdatabase(ctx.author.id, "pitch", pitch)
+        await setdatabase(ctx.author.id, "pitch", str(pitch))
         embed.description += f"\n読み上げピッチを {pitch} に変更したのだ"
     await ctx.send_followup(embed=embed)
 
@@ -2041,9 +2212,10 @@ async def activate(ctx):
 async def stop_bot(ctx, message: discord.Option(input_type=str, description="カスタムメッセージ",
                                                 default=None)):
     await ctx.defer()
-    await stop(message)
+    await request_cluster_stop(message)
     await ctx.send_followup("送信しました。")
-    await bot.close()
+    # stop() の中で bot.close() と sys.exit() まで行う。自クラスタは最後に落とす。
+    await stop(message)
 
 
 @bot.slash_command(description="コグをリロードするのだ(modonly)", guild_ids=ManagerGuilds, name="reload")
@@ -2150,6 +2322,19 @@ async def stop(message=None):
     await broadcast(channels, embed)
     await bot.close()
     sys.exit()
+
+
+async def request_cluster_stop(message=None):
+    """全クラスタに停止シグナルを書き込む。単一プロセス構成では何もしない。"""
+    if CLUSTER_COUNT <= 1:
+        return
+    path = cluster_signal.signal_path(os.path.dirname(os.path.abspath(__file__)))
+    try:
+        with open(path, "wt", encoding="utf-8") as f:
+            json.dump(cluster_signal.build_signal(message, CLUSTER_ID), f, ensure_ascii=False)
+        logger.warning(f"全クラスタへ停止シグナルを送信しました: {path}")
+    except OSError as e:
+        logger.error(f"停止シグナルの書き込みに失敗: {e}")
 
 
 async def restart(message=None):
@@ -2972,11 +3157,11 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         )
         if member.id in (row_get(g_row, "mute_list", []) or []):
             return
-        pattern = "https?://[\w/:%#\$&\?\(\)~\.=\+\-@]+"
-        pattern_emoji = "\<:.+?\>"
-        pattern_aniemoji = "\<a.+?\>"
-        pattern_mension = "\<@.+?\>"
-        pattern_spoiler = "\|\|.*?\|\|"
+        pattern = r"https?://[\w/:%#\$&\?\(\)~\.=\+\-@]+"
+        pattern_emoji = r"\<:.+?\>"
+        pattern_aniemoji = r"\<a.+?\>"
+        pattern_mension = r"\<@.+?\>"
+        pattern_spoiler = r"\|\|.*?\|\|"
         pattern_codeblock = "```.*?```"
         voice_id = None
         is_premium = guild.id in premium_server_list
@@ -3016,7 +3201,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
 
         lang = row_get(g_row, "lang", "ja")
 
-        pattern_voice = "\.v[0-9]*"
+        pattern_voice = r"\.v[0-9]*"
         pattern_pitch = r"\.p-?[0-9]+"
         pattern_speed = r"\.s[0-9]+"
         pitch_override = None
@@ -3557,14 +3742,6 @@ async def on_voice_state_update(member, before, after):
     if bot.user.id == member.id:
         return
 
-    if (bot.user.id == member.id and after.channel is None) or (member.bot is not True and is_bot_only(voicestate.channel)):
-        await voicestate.disconnect()
-
-        if voicestate.guild.id in vclist:
-            del vclist[voicestate.guild.id]
-        remove_premium_guild_dict(voicestate.guild.id)
-        return
-
     if after.channel is not None and after.channel.id == voicestate.channel.id and str(
         member.id) in premium_user_list and after.channel.guild.id not in premium_server_list:
         premium_server_list.append(after.channel.guild.id)
@@ -3596,7 +3773,7 @@ async def on_voice_state_update(member, before, after):
     if await getdatabase(member.guild.id, "is_readjoin", False, "guild"):
         if after.channel is not None and before.channel is not None and after.channel.id == before.channel.id:
             return
-        pattern_emoji = "\<.+?\>"
+        pattern_emoji = r"\<.+?\>"
         name = member.display_name
         name = await henkan_private_dict(member.guild.id, name)
         name = await henkan_private_dict(9686, name)
@@ -3610,6 +3787,14 @@ async def on_voice_state_update(member, before, after):
         elif before.channel is not None and before.channel.id == voicestate.channel.id:
             tmpl = await getdatabase(member.guild.id, "leave_text", "&nameが退出したのだ、", "guild")
             await add_yomiage_queue(member, member.guild, tmpl.replace("&name", name), no_read_name=True)
+
+    if (bot.user.id == member.id and after.channel is None) or (is_bot_only(voicestate.channel)):
+        await voicestate.disconnect()
+
+        if voicestate.guild.id in vclist:
+            del vclist[voicestate.guild.id]
+        remove_premium_guild_dict(voicestate.guild.id)
+        return
 
 
 # ボットのみか確認
@@ -3964,6 +4149,30 @@ async def watch_main_changes():
         await asyncio.sleep(0.1)
 
 
+async def watch_stop_signal():
+    """他クラスタからの停止シグナルを監視して自分も停止する"""
+    path = cluster_signal.signal_path(os.path.dirname(os.path.abspath(__file__)))
+    if not os.path.exists(path):
+        # awatch は監視対象が無いと開始できないので空で作る。
+        # issued_at を持たないため、これを検知した他クラスタが誤停止することはない。
+        with open(path, "wt", encoding="utf-8") as f:
+            json.dump({}, f)
+    logger.info(f"停止シグナルの監視を開始: {path}")
+
+    async for _ in awatch(path):
+        try:
+            with open(path, encoding="utf-8") as f:
+                payload = json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            logger.warning(f"停止シグナルの読み込みに失敗: {e}")
+            continue
+        if not cluster_signal.should_stop(payload, CLUSTER_ID, _PROCESS_STARTED_AT):
+            continue
+        logger.warning(f"停止シグナル受信 (発行元 cluster {payload.get('issued_by')})")
+        await stop(payload.get("message"))
+        break
+
+
 @tasks.loop(minutes=1, count=1)
 async def init_loop():
     # 遅いコールバック検出（イベントループブロックの犯人特定用）
@@ -3999,6 +4208,11 @@ async def init_loop():
     bot.loop.create_task(watch_cog_changes())
     bot.loop.create_task(watch_main_changes())
     logger.info("watch_cog_changes, watch_main_changes を開始しました")
+
+    # 複数クラスタ構成のときだけ、他クラスタからの停止シグナルを監視する
+    if CLUSTER_COUNT > 1:
+        bot.loop.create_task(watch_stop_signal())
+        logger.info("watch_stop_signal を開始しました")
 
 
 async def save_customemoji(custom_emoji, kana):
