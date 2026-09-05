@@ -3742,14 +3742,6 @@ async def on_voice_state_update(member, before, after):
     if bot.user.id == member.id:
         return
 
-    if (bot.user.id == member.id and after.channel is None) or (member.bot is not True and is_bot_only(voicestate.channel)):
-        await voicestate.disconnect()
-
-        if voicestate.guild.id in vclist:
-            del vclist[voicestate.guild.id]
-        remove_premium_guild_dict(voicestate.guild.id)
-        return
-
     if after.channel is not None and after.channel.id == voicestate.channel.id and str(
         member.id) in premium_user_list and after.channel.guild.id not in premium_server_list:
         premium_server_list.append(after.channel.guild.id)
@@ -3795,6 +3787,14 @@ async def on_voice_state_update(member, before, after):
         elif before.channel is not None and before.channel.id == voicestate.channel.id:
             tmpl = await getdatabase(member.guild.id, "leave_text", "&nameが退出したのだ、", "guild")
             await add_yomiage_queue(member, member.guild, tmpl.replace("&name", name), no_read_name=True)
+
+    if (bot.user.id == member.id and after.channel is None) or (is_bot_only(voicestate.channel)):
+        await voicestate.disconnect()
+
+        if voicestate.guild.id in vclist:
+            del vclist[voicestate.guild.id]
+        remove_premium_guild_dict(voicestate.guild.id)
+        return
 
 
 # ボットのみか確認
