@@ -3065,6 +3065,8 @@ async def on_message(message: discord.Message):
     voice = message.guild.voice_client
     if voice and (message.channel.id == vclist.get(message.guild.id) or message.channel.id == voice.channel.id):
         output = message.content
+        if output.startswith(("!", "！")):
+            return
         if len(message.attachments) >= 1:
             output = "テンプファイル" + output
         if len(message.stickers) >= 1:
