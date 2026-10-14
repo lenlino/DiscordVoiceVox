@@ -4550,18 +4550,23 @@ def is_valid_regex(pattern: str) -> bool:
         return False
 
 async def henkan_private_dict(server_id, source, is_premium=False):
-    if server_id not in _private_dict_cache:
+    path = user_dict_loc + "/" + f"{server_id}.json"
+    try:
+        mtime = os.path.getmtime(path)
+    except OSError:
+        mtime = None
+    cached = _private_dict_cache.get(server_id)
+    if cached is None or cached[0] != mtime:
         try:
-            with open(user_dict_loc + "/" + f"{server_id}.json", "r",
-                      encoding='utf-8') as f:
-                _private_dict_cache[server_id] = json.load(f)
+            with open(path, "r", encoding='utf-8') as f:
+                _private_dict_cache[server_id] = (mtime, json.load(f))
         except:
-            _private_dict_cache[server_id] = {}
+            _private_dict_cache[server_id] = (mtime, {})
         if len(_private_dict_cache) > _PRIVATE_DICT_CACHE_MAX:
             _private_dict_cache.popitem(last=False)
     else:
         _private_dict_cache.move_to_end(server_id)
-    json_data = _private_dict_cache[server_id]
+    json_data = _private_dict_cache[server_id][1]
     source = toLowerCase(source)
     dict_data = sorted(json_data.keys(), key=len)
     dict_data.reverse()
