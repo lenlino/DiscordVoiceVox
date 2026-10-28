@@ -14,7 +14,7 @@ import re
 import sys
 import time
 import importlib
-import urllib
+import urllib.parse
 import uuid
 import io
 import wave
@@ -42,6 +42,7 @@ from lavalink.filters import Timescale
 
 import emoji
 import romajitable
+import alkana
 import unicodedata
 from LavalinkClient import LavalinkWavelink, LavalinkPlayer
 from fast_sharded_bot import FastShardedBot
@@ -3133,6 +3134,15 @@ async def add_yomiage_queue(member, guild, text: str, no_read_name=False):
         await yomiage(queue.member, queue.guild, queue.text, queue.no_read_name)
 
 
+def url_site_name(url):
+    labels = (urllib.parse.urlsplit(url).hostname or "").split(".")
+    if len(labels) < 2:
+        return labels[0]
+    if len(labels) >= 3 and labels[-2] in ("co", "ne", "or", "ac", "go", "com", "net", "org"):
+        return labels[-3]
+    return labels[-2]
+
+
 async def yomiage(member, guild, text: str, no_read_name=False):
     is_premium = False
     time_sta = time.time()
@@ -3263,9 +3273,9 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             voice_id = 3
 
         if lang == "ko":
-            output = re.sub(pattern, "유알엘생략", output)
+            output = re.sub(pattern, lambda m: url_site_name(m.group()) + " 유알엘", output)
         elif lang == "ja":
-            output = re.sub(pattern, "ユーアールエル省略", output)
+            output = re.sub(pattern, lambda m: url_site_name(m.group()) + "のユーアールエル", output)
 
         _mark("pre")
         output = await henkan_private_dict(guild.id, output, is_premium)
@@ -3602,6 +3612,7 @@ async def honyaku_and_ikaryaku(lang, output, voice_id, member_id, guild_id, is_p
             #print("翻訳")
 
         if re.search("[a-zA-Z]", output):
+            output = re.sub("[a-zA-Z]+", lambda m: alkana.get_kana(m.group()) or m.group(), output)
             output = (await romajitable.to_kana(output)).katakana
         if len(output) <= 0:
             return ""
