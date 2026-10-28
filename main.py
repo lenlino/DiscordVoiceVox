@@ -92,7 +92,7 @@ DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
 DB_PORT = os.getenv("DB_PORT", 5432)
 DB_NAME = os.getenv("DB_NAME", "postgres")
 DB_USER = os.getenv("DB_USER", "postgres")
-DB_PASS = os.getenv("DB_PASS", "maikura123")
+DB_PASS = os.getenv("DB_PASS")
 tips_list = ["</setvc:1083939849381359697>で自分の声、速度、ピッチを変更できます",
              "[プレミアムプラン](https://lenlino.com/?page_id=2510)(月100円～)あります",
              "[要望・不具合募集中](https://forms.gle/1TvbqzHRz6Q1vSfq9)",
@@ -3477,6 +3477,9 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                         await channel.connect()
                     logger.info("再接続完了")
                     break
+            player = guild.voice_client
+            if player is None or bot.lavalink.player_manager.get(guild.id) is None:
+                return
             await player.play(source)
         else:
             guild.voice_client.play(source)
