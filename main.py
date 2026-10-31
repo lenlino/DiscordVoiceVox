@@ -14,7 +14,7 @@ import re
 import sys
 import time
 import importlib
-import urllib
+import urllib.parse
 import uuid
 import io
 import wave
@@ -42,6 +42,7 @@ from lavalink.filters import Timescale
 
 import emoji
 import romajitable
+import alkana
 import unicodedata
 from LavalinkClient import LavalinkWavelink, LavalinkPlayer
 from fast_sharded_bot import FastShardedBot
@@ -91,18 +92,18 @@ DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
 DB_PORT = os.getenv("DB_PORT", 5432)
 DB_NAME = os.getenv("DB_NAME", "postgres")
 DB_USER = os.getenv("DB_USER", "postgres")
-DB_PASS = os.getenv("DB_PASS", "maikura123")
+DB_PASS = os.getenv("DB_PASS")
 tips_list = ["</setvc:1083939849381359697>で自分の声、速度、ピッチを変更できます",
              "[プレミアムプラン](https://lenlino.com/?page_id=2510)(月100円～)あります",
              "[要望・不具合募集中](https://forms.gle/1TvbqzHRz6Q1vSfq9)",
              "使い方やコマンド一覧は[こちら](https://lenlino.com/?page_id=2171)",
              "音声が途切れる場合は音声チャンネル設定の地域を変更することで修正される場合があります",
-             "プレミアムプランでは開発版のずんだもんαが利用できます。追加は[BOT一覧](https://zunda.lenlino.com/bots)から可能です",
+             "[プレミアムプラン](https://lenlino.com/?page_id=2510)では開発版のずんだもんαが利用できます。追加は[BOT一覧](https://zunda.lenlino.com/bots)から可能です",
              "</server-set:1073368354942885908>で入退室、名前の読み上げ・自動接続などを設定できます",
              "コマンドが表示されない場合はDiscordアプリを最新版にすると治る場合があります",
              "VOICEVOXの音声はVOICEVOX:ずんだもんの表記を行えば配信等でも利用可能です。\n"
              "詳しくは[VOICEVOXホームページ](https://voicevox.hiroshiba.jp/term/)をご確認ください",
-             "1000円プランではVOICEVOX APIの利用が可能です。詳しくは[こちら](https://lenlino.com/zunda-beta/api-usage/)",
+             "[1000円プラン](https://lenlino.com/?page_id=2510)ではVOICEVOX APIの利用が可能です。詳しくは[こちら](https://lenlino.com/zunda-beta/api-usage/)",
              "[500円以上のプラン](https://lenlino.com/?page_id=2510)ではすべてのVOICEVOX音声が高速なGPUによる生成を利用しています",
              "ボイス一覧は[こちら](https://zunda.lenlino.com/voices)",
              "[Webダッシュボード](https://zunda.lenlino.com/)から設定変更を行うことができます",
@@ -767,7 +768,7 @@ class VoiceSelectView2(discord.ui.Select):
         if (1000 <= id < 2000 or id >= 4000) and is_premium is not True:
             embed = discord.Embed(
                 title="**Error**",
-                description=f"この音声はプレミアムプラン限定です",
+                description=f"この音声は[プレミアムプラン](https://lenlino.com/?page_id=2510)限定です",
                 color=discord.Colour.brand_red(),
             )
             await interaction.response.send_message(embed=embed)
@@ -798,7 +799,7 @@ class ActivateButtonView(discord.ui.View):  # Create a class called MyView that 
     async def token_button_callback(self, button, interaction):
         await interaction.response.defer()
         embed = discord.Embed(title="Failed",
-                              description="有効なプレミアムプランが存在しないかアクティベートされていないのだ。")
+                              description="有効な[プレミアムプラン](https://lenlino.com/?page_id=2510)が存在しないかアクティベートされていないのだ。")
         if str(interaction.user.id) not in premium_user_list:
             await interaction.followup.send(embeds=[embed], ephemeral=True)
             return
@@ -866,7 +867,7 @@ class ActivateModal(discord.ui.Modal):
         subscription_id = target_subscription[0]["id"]
         stripe.Subscription.modify(subscription_id, metadata={"discord_user_id": interaction.user.id})
         embed = discord.Embed(title="success", color=discord.Colour.brand_green())
-        embed.description = "プレミアムプランへの登録が完了したのだ"
+        embed.description = "[プレミアムプラン](https://lenlino.com/?page_id=2510)への登録が完了したのだ"
         amount = target_subscription[0]["plan"]["amount"]
         add_premium_user(interaction.user.id, amount)
         if amount == 100:
@@ -1241,7 +1242,7 @@ async def set(ctx, key: discord.Option(str, choices=[
             elif (2000 > int(value) >= 1000 or int(value) >= 4000) and is_premium is not True:
                 embed = discord.Embed(
                     title="**Error**",
-                    description=f"この音声はプレミアムプラン限定なのだ",
+                    description=f"この音声は[プレミアムプラン](https://lenlino.com/?page_id=2510)限定なのだ",
                     color=discord.Colour.brand_red(),
                 )
                 print(f"**errorvoice**")
@@ -1330,7 +1331,7 @@ async def set(ctx, key: discord.Option(str, choices=[
         if str(ctx.author.id) not in premium_user_list:
             embed = discord.Embed(
                 title="**Error**",
-                description=f"プレミアム限定設定なのだ",
+                description=f"[プレミアムプラン](https://lenlino.com/?page_id=2510)限定設定なのだ",
                 color=discord.Colour.brand_red(),
             )
             await ctx.send_followup(embed=embed)
@@ -2015,7 +2016,7 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=str,
             target_is_premium = str(target_user.id) in premium_user_list
             if (2000 > int(voice_val) >= 1000 or int(voice_val) >= 4000) and target_is_premium is False:
                 embed = discord.Embed(title="**Error**",
-                                      description="この音声は対象メンバーがプレミアムプランの場合のみ設定できます。",
+                                      description="この音声は対象メンバーが[プレミアムプラン](https://lenlino.com/?page_id=2510)の場合のみ設定できます。",
                                       color=discord.Colour.brand_red())
                 await ctx.send_followup(embed=embed)
                 return
@@ -2091,7 +2092,7 @@ async def setvc(ctx, voiceid: discord.Option(required=False, input_type=str,
     if (2000 > int(voiceid) >= 1000 or int(voiceid) >= 4000) and is_premium is False:
         embed = discord.Embed(
             title="**Error**",
-            description=f"この音声はプレミアムプラン限定です。",
+            description=f"この音声は[プレミアムプラン](https://lenlino.com/?page_id=2510)限定です。",
             color=discord.Colour.brand_red(),
         )
         print(f"**errorvoice**")
@@ -2582,7 +2583,7 @@ async def addglobaldict(ctx, surface: discord.Option(input_type=str, description
         if await is_premium_check(ctx.author.id, 100) is False:
             embed = discord.Embed(
                 title="**Error**",
-                description=f"ボイス辞書はプレミアム限定機能です。",
+                description=f"ボイス辞書は[プレミアムプラン](https://lenlino.com/?page_id=2510)限定機能です。",
                 color=discord.Colour.brand_red(),
             )
             await ctx.respond(embed=embed)
@@ -3133,6 +3134,15 @@ async def add_yomiage_queue(member, guild, text: str, no_read_name=False):
         await yomiage(queue.member, queue.guild, queue.text, queue.no_read_name)
 
 
+def url_site_name(url):
+    labels = (urllib.parse.urlsplit(url).hostname or "").split(".")
+    if len(labels) < 2:
+        return labels[0]
+    if len(labels) >= 3 and labels[-2] in ("co", "ne", "or", "ac", "go", "com", "net", "org"):
+        return labels[-3]
+    return labels[-2]
+
+
 async def yomiage(member, guild, text: str, no_read_name=False):
     is_premium = False
     time_sta = time.time()
@@ -3263,9 +3273,9 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             voice_id = 3
 
         if lang == "ko":
-            output = re.sub(pattern, "유알엘생략", output)
+            output = re.sub(pattern, lambda m: url_site_name(m.group()) + " 유알엘", output)
         elif lang == "ja":
-            output = re.sub(pattern, "ユーアールエル省略", output)
+            output = re.sub(pattern, lambda m: url_site_name(m.group()) + "のユーアールエル", output)
 
         _mark("pre")
         output = await henkan_private_dict(guild.id, output, is_premium)
@@ -3467,6 +3477,9 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                         await channel.connect()
                     logger.info("再接続完了")
                     break
+            player = guild.voice_client
+            if player is None or bot.lavalink.player_manager.get(guild.id) is None:
+                return
             await player.play(source)
         else:
             guild.voice_client.play(source)
@@ -3602,6 +3615,7 @@ async def honyaku_and_ikaryaku(lang, output, voice_id, member_id, guild_id, is_p
             #print("翻訳")
 
         if re.search("[a-zA-Z]", output):
+            output = re.sub("[a-zA-Z]+", lambda m: alkana.get_kana(m.group()) or m.group(), output)
             output = (await romajitable.to_kana(output)).katakana
         if len(output) <= 0:
             return ""
@@ -4334,7 +4348,7 @@ async def adddict_local(ctx, surface, pronunciation, audio_file, dict_file):
         if (await is_premium_check(ctx.author.id, 100) or await is_premium_check(ctx.guild.id, 100)) is False:
             embed = discord.Embed(
                 title="**Error**",
-                description=f"ボイス辞書はプレミアム限定機能です。",
+                description=f"ボイス辞書は[プレミアムプラン](https://lenlino.com/?page_id=2510)限定機能です。",
                 color=discord.Colour.brand_red(),
             )
             await ctx.respond(embed=embed)
