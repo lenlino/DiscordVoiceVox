@@ -1193,8 +1193,8 @@ async def set_value_autocomplete(ctx: AutocompleteContext):
     return []
 
 
-@bot.slash_command(description="色々な設定なのだ")
-async def set(ctx, key: discord.Option(str, choices=[
+@bot.slash_command(description="色々な設定なのだ", name="set")
+async def set_command(ctx, key: discord.Option(str, choices=[
     discord.OptionChoice(name="ボイス(voice)", value="voice"),
     discord.OptionChoice(name="速度(speed)", value="speed"),
     discord.OptionChoice(name="ピッチ(pitch)", value="pitch"),
