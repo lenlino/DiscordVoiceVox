@@ -3212,6 +3212,7 @@ async def yomiage(member, guild, text: str, no_read_name=False):
             output = output[:actual_limit + 50]
 
         lang = row_get(g_row, "lang", "ja")
+        is_translate = row_get(g_row, "is_translate", False)
 
         pattern_voice = r"\.v[0-9]*"
         pattern_pitch = r"\.p-?[0-9]+"
@@ -3317,9 +3318,10 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                     split_output[i] = f"global_{split_text}"
                 else:
                     split_output[i] = await honyaku_and_ikaryaku(lang, split_output[i], voice_id, member.id, guild.id,
-                                                                 is_premium)
+                                                                 is_premium, actual_limit, is_translate)
         else:
-            split_output = [await honyaku_and_ikaryaku(lang, output, voice_id, member.id, guild.id, is_premium)]
+            split_output = [await honyaku_and_ikaryaku(lang, output, voice_id, member.id, guild.id, is_premium,
+                                                       actual_limit, is_translate)]
         _mark("honyaku")
 
         if guild.voice_client is None:
@@ -3449,12 +3451,10 @@ async def yomiage(member, guild, text: str, no_read_name=False):
         if is_lavalink:
             player = guild.voice_client
 
-            filter_player = bot.lavalink.player_manager.get(guild.id)
             timescale = Timescale()
             speed = float(float(speed) / 100)
             pitch = float(float(pitch) / 100) + 1
             timescale.update(speed=speed, pitch=pitch)
-            await filter_player.set_filter(timescale)
             loop = 0
             while player.playing is True:
                 await asyncio.sleep(1)
@@ -3478,9 +3478,11 @@ async def yomiage(member, guild, text: str, no_read_name=False):
                     logger.info("再接続完了")
                     break
             player = guild.voice_client
-            if player is None or bot.lavalink.player_manager.get(guild.id) is None:
+            ll_player = bot.lavalink.player_manager.get(guild.id)
+            if player is None or ll_player is None:
                 return
-            await player.play(source)
+            ll_player.filters["timescale"] = timescale
+            await ll_player.play(source, filters=list(ll_player.filters.values()))
         else:
             guild.voice_client.play(source)
     finally:
@@ -3586,9 +3588,13 @@ def remove_symbols_except_last(text):
 
     return text
 
+def is_zh(in_str):
+    """
+    SJISに変換して文字数が減れば簡体字があるので中国語
+    """
+    return (set(in_str) - set(in_str.encode('sjis','ignore').decode('sjis'))) != set([])
 
-
-async def honyaku_and_ikaryaku(lang, output, voice_id, member_id, guild_id, is_premium):
+async def honyaku_and_ikaryaku(lang, output, voice_id, member_id, guild_id, is_premium, actual_limit, is_translate):
     if lang == "ko":
 
         if len(output) <= 0:
@@ -3608,8 +3614,8 @@ async def honyaku_and_ikaryaku(lang, output, voice_id, member_id, guild_id, is_p
         output = toKana(output)
         output = output.replace(" ", "")
     elif lang == "ja":
-        if (await is_premium_check(guild_id, 300) and re.match("[ぁ-んァ-ヶー一-龯]", output) is None
-            and await getdatabase(guild_id, "is_translate", False, "guild")):
+        if (is_translate and (re.match("[ぁ-んァ-ヶー一-龯]", output) is None or is_zh(output))
+            and await is_premium_check(guild_id, 300)):
             #print(output)
             output = await asyncio.to_thread(ts.translate_text, output, to_language="ja")
             #print("翻訳")
@@ -3622,18 +3628,6 @@ async def honyaku_and_ikaryaku(lang, output, voice_id, member_id, guild_id, is_p
         output = re.sub("w{4,100}", "ワラ", output)
         if re.search("[^w]", output) is None:
             output = "ワラ"
-
-        true_max_limit = text_limit
-        if is_premium:
-            true_max_limit = text_limit_100
-
-        user_limit_str = await getdatabase(guild_id, "text_limit", str(true_max_limit), "guild")
-        try:
-            user_limit = int(user_limit_str)
-        except (ValueError, TypeError):
-            user_limit = true_max_limit
-
-        actual_limit = min(user_limit, true_max_limit)
 
         if len(output) > actual_limit:
             output = output[:actual_limit] + "以下略"
